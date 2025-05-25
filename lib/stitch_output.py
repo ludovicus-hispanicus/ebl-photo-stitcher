@@ -48,21 +48,36 @@ def save_stitched_output(
     print(f"    Attempting to save JPG to: {jpg_filepath}")
     jpg_save_success = save_jpg_output(final_image, jpg_filepath)
 
-    # ADD A SMALL DELAY before attempting metadata operations, especially for TIFF
+    # ADD A SMALL DELAY before attempting metadata operations
     if tiff_save_success or jpg_save_success:
         print("    Brief pause before metadata application...")
-        time.sleep(0.5) # Wait for 0.5 seconds
+        time.sleep(0.5)  # Wait for 0.5 seconds
 
-    # Set metadata if TIFF save was successful
+    # Apply metadata to successfully saved files
+    saved_files = []
     if tiff_save_success:
-        apply_metadata(tiff_filepath, output_base_name, photographer_name, output_dpi)
-    else:
-        print(f"    Skipping metadata for TIFF as save failed: {os.path.basename(tiff_filepath)}")
-
-    # Set metadata if JPG save was successful
+        saved_files.append(tiff_filepath)
     if jpg_save_success:
-        apply_metadata(jpg_filepath, output_base_name, photographer_name, output_dpi)
-    else:
+        saved_files.append(jpg_filepath)
+    
+    # Set metadata for all successfully saved files
+    for file_path in saved_files:
+        print(f"    Setting metadata for: {os.path.basename(file_path)}...")
+        apply_all_metadata(
+            file_path,
+            image_title=output_base_name,
+            photographer_name=photographer_name,
+            institution_name=STITCH_INSTITUTION,
+            credit_line_text=STITCH_CREDIT_LINE,
+            copyright_text=STITCH_CREDIT_LINE,
+            usage_terms_text=STITCH_XMP_USAGE_TERMS,
+            image_dpi=output_dpi
+        )
+    
+    # Print message for skipped files
+    if not tiff_save_success:
+        print(f"    Skipping metadata for TIFF as save failed: {os.path.basename(tiff_filepath)}")
+    if not jpg_save_success:
         print(f"    Skipping metadata for JPG as save failed: {os.path.basename(jpg_filepath)}")
     
     return (tiff_filepath if tiff_save_success else None, 
@@ -103,33 +118,3 @@ def save_jpg_output(image, output_path):
     except Exception as e_jpg:
         print(f"      ERROR saving final JPG: {e_jpg}")
         return False
-
-def apply_metadata(image_path, output_base_name, photographer_name, output_dpi):
-    """Apply EXIF and XMP metadata to the image file."""
-    print(f"    Setting metadata for: {os.path.basename(image_path)}...")
-    year = str(datetime.date.today().year)
-    photographer_name_with_institution=f"{photographer_name} ({STITCH_INSTITUTION})"
-    
-    # Use the pure Python metadata handling
-    metadata_applied = apply_all_metadata(
-        image_path, 
-        image_title=output_base_name, 
-        photographer_name=photographer_name_with_institution,
-        institution_name=STITCH_INSTITUTION, 
-        credit_line_text=STITCH_CREDIT_LINE,
-        copyright_text=STITCH_CREDIT_LINE,
-        usage_terms_text=STITCH_XMP_USAGE_TERMS,
-        image_dpi=output_dpi
-    )
-    
-    # Fall back to basic EXIF metadata if the pure Python approach fails
-    if not metadata_applied:
-        print("      Falling back to basic EXIF metadata.")
-        set_basic_exif_metadata(
-            image_path, 
-            output_base_name, 
-            photographer_name_with_institution,
-            STITCH_CREDIT_LINE,
-            STITCH_INSTITUTION,
-            output_dpi
-        )

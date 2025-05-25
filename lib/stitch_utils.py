@@ -12,9 +12,7 @@ except ImportError:
     def paste_image_onto_canvas(*args): raise ImportError("paste_image_onto_canvas missing")
     def convert_to_bgr_if_needed(img): return img
     def resize_image_maintain_aspect(*args): raise ImportError("resize_image_maintain_aspect missing")
-
-OBJECT_FILE_SUFFIX = "_object.tif"
-SCALED_RULER_FILE_SUFFIX = "_07.tif"
+from stitch_config import OBJECT_FILE_SUFFIX, SCALED_RULER_FILE_SUFFIX
 
 def find_processed_image_file(subfolder_path, base_name, view_specific_part, general_suffix):
     target_filename = f"{base_name}{view_specific_part}{general_suffix}"

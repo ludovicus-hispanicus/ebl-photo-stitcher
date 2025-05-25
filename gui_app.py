@@ -21,7 +21,7 @@ try:
     from gui_workflow_runner import run_complete_image_processing_workflow
     import resize_ruler 
     import ruler_detector
-    from stitch_images_adapter import process_tablet_subfolder
+    from stitch_images import process_tablet_subfolder
     from object_extractor import extract_and_save_center_object, extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,

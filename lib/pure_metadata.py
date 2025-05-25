@@ -9,6 +9,7 @@ import datetime
 import piexif
 import cv2
 import shutil
+import time
 
 # Try to import pyexiv2 modules (multiple possible package names)
 pyexiv2 = None
@@ -97,60 +98,6 @@ def set_basic_exif_metadata(image_path, image_title, photographer_name, institut
         print(f"      Warn: piexif metadata error: {e}")
         return False
 
-def clean_image_metadata(image_path):
-    """Clean problematic metadata like shape data from the image"""
-    temp_file_path = None  # Initialize for cleanup logic
-    try:
-        # Create a temporary file path with the original extension
-        base, file_ext = os.path.splitext(image_path)
-        # Ensure the temporary filename is distinct before overwriting
-        temp_file_path = base + "_cleaning_temp" + file_ext
-
-        img = cv2.imread(image_path)
-        if img is None:
-            print(f"      Warning: Could not read image to clean metadata: {image_path}")
-            return False
-        
-        write_success = False
-        # Save with appropriate parameters based on file type, using the original extension for the temp file
-        if file_ext.lower() in ['.tif', '.tiff']:
-            write_success = cv2.imwrite(temp_file_path, img, [cv2.IMWRITE_TIFF_COMPRESSION, 1])
-        elif file_ext.lower() in ['.jpg', '.jpeg']:
-            # This branch may not be hit if clean_image_metadata is only called for TIFFs
-            # from apply_all_metadata, but included for generality.
-            write_success = cv2.imwrite(temp_file_path, img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        else:
-            # This case implies an unsupported file type for this cleaning function's specific parameters.
-            # OpenCV's imwrite might still fail if it doesn't support writing this extension.
-            print(f"      Warning: Attempting to clean metadata for an extension '{file_ext}' by simple re-save. OpenCV might not support writing this format.")
-            write_success = cv2.imwrite(temp_file_path, img)
-            
-        if not write_success:
-            print(f"      Warning: cv2.imwrite failed for temporary file: {temp_file_path}")
-            if os.path.exists(temp_file_path): # Attempt to remove if partially created
-                try:
-                    os.remove(temp_file_path)
-                except Exception as e_rem:
-                    print(f"        Could not remove partially written temp file {temp_file_path}: {e_rem}")
-            return False
-            
-        # If imwrite was successful, the temporary file should exist.
-        # Replace original with cleaned version
-        os.remove(image_path)
-        os.rename(temp_file_path, image_path)
-        print(f"      Successfully cleaned image metadata for {os.path.basename(image_path)}.")
-        return True
-
-    except Exception as clean_err:
-        print(f"      Warning: Failed to clean image metadata for {os.path.basename(image_path)}: {clean_err}")
-        # If temp file path was defined and exists, try to clean it up
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception as e_rem_err:
-                 print(f"        Could not remove temp file {temp_file_path} during error cleanup: {e_rem_err}")
-        return False
-
 def apply_all_metadata(
     image_path, 
     image_title, 
@@ -179,21 +126,7 @@ def apply_all_metadata(
     if not (is_tiff or is_jpeg):
         print(f"Warning: Unsupported file format: {file_ext}. Only TIFF and JPEG are supported.")
         return False
-    
-    print(f"    Setting metadata for: {os.path.basename(image_path)}")
-    
-    # Try to fix any problematic metadata first
-    try:
-        # For TIFF files, check for shape data
-        if is_tiff:
-            with open(image_path, 'rb') as f:
-                file_start = f.read(1000)  # Read first 1000 bytes to check
-                if b'{"shape"' in file_start:
-                    print("      Detected problematic shape data, cleaning...")
-                    clean_image_metadata(image_path)
-    except Exception as e:
-        print(f"      Warning: Error checking for shape data: {e}")
-    
+        
     # If exiv2 module is available, use it for comprehensive metadata handling
     if pyexiv2:
         img = None # Initialize img to None for the finally block

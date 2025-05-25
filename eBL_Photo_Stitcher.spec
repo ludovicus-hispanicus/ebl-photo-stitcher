@@ -20,6 +20,8 @@ a = Analysis(
         'rawpy',
         'piexif',
         'pyexiv2',
+        'cairo',
+        'cairosvg',
     ],
     hookspath=[],
     hooksconfig={},

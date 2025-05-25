@@ -8,7 +8,7 @@ import traceback # Added for error printing
 try:
     import resize_ruler
     import ruler_detector
-    from stitch_images_adapter import process_tablet_subfolder
+    from stitch_images import process_tablet_subfolder
     from stitch_config import MUSEUM_CONFIGS
     from object_extractor import extract_and_save_center_object, extract_specific_contour_to_image_array
     from remove_background import (

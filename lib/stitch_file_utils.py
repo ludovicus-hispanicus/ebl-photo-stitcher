@@ -5,9 +5,7 @@ try:
 except ImportError:
     print("FATAL ERROR: stitch_file_utils.py cannot import from image_utils.py")
     def convert_to_bgr_if_needed(img): return img # Fallback
-
-OBJECT_FILE_SUFFIX = "_object.tif"
-SCALED_RULER_FILE_SUFFIX = "_07.tif" # Assuming this is the final scaled ruler
+from stitch_config import OBJECT_FILE_SUFFIX, SCALED_RULER_FILE_SUFFIX
 
 def find_processed_image_file(subfolder_path, base_name, view_specific_part, general_suffix):
     target_filename = f"{base_name}{view_specific_part}{general_suffix}"
@@ -81,7 +79,6 @@ def load_images_for_stitching_process(subfolder_path, image_base_name, view_to_f
 
         image_file_path = None
         if view_name_key == "ruler":
-            # Ruler uses a different naming convention: base_name + _07.tif (or SCALED_RULER_FILE_SUFFIX)
             # The image_base_name here is the subfolder name.
             image_file_path = find_processed_image_file(subfolder_path, image_base_name, "", SCALED_RULER_FILE_SUFFIX)
         else:
