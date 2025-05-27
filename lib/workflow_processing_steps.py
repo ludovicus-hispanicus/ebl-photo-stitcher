@@ -1,6 +1,7 @@
+import json
 import os
-import re # Keep re for image_extensions tuple creation if needed by caller
-from typing import List, Dict, Optional # ADDED IMPORT
+import re
+from typing import List, Dict, Optional, Tuple, Union
 
 def organize_project_subfolders(source_folder_path: str, image_extensions: tuple, organize_files_func) -> List[str]:
     """
@@ -118,4 +119,73 @@ def determine_ruler_image_for_scaling(
             print(f"   WARNING: Could not determine ruler image by standard patterns. Using first image found: {os.path.basename(ruler_for_scale_fp)} for scaling. This may be incorrect.")
             
     return ruler_for_scale_fp
+
+def determine_pixels_per_cm_from_measurement(
+    image_path: str, 
+    tablet_width_cm: float,
+    should_extract_object: bool = True,
+    bg_color_tolerance: int = 20
+) -> float:
+    """
+    Calculate pixels per cm based on a known width measurement.
+    
+    Args:
+        image_path: Path to the image
+        tablet_width_cm: Known width of the tablet in cm
+        should_extract_object: Whether to extract the object first (default: True)
+        bg_color_tolerance: Background color tolerance for extraction
+        
+    Returns:
+        Pixels per cm value
+    """
+    import cv2
+    from remove_background import (
+        detect_dominant_corner_background_color,
+        create_foreground_mask_from_background,
+        select_contour_closest_to_image_center
+    )
+    
+    # Load the image
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(f"Failed to load image: {image_path}")
+    
+    # Get image dimensions
+    img_height, img_width = img.shape[:2]
+    
+    # If we should extract the object first
+    if should_extract_object:
+        print(f"   Extracting object for measurement calculation from {os.path.basename(image_path)}")
+        
+        # Detect background color
+        bg_color = detect_dominant_corner_background_color(img)
+        
+        # Create foreground mask
+        fg_mask = create_foreground_mask_from_background(img, bg_color, bg_color_tolerance)
+        
+        # Get main object contour
+        main_contour = select_contour_closest_to_image_center(
+            img, fg_mask, min_contour_area_as_image_fraction=0.001
+        )
+        
+        if main_contour is None:
+            print(f"   Warning: Could not detect main object in {os.path.basename(image_path)}")
+            print(f"   Using full image width instead: {img_width}px / {tablet_width_cm}cm")
+            return img_width / tablet_width_cm
+        
+        # Get bounding rectangle of the object
+        x, y, w, h = cv2.boundingRect(main_contour)
+        
+        # Use object width rather than full image width
+        obj_width_px = w
+        print(f"   Extracted object width: {obj_width_px}px (full image: {img_width}px)")
+        
+        # Calculate pixels per cm using object width
+        pixels_per_cm = obj_width_px / tablet_width_cm
+    else:
+        # Use full image width (original behavior)
+        pixels_per_cm = img_width / tablet_width_cm
+    
+    print(f"   Calculated from measurement: {obj_width_px if should_extract_object else img_width}px / {tablet_width_cm}cm = {pixels_per_cm:.2f} px/cm")
+    return pixels_per_cm
 

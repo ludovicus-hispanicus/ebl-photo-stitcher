@@ -23,6 +23,8 @@ try:
     import ruler_detector_iraq_museum
     # Import new helper functions
     from workflow_processing_steps import organize_project_subfolders, determine_ruler_image_for_scaling
+    from measurements_utils import load_measurements_from_json, get_tablet_width_from_measurements
+    from workflow_processing_steps import determine_pixels_per_cm_from_measurement
 except ImportError as e:
     print(
         f"ERROR in gui_workflow_runner.py: Failed to import a processing module: {e}")
@@ -58,7 +60,9 @@ def run_complete_image_processing_workflow(
     finished_callback,
     museum_selection="British Museum",
     app_root_window=None,
-    background_color_tolerance=20
+    background_color_tolerance=20,
+    use_measurements_from_database=False,
+    measurements_dict=None
 ):
     from lib.complex_layout_main import ComplexLayoutDialog
 
@@ -180,27 +184,79 @@ def run_complete_image_processing_workflow(
             print("-"*40)
             continue
 
-        try:
-            curr_scale_fp, is_temp_s_file = ruler_for_scale_fp, False
-            if curr_scale_fp.lower().endswith(raw_ext_config):
-                tmp_s_fp = os.path.join(
-                    subfolder_path_item, f"{os.path.splitext(os.path.basename(curr_scale_fp))[0]}_rawscale.tif")
-                convert_raw_image_to_tiff(curr_scale_fp, tmp_s_fp)
-                curr_scale_fp, is_temp_s_file = tmp_s_fp, True
-                cr2_conv_total += 1
+        # Check if we should use measurements first
+        px_cm_val = None
+        measurements_used = False
+        
+        if use_measurements_from_database and measurements_dict:
+            tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
+            if tablet_width_cm is not None and tablet_width_cm > 0:
+                try:
+                    # Use the improved function that extracts the object first
+                    px_cm_val = determine_pixels_per_cm_from_measurement(
+                        ruler_for_scale_fp, 
+                        tablet_width_cm, 
+                        should_extract_object=True,
+                        bg_color_tolerance=background_color_tolerance
+                    )
+                    measurements_used = True
+                    print(f"   Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
+                except Exception as e:
+                    print(f"   Error using measurement from database: {e}")
+                    px_cm_val = None
+        
+        # If we're not using measurements or the measurement approach failed, use the existing ruler detection
+        if px_cm_val is None:
+            try:
+                curr_scale_fp, is_temp_s_file = ruler_for_scale_fp, False
+                if curr_scale_fp.lower().endswith(raw_ext_config):
+                    tmp_s_fp = os.path.join(
+                        subfolder_path_item, f"{os.path.splitext(os.path.basename(curr_scale_fp))[0]}_rawscale.tif")
+                    convert_raw_image_to_tiff(curr_scale_fp, tmp_s_fp)
+                    curr_scale_fp, is_temp_s_file = tmp_s_fp, True
+                    cr2_conv_total += 1
 
-            if museum_selection == "Iraq Museum":
-                print(f"   Using Iraq Museum specific ruler detector for {os.path.basename(curr_scale_fp)}...")
-                px_cm_val = ruler_detector_iraq_museum.detect_1cm_distance_iraq(curr_scale_fp)
-                if px_cm_val is None or px_cm_val <= 0:
-                    raise ValueError("Iraq Museum ruler detection failed to return a valid pixels/cm value.")
-                print(f"     Iraq Museum ruler detector returned px/cm: {px_cm_val}")
-            else:
-                px_cm_val = ruler_detector.estimate_pixels_per_centimeter_from_ruler(
-                    curr_scale_fp, ruler_position=gui_ruler_position)
-            
-            if is_temp_s_file and os.path.exists(curr_scale_fp):
-                os.remove(curr_scale_fp)
+                if museum_selection == "Iraq Museum":
+                    print(f"   Using Iraq Museum specific ruler detector for {os.path.basename(curr_scale_fp)}...")
+                    px_cm_val = ruler_detector_iraq_museum.detect_1cm_distance_iraq(curr_scale_fp)
+                    if px_cm_val is None or px_cm_val <= 0:
+                        raise ValueError("Iraq Museum ruler detection failed to return a valid pixels/cm value.")
+                    print(f"     Iraq Museum ruler detector returned px/cm: {px_cm_val}")
+                else:
+                    px_cm_val = ruler_detector.estimate_pixels_per_centimeter_from_ruler(
+                        curr_scale_fp, ruler_position=gui_ruler_position)
+                
+                if is_temp_s_file and os.path.exists(curr_scale_fp):
+                    os.remove(curr_scale_fp)
+            except Exception as e:
+                print(f"   Error during ruler scale detection: {e}")
+                
+                # Try to use measurements as fallback if not already attempted
+                if not measurements_used and measurements_dict:
+                    tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
+                    if tablet_width_cm is not None and tablet_width_cm > 0:
+                        try:
+                            # Use the improved function that extracts the object first
+                            px_cm_val = determine_pixels_per_cm_from_measurement(
+                                ruler_for_scale_fp, 
+                                tablet_width_cm, 
+                                should_extract_object=True,
+                                bg_color_tolerance=background_color_tolerance
+                            )
+                            print(f"   FALLBACK: Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
+                        except Exception as e_meas:
+                            print(f"   Error using measurement fallback: {e_meas}")
+                            px_cm_val = None
+                    else:
+                        print(f"   No measurement found in database for this tablet")
+                
+                if px_cm_val is None:
+                    print(f"   ERROR: Could not determine ruler scale for {subfolder_name_item}. Skip.")
+                    total_err += 1
+                    print("-"*40)
+                    continue
+
+        try:
             accumulated_sub_progress += sub_steps_alloc["scale"] * \
                 prog_per_folder
             progress_callback(current_prog_base + accumulated_sub_progress)

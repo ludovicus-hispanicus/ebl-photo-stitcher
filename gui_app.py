@@ -30,6 +30,7 @@ try:
     )
     from raw_processor import convert_raw_image_to_tiff
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
+    from measurements_utils import load_measurements_from_json  # Add this import
 except ImportError as e:
     # This error handling for imports from lib is crucial
     # Determine the expected absolute path to lib for a more informative error message
@@ -97,7 +98,21 @@ class ImageProcessorApp:
         self.museum_var = tk.StringVar()
         self.bg_color_tolerance_var = tk.IntVar(value=20)  # Default value from object_extractor.py
         self.progress_var = tk.DoubleVar(value=0.0)
+        self.use_measurements_var = tk.BooleanVar(value=False)
         
+        # Load measurements data first, before creating widgets
+        self.measurements_loaded = False
+        self.measurements_dict = {}
+        measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
+        if os.path.exists(measurements_file):
+            print(f"Loading measurements from {measurements_file}")
+            self.measurements_dict = load_measurements_from_json(measurements_file)
+            self.measurements_loaded = len(self.measurements_dict) > 0
+            print(f"Measurements loaded: {self.measurements_loaded} (found {len(self.measurements_dict)} entries)")
+        else:
+            print(f"Measurements file not found at: {measurements_file}")
+            print(f"Absolute path: {os.path.abspath(measurements_file)}")
+
         self._setup_icon()
         self._setup_styles()
         self._create_widgets()
@@ -186,9 +201,41 @@ class ImageProcessorApp:
             self.save_config()
 
     def _create_logo_options_ui(self, p):
-        f = ttk.LabelFrame(p, text="Options", padding="10")  # Renamed from "Logo Options" to "Options"
+        f = ttk.LabelFrame(p, text="Options", padding="10")
         f.pack(fill=tk.X, pady=5)
         
+        # Add measurements checkbox
+        measurements_frame = ttk.Frame(f)
+        measurements_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.measurements_checkbox = ttk.Checkbutton(
+            measurements_frame, 
+            text="Use measurements from database (Sippar Collection)",
+            variable=self.use_measurements_var
+        )
+        self.measurements_checkbox.pack(anchor=tk.W)
+        
+        # Disable checkbox if measurements aren't loaded
+        if not self.measurements_loaded:
+            self.measurements_checkbox.state(['disabled'])
+            hint_label = ttk.Label(
+                measurements_frame, 
+                text="(sippar.json not found in assets folder)",
+                font=('Helvetica', 8, 'italic'),
+                foreground="gray"
+            )
+            hint_label.pack(anchor=tk.W, padx=(20, 0))
+
+        # Add a small debug button (only visible in development)
+        if os.path.exists(os.path.join(script_directory, "DEBUG")):
+            debug_btn = ttk.Button(
+                measurements_frame, 
+                text="Debug Measurements", 
+                command=self.debug_measurements_loading,
+                style="Small.TButton"
+            )
+            debug_btn.pack(side=tk.RIGHT, padx=(5, 0))
+
         # Logo options section
         self.alc = ttk.Checkbutton(
             f, text="Add Logo", variable=self.add_logo_var, command=self.toggle_logo_path_entry)
@@ -220,7 +267,7 @@ class ImageProcessorApp:
         # Label to show current value
         self.tolerance_value_label = ttk.Label(slider_frame, text="20")
         self.tolerance_value_label.pack(side=tk.LEFT, padx=(0, 5))
-
+        
     def _create_process_button_ui(self, p):
         self.prb = ttk.Button(p, text="Start Processing",
                               command=self.start_processing_thread)
@@ -366,7 +413,8 @@ class ImageProcessorApp:
             "last_add_logo": self.add_logo_var.get(),
             "last_logo_path": self.logo_path_var.get(), 
             "last_museum": self.museum_var.get(),
-            "last_bg_color_tolerance": self.bg_color_tolerance_var.get()
+            "last_bg_color_tolerance": self.bg_color_tolerance_var.get(),
+            "last_use_measurements": self.use_measurements_var.get()
         }
         save_app_config(self.config_file_path, cfg_data)
 
@@ -384,6 +432,10 @@ class ImageProcessorApp:
         # Load bg color tolerance with fallback to default (20)
         self.bg_color_tolerance_var.set(loaded_cfg.get("last_bg_color_tolerance", 20))
         self.update_tolerance_label()  # Update the label to match the loaded value
+    
+        # Load use measurements setting if available and measurements are loaded
+        if self.measurements_loaded:
+            self.use_measurements_var.set(loaded_cfg.get("last_use_measurements", False))
     
         self.toggle_logo_path_entry()
 
@@ -404,6 +456,7 @@ class ImageProcessorApp:
         ms = self.museum_var.get()
         obm = "auto"        # Background mode is set to "auto" by default
         bg_tolerance = self.bg_color_tolerance_var.get()  # Get the tolerance value
+        use_measurements = self.use_measurements_var.get()  # Get the measurements setting
 
         if not fp or not os.path.isdir(fp):
             messagebox.showerror("Error", "Select valid input folder.")
@@ -416,7 +469,12 @@ class ImageProcessorApp:
         self.lt.configure(state=tk.NORMAL)
         self.lt.delete('1.0', tk.END)
         self.lt.configure(state=tk.DISABLED)
-        print(f"Starting processing with {ms} ruler...\n")
+        
+        print(f"Starting processing with {ms} ruler...")
+        if use_measurements:
+            print(f"Using measurements from database when available.")
+        print("")
+        
         self.prb.config(state=tk.DISABLED)
         self.update_progress_bar(0)
 
@@ -438,15 +496,62 @@ class ImageProcessorApp:
                              OBJECT_ARTIFACT_SUFFIX,
                              self.update_progress_bar,
                              self.processing_finished_ui_update,
-                             self.museum_var.get(),
-                             self.root,  # ADDED: Pass the main app window as parent for dialogs
-                             bg_tolerance  # ADDED: Pass the background color tolerance value
+                             ms,  # museum_selection
+                             self.root,  # app_root_window for dialogs
+                             bg_tolerance,  # background_color_tolerance
+                             use_measurements,  # use_measurements_from_database
+                             self.measurements_dict  # measurements_dict
                          ),
                          daemon=True).start()
 
     def update_tolerance_label(self, event=None):
         value = self.bg_color_tolerance_var.get()
         self.tolerance_value_label.config(text=str(value))
+
+    def debug_measurements_loading(self):
+        """Debug function to test loading the measurements file"""
+        measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
+        
+        print("\n--- DEBUG: Measurements Loading ---")
+        print(f"Assets folder path: {resource_path(ASSETS_SUBFOLDER)}")
+        print(f"Measurements file path: {measurements_file}")
+        print(f"File exists: {os.path.exists(measurements_file)}")
+        
+        if os.path.exists(measurements_file):
+            try:
+                with open(measurements_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                print(f"Successfully loaded JSON data, contains {len(data)} items")
+                
+                # Check for expected format
+                if isinstance(data, list) and len(data) > 0:
+                    sample = data[0]
+                    print(f"Sample item format: {list(sample.keys())}")
+                    has_id = "_id" in sample
+                    has_width = "width" in sample
+                    print(f"Has '_id' field: {has_id}")
+                    print(f"Has 'width' field: {has_width}")
+                    
+                    if has_id and has_width:
+                        print(f"Sample: ID={sample['_id']}, width={sample['width']}")
+                else:
+                    print("Data doesn't appear to be a list or is empty")
+            except Exception as e:
+                print(f"Error testing measurements file: {e}")
+        
+        # Try reloading the measurements dictionary
+        self.measurements_dict = load_measurements_from_json(measurements_file)
+        self.measurements_loaded = len(self.measurements_dict) > 0
+        print(f"Reload result: loaded={self.measurements_loaded}, entries={len(self.measurements_dict)}")
+        
+        # Update UI based on loaded status
+        if self.measurements_loaded and hasattr(self, "measurements_checkbox"):
+            self.measurements_checkbox.state(['!disabled'])
+            # Remove any hint labels about missing file
+            for child in self.measurements_checkbox.master.winfo_children():
+                if isinstance(child, ttk.Label) and "(sippar.json not found" in child.cget("text"):
+                    child.destroy()
+        print("--- End DEBUG ---\n")
 
 
 if __name__ == "__main__":
