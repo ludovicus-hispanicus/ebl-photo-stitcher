@@ -66,8 +66,8 @@ def save_stitched_output(
         apply_all_metadata(
             file_path,
             image_title=output_base_name,
-            photographer_name=photographer_name,
             institution_name=STITCH_INSTITUTION,
+            photographer_name=f"{photographer_name} ({STITCH_INSTITUTION})",
             credit_line_text=STITCH_CREDIT_LINE,
             copyright_text=STITCH_CREDIT_LINE,
             usage_terms_text=STITCH_XMP_USAGE_TERMS,

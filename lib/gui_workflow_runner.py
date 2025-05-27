@@ -57,7 +57,8 @@ def run_complete_image_processing_workflow(
     progress_callback,
     finished_callback,
     museum_selection="British Museum",
-    app_root_window=None 
+    app_root_window=None,
+    background_color_tolerance=20
 ):
     from lib.complex_layout_main import ComplexLayoutDialog
 
@@ -226,7 +227,8 @@ def run_complete_image_processing_workflow(
                 source_background_detection_mode=gui_obj_bg_mode, 
                 output_image_background_color=output_bg_color,
                 output_filename_suffix=object_artifact_suffix_config,
-                museum_selection=museum_selection
+                museum_selection=museum_selection,
+                background_color_tolerance_value=background_color_tolerance  # Add the parameter
             )
             
             accumulated_sub_progress += sub_steps_alloc["ruler_art"] * \
@@ -237,7 +239,7 @@ def run_complete_image_processing_workflow(
             if ruler_loaded_arr is None:
                 raise ValueError(f"Fail reload {path_ruler_extract_img}")
             
-            all_m = create_foreground_mask(ruler_loaded_arr, detected_bg_color_from_image, 40)
+            all_m = create_foreground_mask(ruler_loaded_arr, detected_bg_color_from_image, background_color_tolerance)
             all_c, _ = cv2.findContours(
                 all_m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             ruler_c = select_ruler_like_contour(
@@ -340,7 +342,8 @@ def run_complete_image_processing_workflow(
                     source_background_detection_mode=gui_obj_bg_mode,
                     output_image_background_color=output_bg_color, 
                     output_filename_suffix=object_artifact_suffix_config,
-                    museum_selection=museum_selection
+                    museum_selection=museum_selection,
+                    background_color_tolerance_value=background_color_tolerance  # Add the parameter
                 )
                     
                 if is_temp_o and os.path.exists(curr_o_path):

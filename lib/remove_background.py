@@ -57,13 +57,7 @@ def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 
     # If the detected background is dark, and it's British Museum or no museum specified,
     # we might want to keep it dark.
     if museum_selection is None or museum_selection == "British Museum":
-        # Check if the detected color is 'dark' (e.g., average brightness less than 100)
-        # Convert detected_bg_color to grayscale to check brightness
-        # Note: A simple average of BGR is a rough brightness estimate
-        if np.mean(detected_bg_color) < 100: # Example threshold for "dark"
-            return detected_bg_color
-        else:
-            return (255, 255, 255) # Otherwise, make it white for British Museum / None if it's not dark
+        return (0, 0, 0) # Otherwise, make it white for British Museum / None if it's not dark
     else:
         # For all other museums, force white output background
         return (255, 255, 255)

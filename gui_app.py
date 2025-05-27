@@ -84,8 +84,8 @@ GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS = {
 class ImageProcessorApp:
     def __init__(self, root_window):
         self.root = root_window
-        self.root.title("eBL Photo Stitcher v0.2")
-        self.root.geometry("600x780")
+        self.root.title("eBL Photo Stitcher v0.4")
+        self.root.geometry("600x850")
         
         self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
 
@@ -94,7 +94,8 @@ class ImageProcessorApp:
         self.photographer_var = tk.StringVar() 
         self.add_logo_var = tk.BooleanVar() 
         self.logo_path_var = tk.StringVar()
-        self.museum_var = tk.StringVar() 
+        self.museum_var = tk.StringVar()
+        self.bg_color_tolerance_var = tk.IntVar(value=20)  # Default value from object_extractor.py
         self.progress_var = tk.DoubleVar(value=0.0)
         
         self._setup_icon()
@@ -185,8 +186,10 @@ class ImageProcessorApp:
             self.save_config()
 
     def _create_logo_options_ui(self, p):
-        f = ttk.LabelFrame(p, text="Logo Options", padding="10")
+        f = ttk.LabelFrame(p, text="Options", padding="10")  # Renamed from "Logo Options" to "Options"
         f.pack(fill=tk.X, pady=5)
+        
+        # Logo options section
         self.alc = ttk.Checkbutton(
             f, text="Add Logo", variable=self.add_logo_var, command=self.toggle_logo_path_entry)
         self.alc.pack(anchor=tk.W)
@@ -199,6 +202,24 @@ class ImageProcessorApp:
         self.blb = ttk.Button(sf, text="Browse...",
                               command=self.browse_logo_file, state=tk.DISABLED)
         self.blb.pack(side=tk.LEFT)
+        
+        # Background detection color tolerance slider
+        bg_tolerance_frame = ttk.Frame(f)
+        bg_tolerance_frame.pack(fill=tk.X, pady=(10, 0))
+        ttk.Label(bg_tolerance_frame, text="Background Detection Color Tolerance:").pack(anchor=tk.W)
+        
+        # Create slider with value label
+        slider_frame = ttk.Frame(bg_tolerance_frame)
+        slider_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.bg_tolerance_slider = ttk.Scale(
+            slider_frame, from_=5, to=50, orient=tk.HORIZONTAL,
+            variable=self.bg_color_tolerance_var, command=self.update_tolerance_label)
+        self.bg_tolerance_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        
+        # Label to show current value
+        self.tolerance_value_label = ttk.Label(slider_frame, text="20")
+        self.tolerance_value_label.pack(side=tk.LEFT, padx=(0, 5))
 
     def _create_process_button_ui(self, p):
         self.prb = ttk.Button(p, text="Start Processing",
@@ -344,7 +365,8 @@ class ImageProcessorApp:
             "last_photographer": self.photographer_var.get(), 
             "last_add_logo": self.add_logo_var.get(),
             "last_logo_path": self.logo_path_var.get(), 
-            "last_museum": self.museum_var.get()
+            "last_museum": self.museum_var.get(),
+            "last_bg_color_tolerance": self.bg_color_tolerance_var.get()
         }
         save_app_config(self.config_file_path, cfg_data)
 
@@ -359,6 +381,10 @@ class ImageProcessorApp:
         self.logo_path_var.set(loaded_cfg.get("last_logo_path", defaults["last_logo_path"]))
         self.museum_var.set(loaded_cfg.get("last_museum", defaults["last_museum"]))
         
+        # Load bg color tolerance with fallback to default (20)
+        self.bg_color_tolerance_var.set(loaded_cfg.get("last_bg_color_tolerance", 20))
+        self.update_tolerance_label()  # Update the label to match the loaded value
+    
         self.toggle_logo_path_entry()
 
     def update_progress_bar(self, value): self.progress_var.set(
@@ -377,8 +403,7 @@ class ImageProcessorApp:
         lp = self.logo_path_var.get()
         ms = self.museum_var.get()
         obm = "auto"        # Background mode is set to "auto" by default
-        # The actual background detection logic is handled in gui_workflow_runner.py
-        # based on the museum_selection parameter
+        bg_tolerance = self.bg_color_tolerance_var.get()  # Get the tolerance value
 
         if not fp or not os.path.isdir(fp):
             messagebox.showerror("Error", "Select valid input folder.")
@@ -414,9 +439,14 @@ class ImageProcessorApp:
                              self.update_progress_bar,
                              self.processing_finished_ui_update,
                              self.museum_var.get(),
-                             self.root # ADDED: Pass the main app window as parent for dialogs
+                             self.root,  # ADDED: Pass the main app window as parent for dialogs
+                             bg_tolerance  # ADDED: Pass the background color tolerance value
                          ),
                          daemon=True).start()
+
+    def update_tolerance_label(self, event=None):
+        value = self.bg_color_tolerance_var.get()
+        self.tolerance_value_label.config(text=str(value))
 
 
 if __name__ == "__main__":
