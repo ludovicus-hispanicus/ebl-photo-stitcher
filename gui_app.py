@@ -199,14 +199,26 @@ class ImageProcessorApp:
     def on_museum_changed(self, event):
         museum_selection = self.museum_var.get()
         print(f"Museum selected: {museum_selection}")
+        
+        # Handle ruler position for Iraq Museum
         if museum_selection == "Iraq Museum":
             self.ruler_position_var.set("bottom-left-fixed") 
         else:
             # If switching away from Iraq Museum and it was on the fixed pos, revert to a default like "top"
             if self.ruler_position_var.get() == "bottom-left-fixed":
                 self.ruler_position_var.set("top")
-        self.draw_ruler_selector() 
-        if event: # Only save config if it's a user interaction, not initial setup
+        
+        # Handle measurements database access based on museum selection
+        if museum_selection == "British Museum" and self.measurements_loaded:
+            # Enable measurements checkbox for British Museum if data is loaded
+            self.measurements_checkbox.state(['!disabled'])
+        else:
+            # For other museums, disable and uncheck the measurements checkbox
+            self.use_measurements_var.set(False)
+            self.measurements_checkbox.state(['disabled'])
+        
+        self.draw_ruler_selector()
+        if event:  # Only save config if it's a user interaction, not initial setup
             self.save_config()
 
     def _create_logo_options_ui(self, p):
