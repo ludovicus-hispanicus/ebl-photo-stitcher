@@ -16,7 +16,8 @@ try:
     )
     from stitch_output import save_stitched_output
     from stitch_config import (
-        STITCH_VIEW_PATTERNS_CONFIG,
+        INTERMEDIATE_SUFFIX_BASE,
+        STITCH_VIEW_PATTERNS_BASE,
         STITCH_BACKGROUND_COLOR,
         STITCH_FINAL_MARGIN_PX,
         STITCH_VIEW_GAP_PX,
@@ -130,12 +131,13 @@ def process_tablet_subfolder(
     current_view_gap = STITCH_VIEW_GAP_PX if view_gap_px_override is None else view_gap_px_override
     current_ruler_padding = STITCH_RULER_PADDING_PX 
 
-    # Step 1: Load all required images
+    # Step 1: Load all required images, including intermediate images
     loaded_images = load_images_for_stitching_process(
         subfolder_path, 
         output_base_name, 
-        STITCH_VIEW_PATTERNS_CONFIG,
-        custom_layout=custom_layout 
+        STITCH_VIEW_PATTERNS_BASE,
+        include_intermediates=True,  # Explicitly include intermediates
+        intermediate_suffix_patterns=INTERMEDIATE_SUFFIX_BASE  # Pass this parameter
     )
     if not loaded_images or loaded_images.get("obverse") is None and (custom_layout is None or custom_layout.get("obverse") is None): 
         print(f"Warning/Error: Stitching requires a primary image (e.g. 'obverse'). Loaded: {list(loaded_images.keys()) if loaded_images else 'None'}")
@@ -247,3 +249,180 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
         return canvas[min_y_coord:max_y_coord, min_x_coord:max_x_coord]
     
     return canvas # Should ideally not happen if images were pasted
+
+def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path, 
+                 photographer_name, ruler_position="bottom", 
+                 add_logo=False, logo_path=None, museum="British Museum"):
+    """
+    Main function to stitch tablet images together.
+    """
+    # Process intermediate images
+    intermediate_positions = [
+        "intermediate_obverse_top", "intermediate_obverse_bottom", 
+        "intermediate_obverse_left", "intermediate_obverse_right",
+        "intermediate_reverse_top", "intermediate_reverse_bottom",
+        "intermediate_reverse_left", "intermediate_reverse_right"
+    ]
+    
+    # Add handling for intermediate images
+    def place_intermediate_images(canvas, loaded_images, main_positions, spacing, relationships):
+        """
+        Place intermediate images between main views with gradient blending
+        
+        Args:
+            canvas: The main canvas where images are placed
+            loaded_images: Dictionary of loaded images
+            main_positions: Dictionary of main image positions (x, y, width, height)
+            spacing: Spacing between views
+            relationships: Dictionary mapping intermediate positions to related main views
+        """
+        # Process each intermediate image
+        for inter_pos, (main_view, side_view) in relationships.items():
+            if inter_pos not in loaded_images or loaded_images[inter_pos] is None:
+                continue
+                
+            if main_view not in main_positions or side_view not in main_positions:
+                print(f"      Warning: Cannot place {inter_pos}, missing main views")
+                continue
+            
+            # Get the intermediate image
+            inter_img = loaded_images[inter_pos]
+            
+            # Get positions of the two views this intermediate connects
+            main_pos = main_positions[main_view]
+            side_pos = main_positions[side_view]
+            
+            # Calculate placement position based on the position of the main views
+            # For top/bottom intermediates
+            if "top" in inter_pos or "bottom" in inter_pos:
+                # Calculate center position between the two views
+                mid_x = (main_pos[0] + main_pos[2]//2 + side_pos[0] + side_pos[2]//2) // 2
+                
+                if "top" in inter_pos:
+                    # Place between main view and top
+                    mid_y = (main_pos[1] + side_pos[1] + side_pos[3]) // 2
+                else:
+                    # Place between main view and bottom
+                    mid_y = (main_pos[1] + main_pos[3] + side_pos[1]) // 2
+                    
+                # Resize intermediate image to appropriate size
+                inter_width = min(main_pos[2], side_pos[2])
+                inter_height = max(spacing, inter_img.shape[0] * inter_width // inter_img.shape[1])
+                resized_inter = cv2.resize(inter_img, (inter_width, inter_height))
+                
+                # Calculate placement coordinates
+                place_x = mid_x - inter_width // 2
+                place_y = mid_y - inter_height // 2
+                
+            # For left/right intermediates
+            else:
+                # Calculate center position between the two views
+                mid_y = (main_pos[1] + main_pos[3]//2 + side_pos[1] + side_pos[3]//2) // 2
+                
+                if "left" in inter_pos:
+                    # Place between main view and left
+                    mid_x = (main_pos[0] + side_pos[0] + side_pos[2]) // 2
+                else:
+                    # Place between main view and right
+                    mid_x = (main_pos[0] + main_pos[2] + side_pos[0]) // 2
+                
+                # Resize intermediate image to appropriate size
+                inter_height = min(main_pos[3], side_pos[3])
+                inter_width = max(spacing, inter_img.shape[1] * inter_height // inter_img.shape[0])
+                resized_inter = cv2.resize(inter_img, (inter_width, inter_height))
+                
+                # Calculate placement coordinates
+                place_x = mid_x - inter_width // 2
+                place_y = mid_y - inter_height // 2
+        
+            # Create gradient blend mask for smooth transitions
+            mask = np.zeros((resized_inter.shape[0], resized_inter.shape[1]), dtype=np.uint8)
+            
+            # Gradient width as 25% of image dimension
+            gradient_width_x = max(1, resized_inter.shape[1] // 4)
+            gradient_width_y = max(1, resized_inter.shape[0] // 4)
+            
+            # Create mask with gradient edges
+            mask.fill(255)  # Full opacity in center
+            
+            # Apply horizontal gradients (left/right edges)
+            for x in range(gradient_width_x):
+                opacity = int(255 * x / gradient_width_x)
+                mask[:, x] = opacity  # Left edge gradient
+                mask[:, resized_inter.shape[1]-x-1] = opacity  # Right edge gradient
+                
+            # Apply vertical gradients (top/bottom edges)
+            for y in range(gradient_width_y):
+                opacity = int(255 * y / gradient_width_y)
+                mask[y, :] = np.minimum(mask[y, :], opacity)  # Top edge gradient
+                mask[resized_inter.shape[0]-y-1, :] = np.minimum(mask[resized_inter.shape[0]-y-1, :], opacity)  # Bottom edge
+        
+            # Convert mask to 3-channel for alpha blending
+            mask_3ch = cv2.merge([mask, mask, mask])
+            
+            # Ensure placement coordinates are within canvas bounds
+            place_x = max(0, min(place_x, canvas.shape[1] - resized_inter.shape[1]))
+            place_y = max(0, min(place_y, canvas.shape[0] - resized_inter.shape[0]))
+            
+            # Place intermediate image with gradient mask on canvas
+            blend_region = canvas[place_y:place_y+resized_inter.shape[0], place_x:place_x+resized_inter.shape[1]]
+            
+            # Check if region sizes match
+            if blend_region.shape[:2] != resized_inter.shape[:2]:
+                print(f"      Warning: Region size mismatch for {inter_pos}, adjusting...")
+                # Adjust to the smaller of the two sizes
+                h = min(blend_region.shape[0], resized_inter.shape[0])
+                w = min(blend_region.shape[1], resized_inter.shape[1])
+                blend_region = canvas[place_y:place_y+h, place_x:place_x+w]
+                resized_inter = resized_inter[:h, :w]
+                mask_3ch = mask_3ch[:h, :w]
+        
+            # Apply the alpha blend
+            for c in range(3):  # RGB channels
+                blend_region[:, :, c] = (resized_inter[:, :, c] * mask_3ch[:, :, c] // 255 + 
+                                       blend_region[:, :, c] * (255 - mask_3ch[:, :, c]) // 255)
+            
+            print(f"      Placed intermediate image: {inter_pos}")
+    
+        return canvas
+
+    # Create a dictionary to track all the main image positions
+    main_positions = {}
+    
+    # Add positions of main views if they exist
+    if "obverse" in loaded_image_dict and loaded_image_dict["obverse"] is not None:
+        main_positions["obverse"] = (obverse_x, obverse_y, 
+                                     loaded_image_dict["obverse"].shape[1],
+                                     loaded_image_dict["obverse"].shape[0])
+    
+    if "reverse" in loaded_image_dict and loaded_image_dict["reverse"] is not None:
+        main_positions["reverse"] = (reverse_x, reverse_y,
+                                    loaded_image_dict["reverse"].shape[1],
+                                    loaded_image_dict["reverse"].shape[0])
+    
+    if "top" in loaded_image_dict and loaded_image_dict["top"] is not None:
+        main_positions["top"] = (top_x, top_y,
+                                loaded_image_dict["top"].shape[1],
+                                loaded_image_dict["top"].shape[0])
+    
+    if "bottom" in loaded_image_dict and loaded_image_dict["bottom"] is not None:
+        main_positions["bottom"] = (bottom_x, bottom_y,
+                                   loaded_image_dict["bottom"].shape[1],
+                                   loaded_image_dict["bottom"].shape[0])
+    
+    if "left" in loaded_image_dict and loaded_image_dict["left"] is not None:
+        main_positions["left"] = (left_x, left_y,
+                                 loaded_image_dict["left"].shape[1],
+                                 loaded_image_dict["left"].shape[0])
+    
+    if "right" in loaded_image_dict and loaded_image_dict["right"] is not None:
+        main_positions["right"] = (right_x, right_y,
+                                  loaded_image_dict["right"].shape[1],
+                                  loaded_image_dict["right"].shape[0])
+    
+    # Now call the place_intermediate_images function
+    print("      Placing intermediate images...")
+    main_canvas = place_intermediate_images(main_canvas, loaded_image_dict, main_positions, view_gap_px, intermediate_relationships)
+
+    # Continue with ruler placement and the rest of the stitching process
+    # ... existing code for ruler and logo placement ...

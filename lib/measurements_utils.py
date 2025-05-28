@@ -12,10 +12,8 @@ def load_measurements_from_json(json_path):
     Returns:
         Dictionary mapping tablet IDs to their measurements, or empty dict if file not found
     """
-    print(f"Attempting to load measurements from: {json_path}")
-    
+
     if not os.path.exists(json_path):
-        print(f"Warning: Measurements file not found at {json_path}")
         return {}
     
     try:
@@ -27,13 +25,7 @@ def load_measurements_from_json(json_path):
         for item in data:
             if "_id" in item and "width" in item:
                 measurements_dict[item["_id"]] = item
-        
-        print(f"Successfully loaded {len(measurements_dict)} measurements from {json_path}")
-        # Print a few sample IDs for verification
-        sample_ids = list(measurements_dict.keys())[:5]
-        if sample_ids:
-            print(f"Sample IDs: {sample_ids}")
-        
+                
         return measurements_dict
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON from measurements file: {e}")

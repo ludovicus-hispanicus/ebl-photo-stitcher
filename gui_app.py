@@ -29,6 +29,12 @@ try:
         select_ruler_like_contour_from_list as select_ruler_like_contour
     )
     from raw_processor import convert_raw_image_to_tiff
+    from stitch_config import (
+        STITCH_VIEW_PATTERNS_BASE,
+        STITCH_VIEW_PATTERNS_WITH_EXT,
+        INTERMEDIATE_SUFFIX_BASE,
+        INTERMEDIATE_SUFFIX_WITH_EXT,
+    )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
     from measurements_utils import load_measurements_from_json  # Add this import
 except ImportError as e:
@@ -71,17 +77,6 @@ RAW_IMAGE_EXTENSION = '.cr2'
 # DEFAULT_PHOTOGRAPHER is now imported
 TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME = "temp_isolated_ruler.tif"
 
-# CORRECTED: Ensure this matches the numeric mapping in stitch_config.STITCH_VIEW_PATTERNS_CONFIG
-# stitch_config.py has: top: _03, bottom: _04
-GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS = {
-    "obverse": "_01.", 
-    "reverse": "_02.", 
-    "top": "_03.",      # Was _04., changed to match stitch_config for consistency
-    "bottom": "_04.",   # Was _03., changed to match stitch_config for consistency
-    "left": "_05.",      # stitch_config has _05 for left
-    "right": "_06."     # stitch_config has _06 for right
-}
-
 class ImageProcessorApp:
     def __init__(self, root_window):
         self.root = root_window
@@ -105,13 +100,8 @@ class ImageProcessorApp:
         self.measurements_dict = {}
         measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
         if os.path.exists(measurements_file):
-            print(f"Loading measurements from {measurements_file}")
             self.measurements_dict = load_measurements_from_json(measurements_file)
             self.measurements_loaded = len(self.measurements_dict) > 0
-            print(f"Measurements loaded: {self.measurements_loaded} (found {len(self.measurements_dict)} entries)")
-        else:
-            print(f"Measurements file not found at: {measurements_file}")
-            print(f"Absolute path: {os.path.abspath(measurements_file)}")
 
         self._setup_icon()
         self._setup_styles()
@@ -479,30 +469,30 @@ class ImageProcessorApp:
         self.update_progress_bar(0)
 
         threading.Thread(target=run_complete_image_processing_workflow,
-                         args=(
-                             fp,
-                             rp,
-                             ph,
-                             obm,
-                             al,
-                             lp,
-                             RAW_IMAGE_EXTENSION,
-                             VALID_IMAGE_EXTENSIONS,
-                             RULER_TEMPLATE_1CM_PATH_ASSET,
-                             RULER_TEMPLATE_2CM_PATH_ASSET,
-                             RULER_TEMPLATE_5CM_PATH_ASSET,
-                             GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS,
-                             TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
-                             OBJECT_ARTIFACT_SUFFIX,
-                             self.update_progress_bar,
-                             self.processing_finished_ui_update,
-                             ms,  # museum_selection
-                             self.root,  # app_root_window for dialogs
-                             bg_tolerance,  # background_color_tolerance
-                             use_measurements,  # use_measurements_from_database
-                             self.measurements_dict  # measurements_dict
-                         ),
-                         daemon=True).start()
+                 args=(
+                     fp,
+                     rp,
+                     ph,
+                     obm,
+                     al,
+                     lp,
+                     RAW_IMAGE_EXTENSION,
+                     VALID_IMAGE_EXTENSIONS,
+                     RULER_TEMPLATE_1CM_PATH_ASSET,
+                     RULER_TEMPLATE_2CM_PATH_ASSET,
+                     RULER_TEMPLATE_5CM_PATH_ASSET,
+                     STITCH_VIEW_PATTERNS_WITH_EXT,  # Use this instead of GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS
+                     TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
+                     OBJECT_ARTIFACT_SUFFIX,
+                     self.update_progress_bar,
+                     self.processing_finished_ui_update,
+                     ms,  # museum_selection
+                     self.root,  # app_root_window for dialogs
+                     bg_tolerance,  # background_color_tolerance
+                     use_measurements,  # use_measurements_from_database
+                     self.measurements_dict  # measurements_dict
+                 ),
+                 daemon=True).start()
 
     def update_tolerance_label(self, event=None):
         value = self.bg_color_tolerance_var.get()
