@@ -54,6 +54,7 @@ except ImportError as e:
 import cv2
 import threading
 import json
+import webbrowser  # Add this import for opening URLs
 from tkinter import filedialog, messagebox, ttk # ttk should be here
 import tkinter as tk # tk is used in the except block above, so it's fine here or earlier
 from PIL import Image, ImageTk, ImageDraw
@@ -76,12 +77,13 @@ VALID_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp')
 RAW_IMAGE_EXTENSION = '.cr2'
 # DEFAULT_PHOTOGRAPHER is now imported
 TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME = "temp_isolated_ruler.tif"
+HELP_URL = "https://github.com/ElectronicBabylonianLiterature/ebl-photo-stitcher?tab=readme-ov-file#usage-gui"
 
 class ImageProcessorApp:
     def __init__(self, root_window):
         self.root = root_window
         self.root.title("eBL Photo Stitcher v0.4")
-        self.root.geometry("600x850")
+        self.root.geometry("600x900")
         
         self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
 
@@ -105,6 +107,7 @@ class ImageProcessorApp:
 
         self._setup_icon()
         self._setup_styles()
+        self._create_help_link()  # Add this before other widgets
         self._create_widgets()
         self.load_config() 
         self.on_museum_changed(None) 
@@ -122,6 +125,22 @@ class ImageProcessorApp:
         style.configure("TLabel", padding=5, font=('Helvetica', 10))
         style.configure("TButton", padding=5, font=('Helvetica', 10))
         style.configure("TFrame", padding=10)
+        # Add style for blue hyperlink
+        style.configure("Link.TLabel", foreground="blue", font=('Helvetica', 10, 'underline'))
+
+    def _create_help_link(self):
+        # Create frame for the help link at the top right
+        help_frame = ttk.Frame(self.root)
+        help_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
+        
+        # Create a spacer to push the help link to the right
+        spacer = ttk.Label(help_frame)
+        spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Create the help link
+        help_link = ttk.Label(help_frame, text="Help", style="Link.TLabel", cursor="hand2")
+        help_link.pack(side=tk.RIGHT)
+        help_link.bind("<Button-1>", lambda e: webbrowser.open_new(HELP_URL))
 
     def _create_widgets(self):
         mf = ttk.Frame(self.root, padding="10")
