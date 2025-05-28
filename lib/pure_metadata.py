@@ -152,7 +152,7 @@ def apply_all_metadata(
             new_xmp_data = {}
             
             # Set EXIF metadata
-            new_exif_data['Exif.Image.Artist'] = f"{photographer_name} ({institution_name})"
+            new_exif_data['Exif.Image.Artist'] = f"{photographer_name}"
             new_exif_data['Exif.Image.Copyright'] = copyright_text
             new_exif_data['Exif.Image.ImageDescription'] = image_title
             new_exif_data['Exif.Image.Software'] = "eBL Photo Stitcher"

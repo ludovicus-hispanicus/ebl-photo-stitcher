@@ -29,6 +29,7 @@ try:
         select_ruler_like_contour_from_list as select_ruler_like_contour
     )
     from raw_processor import convert_raw_image_to_tiff
+    import stitch_config
     from stitch_config import (
         STITCH_VIEW_PATTERNS_BASE,
         STITCH_VIEW_PATTERNS_WITH_EXT,
@@ -78,6 +79,10 @@ RAW_IMAGE_EXTENSION = '.cr2'
 # DEFAULT_PHOTOGRAPHER is now imported
 TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME = "temp_isolated_ruler.tif"
 HELP_URL = "https://github.com/ElectronicBabylonianLiterature/ebl-photo-stitcher?tab=readme-ov-file#usage-gui"
+
+# remember the real defaults  
+_ORIG_STITCH_CREDIT    = stitch_config.STITCH_CREDIT_LINE
+_ORIG_STITCH_INSTITUTION = stitch_config.STITCH_INSTITUTION
 
 class ImageProcessorApp:
     def __init__(self, root_window):
@@ -499,31 +504,56 @@ class ImageProcessorApp:
         self.prb.config(state=tk.DISABLED)
         self.update_progress_bar(0)
 
-        threading.Thread(target=run_complete_image_processing_workflow,
-                 args=(
-                     fp,
-                     rp,
-                     ph,
-                     obm,
-                     al,
-                     lp,
-                     RAW_IMAGE_EXTENSION,
-                     VALID_IMAGE_EXTENSIONS,
-                     RULER_TEMPLATE_1CM_PATH_ASSET,
-                     RULER_TEMPLATE_2CM_PATH_ASSET,
-                     RULER_TEMPLATE_5CM_PATH_ASSET,
-                     STITCH_VIEW_PATTERNS_WITH_EXT,  # Use this instead of GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS
-                     TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
-                     OBJECT_ARTIFACT_SUFFIX,
-                     self.update_progress_bar,
-                     self.processing_finished_ui_update,
-                     ms,  # museum_selection
-                     self.root,  # app_root_window for dialogs
-                     bg_tolerance,  # background_color_tolerance
-                     use_measurements,  # use_measurements_from_database
-                     self.measurements_dict  # measurements_dict
-                 ),
-                 daemon=True).start()
+        museum = self.museum_var.get()
+
+        # ——— Credit line overrides ———
+        if museum == "Iraq Museum":
+            stitch_config.STITCH_CREDIT_LINE = (
+                "Cuneiform Artefacts of Iraq in Context (CAIC), "
+                "Bayerische Akademie der Wissenschaften"
+            )
+        elif museum == "Non-eBL Ruler (VAM)":
+            stitch_config.STITCH_CREDIT_LINE = ""
+        else:
+            stitch_config.STITCH_CREDIT_LINE = _ORIG_STITCH_CREDIT
+
+        # ——— Institution overrides ———
+        if museum == "Iraq Museum":
+            stitch_config.STITCH_INSTITUTION = "The Iraq Museum – eBL Project"
+        elif museum == "Non-eBL Ruler (VAM)":
+            stitch_config.STITCH_INSTITUTION = (
+                "Staatliche Museen zu Berlin, Vorderasiatisches Museum"
+            )
+        else:
+            stitch_config.STITCH_INSTITUTION = _ORIG_STITCH_INSTITUTION
+
+        threading.Thread(
+            target=run_complete_image_processing_workflow,
+            args=(
+                fp,
+                rp,
+                ph,
+                obm,
+                al,
+                lp,
+                RAW_IMAGE_EXTENSION,
+                VALID_IMAGE_EXTENSIONS,
+                RULER_TEMPLATE_1CM_PATH_ASSET,
+                RULER_TEMPLATE_2CM_PATH_ASSET,
+                RULER_TEMPLATE_5CM_PATH_ASSET,
+                STITCH_VIEW_PATTERNS_WITH_EXT,  # Use this instead of GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS
+                TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
+                OBJECT_ARTIFACT_SUFFIX,
+                self.update_progress_bar,
+                self.processing_finished_ui_update,
+                ms,  # museum_selection
+                self.root,  # app_root_window for dialogs
+                bg_tolerance,  # background_color_tolerance
+                use_measurements,  # use_measurements_from_database
+                self.measurements_dict  # measurements_dict
+            ),
+            daemon=True
+        ).start()
 
     def update_tolerance_label(self, event=None):
         value = self.bg_color_tolerance_var.get()

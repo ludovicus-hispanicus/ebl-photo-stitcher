@@ -4,15 +4,9 @@ import numpy as np
 import os
 import imageio
 import datetime
-import time # Import time for sleep
-from stitch_config import (
-    FINAL_TIFF_SUBFOLDER_NAME,
-    FINAL_JPG_SUBFOLDER_NAME,
-    JPEG_SAVE_QUALITY,
-    STITCH_INSTITUTION,
-    STITCH_CREDIT_LINE,
-    STITCH_XMP_USAGE_TERMS
-)
+import time  # Import time for sleep
+import stitch_config
+from stitch_config import FINAL_TIFF_SUBFOLDER_NAME, FINAL_JPG_SUBFOLDER_NAME, JPEG_SAVE_QUALITY
 
 try:
     from pure_metadata import apply_all_metadata, set_basic_exif_metadata
@@ -66,11 +60,11 @@ def save_stitched_output(
         apply_all_metadata(
             file_path,
             image_title=output_base_name,
-            institution_name=STITCH_INSTITUTION,
-            photographer_name=f"{photographer_name} ({STITCH_INSTITUTION})",
-            credit_line_text=STITCH_CREDIT_LINE,
-            copyright_text=STITCH_CREDIT_LINE,
-            usage_terms_text=STITCH_XMP_USAGE_TERMS,
+            institution_name=stitch_config.STITCH_INSTITUTION,
+            photographer_name=f"{photographer_name} ({stitch_config.STITCH_INSTITUTION})",
+            credit_line_text=stitch_config.STITCH_CREDIT_LINE,
+            copyright_text=stitch_config.STITCH_CREDIT_LINE,
+            usage_terms_text=stitch_config.STITCH_XMP_USAGE_TERMS,
             image_dpi=output_dpi
         )
     
