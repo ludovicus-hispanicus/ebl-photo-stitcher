@@ -26,7 +26,7 @@ STITCH_VIEW_PATTERNS_FOR_OBJECTS = {k: f"{v}{OBJECT_FILE_SUFFIX}" for k, v in ST
 # Intermediate image suffixes - for detecting both original and object files
 INTERMEDIATE_SUFFIX_BASE = {
     "07": "intermediate_obverse_left",
-    "08": "intermediate_reverse_right",
+    "08": "intermediate_obverse_right",
     "ot": "intermediate_obverse_top",
     "ob": "intermediate_obverse_bottom",
     "ol": "intermediate_obverse_left",

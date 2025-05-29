@@ -129,7 +129,7 @@ def process_intermediate_image_with_mask(
     # 2. intermediate_obverse_top, etc. (full position names)
     position = None
     position_patterns = [
-        r'_([or][rltb])_', # Match _ol_, _or_, _ot_, _ob_, _rl_, _rr_, _rt_, _rb_
+        r'_([or0][rltb78])_', # Match _ol_, _or_, _ot_, _ob_, _rl_, _rr_, _rt_, _rb_
         r'intermediate_[^_]+_([^_\.]+)' # Match position after intermediate_side_
     ]
     
