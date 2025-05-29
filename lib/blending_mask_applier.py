@@ -83,9 +83,9 @@ def _normalize_position_name(position):
     position = position.lower()
     
     # Handle shorthand codes like 'ol', 'or', etc.
-    if position == 'ol' or position == 'rl':
+    if position == 'ol' or position == 'rl' or position == '07':
         return 'left'
-    elif position == 'or' or position == 'rr':
+    elif position == 'or' or position == 'rr' or position == '08':
         return 'right'
     elif position == 'ot' or position == 'rt':
         return 'top'
