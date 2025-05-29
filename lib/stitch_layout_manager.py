@@ -148,12 +148,19 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     """
     Calculate the canvas dimensions and coordinates for placing each image or blended sequence.
     Returns canvas dimensions, coordinate map, and the input images_dict.
-    MODIFIED to handle sequences and use their post-blending dimensions for layout.
-    The layout logic is still based on a standard 6-view + ruler concept but uses actual
-    dimensions from images_dict (which could be single images or blended sequences).
     
-    Also adds rotated left and right views next to the reverse view.
-    NOW INCLUDES INTERMEDIATE IMAGES.
+    The central column is arranged in this order:
+    - Intermediate Obverse Top (_ot)
+    - Obverse (_01)
+    - Intermediate Obverse Bottom (_ob)
+    - Bottom (_04)
+    - Intermediate Reverse Top (_rt)
+    - Reverse (_02)
+    - Intermediate Reverse Bottom (_rb)
+    - Top (_03)
+    - Ruler
+    
+    The sides (left, right) are aligned horizontally with obverse/reverse.
     """
     
     # Helper to determine which dimension is primary for a sequence based on key naming
@@ -184,15 +191,20 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
         if obv_h == 0 or obv_w == 0: 
             raise ValueError("A primary image (e.g., 'obverse' or other from custom_layout) with valid dimensions is required for layout.")
 
+    # Get dimensions for all sides
     l_w = get_image_dimension(images_dict.get("left"), 1, blend_overlap_px if isinstance(images_dict.get("left"), list) and get_sequence_primary_axis("left") == 1 else 0)
     r_w = get_image_dimension(images_dict.get("right"), 1, blend_overlap_px if isinstance(images_dict.get("right"), list) and get_sequence_primary_axis("right") == 1 else 0)
-    b_h = get_image_dimension(images_dict.get("bottom"), 0, blend_overlap_px if isinstance(images_dict.get("bottom"), list) and get_sequence_primary_axis("bottom") == 0 else 0)
-    rev_h = get_image_dimension(images_dict.get("reverse"), 0, blend_overlap_px if isinstance(images_dict.get("reverse"), list) and get_sequence_primary_axis("reverse") == 0 else 0)
-    t_h = get_image_dimension(images_dict.get("top"), 0, blend_overlap_px if isinstance(images_dict.get("top"), list) and get_sequence_primary_axis("top") == 0 else 0)
-    
-    # Get left and right heights for vertical alignment with reverse
     l_h = get_image_dimension(images_dict.get("left"), 0, blend_overlap_px if isinstance(images_dict.get("left"), list) and get_sequence_primary_axis("left") == 0 else 0)
     r_h = get_image_dimension(images_dict.get("right"), 0, blend_overlap_px if isinstance(images_dict.get("right"), list) and get_sequence_primary_axis("right") == 0 else 0)
+    
+    b_h = get_image_dimension(images_dict.get("bottom"), 0, blend_overlap_px if isinstance(images_dict.get("bottom"), list) and get_sequence_primary_axis("bottom") == 0 else 0)
+    b_w = get_image_dimension(images_dict.get("bottom"), 1, blend_overlap_px if isinstance(images_dict.get("bottom"), list) and get_sequence_primary_axis("bottom") == 1 else 0)
+    
+    rev_h = get_image_dimension(images_dict.get("reverse"), 0, blend_overlap_px if isinstance(images_dict.get("reverse"), list) and get_sequence_primary_axis("reverse") == 0 else 0)
+    rev_w = get_image_dimension(images_dict.get("reverse"), 1, blend_overlap_px if isinstance(images_dict.get("reverse"), list) and get_sequence_primary_axis("reverse") == 1 else 0)
+    
+    t_h = get_image_dimension(images_dict.get("top"), 0, blend_overlap_px if isinstance(images_dict.get("top"), list) and get_sequence_primary_axis("top") == 0 else 0)
+    t_w = get_image_dimension(images_dict.get("top"), 1, blend_overlap_px if isinstance(images_dict.get("top"), list) and get_sequence_primary_axis("top") == 1 else 0)
     
     rul_h = get_image_dimension(images_dict.get("ruler"), 0) # Ruler is assumed to be a single image
     rul_w = get_image_dimension(images_dict.get("ruler"), 1)
@@ -202,238 +214,259 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     for key, img_data in images_dict.items():
         if "intermediate" in key and img_data is not None: # Process only existing intermediates
             # Assuming intermediates are single images or already blended if they were sequences.
-            # The get_sequence_primary_axis might need refinement for intermediates if they can be sequences.
             h = get_image_dimension(img_data, 0, blend_overlap_px if isinstance(img_data, list) and get_sequence_primary_axis(key) == 0 else 0)
             w = get_image_dimension(img_data, 1, blend_overlap_px if isinstance(img_data, list) and get_sequence_primary_axis(key) == 1 else 0)
             if h > 0 and w > 0:
                 intermediate_dims[key] = {"h": h, "w": w, "data": img_data}
 
-    # Calculate first row width (left + int_obv_l + obverse + int_obv_r + right)
-    row1_elements_widths = []
-    if images_dict.get("left") is not None: row1_elements_widths.append(l_w)
-    
+    # Define keys for intermediates
+    int_obv_t_key = "intermediate_obverse_top"     # _ot
+    int_obv_b_key = "intermediate_obverse_bottom"  # _ob
+    int_rev_t_key = "intermediate_reverse_top"     # _rt
+    int_rev_b_key = "intermediate_reverse_bottom"  # _rb
     int_obv_l_key = "intermediate_obverse_left"
-    if int_obv_l_key in intermediate_dims and images_dict.get("obverse") is not None: # Place if obverse exists
-        row1_elements_widths.append(intermediate_dims[int_obv_l_key]["w"])
-        
-    if images_dict.get("obverse") is not None: row1_elements_widths.append(obv_w)
-    
     int_obv_r_key = "intermediate_obverse_right"
-    if int_obv_r_key in intermediate_dims and images_dict.get("obverse") is not None: # Place if obverse exists
-        row1_elements_widths.append(intermediate_dims[int_obv_r_key]["w"])
-
-    if images_dict.get("right") is not None: row1_elements_widths.append(r_w)
+    int_rev_l_key = "intermediate_reverse_left"
+    int_rev_r_key = "intermediate_reverse_right"
     
-    row1_w = sum(row1_elements_widths)
-    if len(row1_elements_widths) > 1:
-        row1_w += view_gap_px * (len(row1_elements_widths) - 1)
-    elif not row1_elements_widths and obv_w > 0: row1_w = obv_w
-    elif not row1_elements_widths: row1_w = 0
-
-
-    bottom_w = get_image_dimension(images_dict.get("bottom"), 1, blend_overlap_px if isinstance(images_dict.get("bottom"), list) and get_sequence_primary_axis("bottom") == 1 else 0)
-    reverse_w = get_image_dimension(images_dict.get("reverse"), 1, blend_overlap_px if isinstance(images_dict.get("reverse"), list) and get_sequence_primary_axis("reverse") == 1 else 0)
-    top_w = get_image_dimension(images_dict.get("top"), 1, blend_overlap_px if isinstance(images_dict.get("top"), list) and get_sequence_primary_axis("top") == 1 else 0)
-
-    # Calculate reverse row width (left_rotated + int_rev_l_rot + reverse + int_rev_r_rot + right_rotated)
-    rev_row_elements_widths = []
-    if images_dict.get("left") is not None: rev_row_elements_widths.append(l_w) # Rotated width is original left's width
-
-    # Example keys for intermediates around reverse (these might need to match actual generated keys)
-    int_rev_l_rot_key = "intermediate_reverse_left_rotated" 
-    if int_rev_l_rot_key in intermediate_dims and images_dict.get("reverse") is not None:
-        rev_row_elements_widths.append(intermediate_dims[int_rev_l_rot_key]["w"])
-
-    if images_dict.get("reverse") is not None: rev_row_elements_widths.append(reverse_w)
-
-    int_rev_r_rot_key = "intermediate_reverse_right_rotated"
-    if int_rev_r_rot_key in intermediate_dims and images_dict.get("reverse") is not None:
-        rev_row_elements_widths.append(intermediate_dims[int_rev_r_rot_key]["w"])
-
-    if images_dict.get("right") is not None: rev_row_elements_widths.append(r_w) # Rotated width is original right's width
+    # Calculate widths for horizontal rows
     
-    rev_row_w = sum(rev_row_elements_widths)
-    if len(rev_row_elements_widths) > 1:
-        rev_row_w += view_gap_px * (len(rev_row_elements_widths) - 1)
-    elif not rev_row_elements_widths and reverse_w > 0: rev_row_w = reverse_w
-    elif not rev_row_elements_widths: rev_row_w = 0
+    # Obverse row: left + int_obv_l + obverse + int_obv_r + right
+    obv_row_width = 0
+    has_left = images_dict.get("left") is not None and l_w > 0
+    has_int_obv_l = int_obv_l_key in intermediate_dims
+    has_obverse = images_dict.get("obverse") is not None and obv_w > 0
+    has_int_obv_r = int_obv_r_key in intermediate_dims
+    has_right = images_dict.get("right") is not None and r_w > 0
     
-    potential_canvas_widths = [row1_w, rev_row_w]
-    # Add widths of single views that are centered (obverse, bottom, top, ruler)
-    # Obverse width is part of row1_w.
-    if bottom_w > 0: potential_canvas_widths.append(bottom_w)
-    if top_w > 0: potential_canvas_widths.append(top_w)
+    obv_row_elements = []
+    if has_left: obv_row_elements.append(l_w)
+    if has_int_obv_l: obv_row_elements.append(intermediate_dims[int_obv_l_key]["w"])
+    if has_obverse: obv_row_elements.append(obv_w)
+    if has_int_obv_r: obv_row_elements.append(intermediate_dims[int_obv_r_key]["w"])
+    if has_right: obv_row_elements.append(r_w)
+    
+    obv_row_width = sum(obv_row_elements)
+    if len(obv_row_elements) > 1:
+        obv_row_width += view_gap_px * (len(obv_row_elements) - 1)
+    
+    # Reverse row: left + int_rev_l + reverse + int_rev_r + right
+    rev_row_width = 0
+    has_int_rev_l = int_rev_l_key in intermediate_dims
+    has_reverse = images_dict.get("reverse") is not None and rev_w > 0
+    has_int_rev_r = int_rev_r_key in intermediate_dims
+    
+    rev_row_elements = []
+    if has_left: rev_row_elements.append(l_w)
+    if has_int_rev_l: rev_row_elements.append(intermediate_dims[int_rev_l_key]["w"])
+    if has_reverse: rev_row_elements.append(rev_w)
+    if has_int_rev_r: rev_row_elements.append(intermediate_dims[int_rev_r_key]["w"])
+    if has_right: rev_row_elements.append(r_w)
+    
+    rev_row_width = sum(rev_row_elements)
+    if len(rev_row_elements) > 1:
+        rev_row_width += view_gap_px * (len(rev_row_elements) - 1)
+    
+    # Calculate canvas width
+    potential_canvas_widths = [obv_row_width, rev_row_width]
+    
+    # Add widths of other centered elements
+    if has_obverse and int_obv_t_key in intermediate_dims:
+        potential_canvas_widths.append(intermediate_dims[int_obv_t_key]["w"])
+    if has_obverse and int_obv_b_key in intermediate_dims:
+        potential_canvas_widths.append(intermediate_dims[int_obv_b_key]["w"])
+    if has_reverse and int_rev_t_key in intermediate_dims:
+        potential_canvas_widths.append(intermediate_dims[int_rev_t_key]["w"])
+    if has_reverse and int_rev_b_key in intermediate_dims:
+        potential_canvas_widths.append(intermediate_dims[int_rev_b_key]["w"])
+    if b_w > 0: potential_canvas_widths.append(b_w)
+    if t_w > 0: potential_canvas_widths.append(t_w)
     if rul_w > 0: potential_canvas_widths.append(rul_w)
-    # Add widths of vertical intermediates if they are wider than obverse
-    int_obv_t_key = "intermediate_obverse_top"
-    if int_obv_t_key in intermediate_dims: potential_canvas_widths.append(intermediate_dims[int_obv_t_key]["w"])
-    int_obv_b_key = "intermediate_obverse_bottom"
-    if int_obv_b_key in intermediate_dims: potential_canvas_widths.append(intermediate_dims[int_obv_b_key]["w"])
-
-    canvas_w = 0
-    if potential_canvas_widths:
-        canvas_w = max(w for w in potential_canvas_widths if w is not None) # Filter out None before max
-    if canvas_w == 0 and obv_w > 0: canvas_w = obv_w # Fallback
+    
+    canvas_w = max(potential_canvas_widths) if potential_canvas_widths else 800
     canvas_w += 200  # Add margins
-
+    
+    # Layout calculation
     coords = {}
-    rotation_flags = {} 
+    rotation_flags = {}
     y_curr = 100  # Starting Y margin
     
-    obverse_x_start_for_centering = 0
-    obverse_actual_width_for_centering = obv_w # Default to obverse's own width
-
-    # --- ROW 1: Left - Intermediate_Obv_Left - Obverse - Intermediate_Obv_Right - Right ---
-    start_x_row1 = (canvas_w - row1_w) // 2 if row1_w > 0 else (canvas_w - obv_w) // 2 # Fallback for centering obverse if row1_w is 0
-    current_x_in_row1 = start_x_row1
-
-    if images_dict.get("left") is not None:
-        coords["left"] = (current_x_in_row1, y_curr)
-        rotation_flags["left"] = False
-        current_x_in_row1 += l_w + view_gap_px
+    # Calculate center positions for the column views
+    # The center of the layout is based on the widest row
+    # If obverse row is wider, center everything based on obverse position
+    # If reverse row is wider, center everything based on reverse position
     
-    if int_obv_l_key in intermediate_dims and images_dict.get("obverse") is not None:
-        int_data = intermediate_dims[int_obv_l_key]
-        # Assuming intermediate is resized to match obverse height (obv_h)
-        coords[int_obv_l_key] = (current_x_in_row1, y_curr + (obv_h - int_data["h"]) // 2) # Vertically center against obv_h
-        current_x_in_row1 += int_data["w"] + view_gap_px
-
-    # Position Obverse
-    # If obverse is the first element in the conceptual row (no left, no int_obv_l)
-    obv_x_final = current_x_in_row1
-    if images_dict.get("left") is None and not (int_obv_l_key in intermediate_dims and images_dict.get("obverse") is not None):
-        obv_x_final = start_x_row1
-        
-    if images_dict.get("obverse") is not None:
-        coords["obverse"] = (obv_x_final, y_curr)
-        obverse_x_start_for_centering = obv_x_final 
-        obverse_actual_width_for_centering = obv_w
-        current_x_in_row1 = obv_x_final + obv_w + view_gap_px
-    else: # Fallback if obverse is missing (should be caught by earlier checks)
-        obverse_x_start_for_centering = (canvas_w - 0) // 2 
-        current_x_in_row1 = obverse_x_start_for_centering
-
-    if int_obv_r_key in intermediate_dims and images_dict.get("obverse") is not None:
-        int_data = intermediate_dims[int_obv_r_key]
-        coords[int_obv_r_key] = (current_x_in_row1, y_curr + (obv_h - int_data["h"]) // 2) # Vertically center against obv_h
-        current_x_in_row1 += int_data["w"] + view_gap_px
-            
-    if images_dict.get("right") is not None:
-        # If right is the first element after obverse (no int_obv_r)
-        # current_x_in_row1 should already be correctly positioned by obverse or int_obv_r
-        coords["right"] = (current_x_in_row1, y_curr)
-        rotation_flags["right"] = False
-        
-    y_curr += obv_h # Advance Y position past the main row (using obverse height as reference for the row)
+    # Calculate obverse x position in its row
+    obv_x = (canvas_w - obv_row_width) // 2
+    if has_left:
+        obv_x += l_w + view_gap_px
+    if has_int_obv_l:
+        obv_x += intermediate_dims[int_obv_l_key]["w"] + view_gap_px
     
-    # --- Intermediate Obverse Bottom ---
-    if int_obv_b_key in intermediate_dims:
-        y_curr += view_gap_px
-        int_data = intermediate_dims[int_obv_b_key]
-        # Center under the obverse view's footprint
-        int_x = obverse_x_start_for_centering + (obverse_actual_width_for_centering - int_data["w"]) // 2
-        coords[int_obv_b_key] = (int_x, y_curr)
-        y_curr += int_data["h"]
-
-    # --- Bottom View ---
-    if images_dict.get("bottom") is not None and b_h > 0:
-        y_curr += view_gap_px
-        bottom_x_pos = obverse_x_start_for_centering + (obverse_actual_width_for_centering - bottom_w) // 2 
-        coords["bottom"] = (bottom_x_pos, y_curr)
-        y_curr += b_h
+    # Calculate reverse x position in its row
+    rev_x = (canvas_w - rev_row_width) // 2
+    if has_left:
+        rev_x += l_w + view_gap_px
+    if has_int_rev_l:
+        rev_x += intermediate_dims[int_rev_l_key]["w"] + view_gap_px
     
-    # --- Reverse Row: Rotated Left - Int_Rev_L_Rot - Reverse - Int_Rev_R_Rot - Rotated Right ---
-    reverse_row_y_start = 0
-    if images_dict.get("reverse") is not None and rev_h > 0: # Check if reverse itself exists for the row
-        y_curr += view_gap_px
-        reverse_row_y_start = y_curr
-        
-        rev_row_start_x = (canvas_w - rev_row_w) // 2 if rev_row_w > 0 else (canvas_w - reverse_w) // 2
-        current_x_in_rev_row = rev_row_start_x
-        
-        if images_dict.get("left") is not None: # Rotated left
-            # Vertically center rotated left (height l_h) with reverse view (height rev_h)
-            coords["left_rotated"] = (current_x_in_rev_row, reverse_row_y_start + (rev_h - l_h) // 2)
-            rotation_flags["left_rotated"] = True
-            current_x_in_rev_row += l_w + view_gap_px # l_w is original width
-        
-        if int_rev_l_rot_key in intermediate_dims and images_dict.get("reverse") is not None:
-            int_data = intermediate_dims[int_rev_l_rot_key]
-            coords[int_rev_l_rot_key] = (current_x_in_rev_row, reverse_row_y_start + (rev_h - int_data["h"]) // 2)
-            current_x_in_rev_row += int_data["w"] + view_gap_px
-
-        # Position Reverse
-        rev_x_final = current_x_in_rev_row
-        if images_dict.get("left") is None and not (int_rev_l_rot_key in intermediate_dims and images_dict.get("reverse") is not None):
-             rev_x_final = rev_row_start_x
-
-        if images_dict.get("reverse") is not None: # Ensure reverse is placed if it's the primary part of this row
-            coords["reverse"] = (rev_x_final, reverse_row_y_start)
-            current_x_in_rev_row = rev_x_final + reverse_w + view_gap_px
-        
-        if int_rev_r_rot_key in intermediate_dims and images_dict.get("reverse") is not None:
-            int_data = intermediate_dims[int_rev_r_rot_key]
-            coords[int_rev_r_rot_key] = (current_x_in_rev_row, reverse_row_y_start + (rev_h - int_data["h"]) // 2)
-            current_x_in_rev_row += int_data["w"] + view_gap_px
-        
-        if images_dict.get("right") is not None: # Rotated right
-            coords["right_rotated"] = (current_x_in_rev_row, reverse_row_y_start + (rev_h - r_h) // 2)
-            rotation_flags["right_rotated"] = True
-        
-        y_curr += rev_h # Advance Y past the reverse row height
+    # Determine the central column reference position
+    # We want the centers of obverse and reverse to align vertically
+    central_column_x = obv_x
+    central_column_width = obv_w
     
-    # --- Intermediate Obverse Top ---
-    # Placed after Reverse row and before Top view, centered under obverse.
+    # --- Step 1: Place Intermediate Obverse Top (_ot) ---
     if int_obv_t_key in intermediate_dims:
-        y_curr += view_gap_px
         int_data = intermediate_dims[int_obv_t_key]
-        int_x = obverse_x_start_for_centering + (obverse_actual_width_for_centering - int_data["w"]) // 2
+        int_x = central_column_x + (central_column_width - int_data["w"]) // 2
         coords[int_obv_t_key] = (int_x, y_curr)
-        y_curr += int_data["h"]
-            
-    # --- Top View ---
-    if images_dict.get("top") is not None and t_h > 0:
-        y_curr += view_gap_px
-        top_x_pos = obverse_x_start_for_centering + (obverse_actual_width_for_centering - top_w) // 2
-        coords["top"] = (top_x_pos, y_curr)
-        y_curr += t_h
-            
-    # --- Ruler View ---
-    if images_dict.get("ruler") is not None and rul_h > 0:
-        y_curr += ruler_padding_px
-        ruler_x_pos = obverse_x_start_for_centering + (obverse_actual_width_for_centering - rul_w) // 2
-        coords["ruler"] = (ruler_x_pos, y_curr)
-        y_curr += rul_h
-
-    canvas_h = y_curr + 100 # Final canvas height with bottom margin
-
-    modified_images_dict = dict(images_dict) # Start with all original/resized images
+        y_curr += int_data["h"] + view_gap_px
     
-    if images_dict.get("left") is not None and "left_rotated" in coords: # Check if it's actually placed
+    # --- Step 2: Place Obverse Row (Left, Int_Obv_L, Obverse, Int_Obv_R, Right) ---
+    obv_row_y = y_curr
+    current_x = (canvas_w - obv_row_width) // 2
+    
+    if has_left:
+        coords["left"] = (current_x, obv_row_y)
+        rotation_flags["left"] = False
+        current_x += l_w + view_gap_px
+    
+    if has_int_obv_l:
+        int_data = intermediate_dims[int_obv_l_key]
+        # Vertically center against obverse height
+        int_y = obv_row_y + (obv_h - int_data["h"]) // 2
+        coords[int_obv_l_key] = (current_x, int_y)
+        current_x += int_data["w"] + view_gap_px
+    
+    if has_obverse:
+        coords["obverse"] = (current_x, obv_row_y)
+        central_column_x = current_x  # Update central column reference
+        central_column_width = obv_w
+        current_x += obv_w + view_gap_px
+    
+    if has_int_obv_r:
+        int_data = intermediate_dims[int_obv_r_key]
+        # Vertically center against obverse height
+        int_y = obv_row_y + (obv_h - int_data["h"]) // 2
+        coords[int_obv_r_key] = (current_x, int_y)
+        current_x += int_data["w"] + view_gap_px
+    
+    if has_right:
+        coords["right"] = (current_x, obv_row_y)
+        rotation_flags["right"] = False
+    
+    y_curr += obv_h + view_gap_px
+    
+    # --- Step 3: Place Intermediate Obverse Bottom (_ob) ---
+    if int_obv_b_key in intermediate_dims:
+        int_data = intermediate_dims[int_obv_b_key]
+        int_x = central_column_x + (central_column_width - int_data["w"]) // 2
+        coords[int_obv_b_key] = (int_x, y_curr)
+        y_curr += int_data["h"] + view_gap_px
+    
+    # --- Step 4: Place Bottom ---
+    if images_dict.get("bottom") is not None and b_h > 0:
+        bottom_x = central_column_x + (central_column_width - b_w) // 2
+        coords["bottom"] = (bottom_x, y_curr)
+        y_curr += b_h + view_gap_px
+    
+    # --- Step 5: Place Intermediate Reverse Top (_rt) ---
+    if int_rev_t_key in intermediate_dims:
+        int_data = intermediate_dims[int_rev_t_key]
+        int_x = central_column_x + (central_column_width - int_data["w"]) // 2
+        coords[int_rev_t_key] = (int_x, y_curr)
+        y_curr += int_data["h"] + view_gap_px
+    
+    # --- Step 6: Place Reverse Row (Left, Int_Rev_L, Reverse, Int_Rev_R, Right) ---
+    rev_row_y = y_curr
+    
+    # Adjust reverse x position to align its center with obverse's center
+    reverse_center_offset = 0
+    if has_reverse and has_obverse:
+        # Calculate centers of obverse and reverse
+        obverse_center = central_column_x + obv_w // 2
+        reverse_center = rev_x + rev_w // 2
+        reverse_center_offset = obverse_center - reverse_center
+    
+    current_x = (canvas_w - rev_row_width) // 2 + reverse_center_offset
+    
+    if has_left:
+        # Rotated left aligned with reverse row
+        rotated_left_y = rev_row_y + (rev_h - l_h) // 2  # Vertically center with reverse
+        coords["left_rotated"] = (current_x, rotated_left_y)
+        rotation_flags["left_rotated"] = True
+        current_x += l_w + view_gap_px
+    
+    if has_int_rev_l:
+        int_data = intermediate_dims[int_rev_l_key]
+        # Vertically center against reverse height
+        int_y = rev_row_y + (rev_h - int_data["h"]) // 2
+        coords[int_rev_l_key] = (current_x, int_y)
+        current_x += int_data["w"] + view_gap_px
+    
+    if has_reverse:
+        coords["reverse"] = (current_x, rev_row_y)
+        current_x += rev_w + view_gap_px
+    
+    if has_int_rev_r:
+        int_data = intermediate_dims[int_rev_r_key]
+        # Vertically center against reverse height
+        int_y = rev_row_y + (rev_h - int_data["h"]) // 2
+        coords[int_rev_r_key] = (current_x, int_y)
+        current_x += int_data["w"] + view_gap_px
+    
+    if has_right:
+        # Rotated right aligned with reverse row
+        rotated_right_y = rev_row_y + (rev_h - r_h) // 2  # Vertically center with reverse
+        coords["right_rotated"] = (current_x, rotated_right_y)
+        rotation_flags["right_rotated"] = True
+    
+    y_curr += rev_h + view_gap_px
+    
+    # --- Step 7: Place Intermediate Reverse Bottom (_rb) ---
+    if int_rev_b_key in intermediate_dims:
+        int_data = intermediate_dims[int_rev_b_key]
+        int_x = central_column_x + (central_column_width - int_data["w"]) // 2
+        coords[int_rev_b_key] = (int_x, y_curr)
+        y_curr += int_data["h"] + view_gap_px
+    
+    # --- Step 8: Place Top ---
+    if images_dict.get("top") is not None and t_h > 0:
+        top_x = central_column_x + (central_column_width - t_w) // 2
+        coords["top"] = (top_x, y_curr)
+        y_curr += t_h + view_gap_px
+    
+    # --- Step 9: Place Ruler ---
+    if images_dict.get("ruler") is not None and rul_h > 0:
+        y_curr += ruler_padding_px - view_gap_px  # Adjust for the special ruler padding
+        ruler_x = central_column_x + (central_column_width - rul_w) // 2
+        coords["ruler"] = (ruler_x, y_curr)
+        y_curr += rul_h
+    
+    canvas_h = y_curr + 100  # Final canvas height with bottom margin
+    
+    # Create rotated versions of left and right for the reverse row
+    modified_images_dict = dict(images_dict)
+    
+    if images_dict.get("left") is not None and "left_rotated" in coords:
         left_img_data = images_dict["left"]
         if isinstance(left_img_data, np.ndarray) and left_img_data.size > 0:
             modified_images_dict["left_rotated"] = cv2.rotate(left_img_data, cv2.ROTATE_180)
-        elif isinstance(left_img_data, list) and left_img_data: # If left is a sequence
-             # Rotation of sequences needs careful handling: rotate each, or blend then rotate.
-             # Assuming for now 'left' for rotation is a single image.
-             # If it's a blended sequence, it should be a single ndarray by this point.
+        elif isinstance(left_img_data, list) and left_img_data:
             print("      Warn: 'left' is a list, rotation for 'left_rotated' might be unexpected.")
-
-
-    if images_dict.get("right") is not None and "right_rotated" in coords: # Check if it's actually placed
+    
+    if images_dict.get("right") is not None and "right_rotated" in coords:
         right_img_data = images_dict["right"]
         if isinstance(right_img_data, np.ndarray) and right_img_data.size > 0:
             modified_images_dict["right_rotated"] = cv2.rotate(right_img_data, cv2.ROTATE_180)
         elif isinstance(right_img_data, list) and right_img_data:
             print("      Warn: 'right' is a list, rotation for 'right_rotated' might be unexpected.")
-            
-    # Add intermediate images to modified_images_dict if they are not already effectively there
-    # (images_dict already contains them, so this is more about ensuring they are considered by the caller)
+    
+    # Add intermediate images to modified_images_dict
     for key, data in intermediate_dims.items():
-        if key in coords: # Only include intermediates that were actually placed
+        if key in coords:  # Only include intermediates that were actually placed
             modified_images_dict[key] = data["data"]
-
-
+    
     return int(canvas_w), int(canvas_h), coords, modified_images_dict
 
 def get_layout_bounding_box(images_dict, layout_coords):
