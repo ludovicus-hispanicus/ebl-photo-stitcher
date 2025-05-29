@@ -36,7 +36,12 @@ def detect_1cm_distance_iraq(image_path):
         # 3. Preprocess the ROI
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         blurred_roi = cv2.GaussianBlur(gray_roi, (3, 3), 0)
-        edges_roi = cv2.Canny(blurred_roi, 25, 75)
+        
+        alpha_contrast = 2.0
+        beta_brightness = 0
+        contrast_adjusted_roi = cv2.convertScaleAbs(blurred_roi, alpha=alpha_contrast, beta=beta_brightness)
+
+        edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 
         # 4. Detect lines in the ROI
         lines_roi = cv2.HoughLinesP(edges_roi, 1, np.pi / 180, 60, minLineLength=30, maxLineGap=10)
