@@ -22,7 +22,9 @@ try:
     import resize_ruler 
     import ruler_detector
     from stitch_images import process_tablet_subfolder
-    from object_extractor import extract_and_save_center_object, extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
+    # Inside gui_app.py, update imports
+    from object_extractor_rembg import extract_and_save_center_object  # Use rembg version
+    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,
         select_contour_closest_to_image_center,
@@ -277,6 +279,8 @@ class ImageProcessorApp:
         self.blb.pack(side=tk.LEFT)
         
         # Background detection color tolerance slider
+        # Commented out as per the code change request
+        """
         bg_tolerance_frame = ttk.Frame(f)
         bg_tolerance_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(bg_tolerance_frame, text="Background Detection Color Tolerance:").pack(anchor=tk.W)
@@ -293,7 +297,8 @@ class ImageProcessorApp:
         # Label to show current value
         self.tolerance_value_label = ttk.Label(slider_frame, text="20")
         self.tolerance_value_label.pack(side=tk.LEFT, padx=(0, 5))
-        
+        """
+
     def _create_process_button_ui(self, p):
         self.prb = ttk.Button(p, text="Start Processing",
                               command=self.start_processing_thread)
@@ -616,7 +621,7 @@ if __name__ == "__main__":
         "remove_background.create_foreground_mask": create_foreground_mask if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'create_foreground_mask_from_background') else None,
         "remove_background.select_contour_closest_to_image_center": select_contour_closest_to_image_center if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_contour_closest_to_image_center') else None,
         # Check original name
-        "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour_from_list') else None,
+        "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour') else None,
         "raw_processor.convert_raw_image_to_tiff": convert_raw_image_to_tiff if 'raw_processor' in sys.modules and hasattr(sys.modules['raw_processor'], 'convert_raw_image_to_tiff') else None,
         "put_images_in_subfolders.organize_files": organize_to_subfolders,  # This is an alias
         "gui_utils.resource_path": resource_path,  # From gui_utils

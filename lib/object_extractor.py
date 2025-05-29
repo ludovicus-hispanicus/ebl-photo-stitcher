@@ -63,41 +63,52 @@ def _crop_image_to_object_bounds(image_array_to_crop, binary_mask_for_bounding_b
     return image_array_to_crop[ymin:ymax, xmin:xmax]
 
 def extract_specific_contour_to_image_array(
-    original_image_bgr_array, 
-    contour_to_be_extracted, 
-    output_canvas_background_bgr_color, 
-    edge_feather_radius_px,
-    contour_smoothing_kernel_size=3
+    source_image_array,
+    contour_to_extract,
+    background_color=(0, 0, 0),
+    padding_px=0,
+    contour_smoothing_kernel_size=None  # Added this param back to maintain compatibility
 ):
-    if contour_to_be_extracted is None or original_image_bgr_array is None:
-        raise ValueError("Input image or contour cannot be None for contour extraction.")
+    """
+    Extract a specific contour from the source image into a new image array.
+    Used for ruler extraction.
     
-    mask_for_selected_contour = np.zeros(original_image_bgr_array.shape[:2], dtype=np.uint8)
-    cv2.drawContours(mask_for_selected_contour, [contour_to_be_extracted], -1, (255), thickness=cv2.FILLED)
-
-    # Apply contour smoothing if a kernel size is specified
-    if contour_smoothing_kernel_size > 0:
-        # Ensure kernel size is odd
-        kernel_val = contour_smoothing_kernel_size if contour_smoothing_kernel_size % 2 != 0 else contour_smoothing_kernel_size + 1
-        # Create an elliptical structuring element
-        morph_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_val, kernel_val))
+    Args:
+        source_image_array: Source image as a numpy array
+        contour_to_extract: Contour to extract
+        background_color: Background color for the output image
+        padding_px: Padding in pixels
+        contour_smoothing_kernel_size: Optional parameter for compatibility, not used
         
-        # Perform morphological opening (erosion followed by dilation) to remove small noise
-        opened_mask = cv2.morphologyEx(mask_for_selected_contour, cv2.MORPH_OPEN, morph_kernel)
-        # Perform morphological closing (dilation followed by erosion) to close small holes
-        mask_for_selected_contour = cv2.morphologyEx(opened_mask, cv2.MORPH_CLOSE, morph_kernel)
+    Returns:
+        Image array with only the extracted contour
+    """
+    # Get bounding rectangle for the contour
+    x, y, w, h = cv2.boundingRect(contour_to_extract)
     
-    if np.sum(mask_for_selected_contour) == 0:
-        raise ValueError("Contour mask is empty after drawing. Contour might be invalid or too small.")
-
-    feathered_alpha_blend_mask = _create_feathered_alpha_blend_mask(mask_for_selected_contour, edge_feather_radius_px)
-    blended_image_on_new_background = _blend_original_on_new_background(
-        original_image_bgr_array, feathered_alpha_blend_mask, output_canvas_background_bgr_color
-    )
-    cropped_final_object_image = _crop_image_to_object_bounds(
-        blended_image_on_new_background, mask_for_selected_contour
-    )
-    return cropped_final_object_image
+    # Add padding
+    x = max(0, x - padding_px)
+    y = max(0, y - padding_px)
+    w = min(source_image_array.shape[1] - x, w + 2 * padding_px)
+    h = min(source_image_array.shape[0] - y, h + 2 * padding_px)
+    
+    # Create new image with the background color
+    result = np.full((h, w, 3), background_color, dtype=np.uint8)
+    
+    # Create mask for the contour
+    mask = np.zeros((source_image_array.shape[0], source_image_array.shape[1]), dtype=np.uint8)
+    cv2.drawContours(mask, [contour_to_extract], -1, 255, -1)
+    
+    # Copy the source image to the new image where the mask is 255
+    for c in range(3):  # For each channel
+        result[:, :, c] = background_color[c]  # Set background color
+        
+        # Get ROI from source and copy it
+        roi_source = source_image_array[y:y+h, x:x+w, c]
+        roi_mask = mask[y:y+h, x:x+w]
+        result[:, :, c] = np.where(roi_mask > 0, roi_source, result[:, :, c])
+    
+    return result
 
 def extract_and_save_center_object( # Renamed from your provided file for consistency with other modules
     input_image_filepath,

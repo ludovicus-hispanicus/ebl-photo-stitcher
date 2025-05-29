@@ -3,7 +3,7 @@ import shutil
 import re
 from collections import defaultdict
 
-FILENAME_PATTERN_FOR_SUBFOLDERING = re.compile(r"(.+)_(\d+)\.(.+)", re.IGNORECASE)
+FILENAME_PATTERN_FOR_SUBFOLDERING = re.compile(r"(.+)_(\d+|[or][rltb])\.(.+)", re.IGNORECASE)
 
 def group_and_move_files_to_subfolders(source_directory_path):
     if not os.path.isdir(source_directory_path):

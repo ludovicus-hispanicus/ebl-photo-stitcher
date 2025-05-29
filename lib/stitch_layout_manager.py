@@ -160,8 +160,30 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     - Top (_03)
     - Ruler
     
+    If exactly 4 images are provided without standard naming, they will be interpreted as:
+    obverse, reverse, top, and bottom views in order of appearance.
+    
     The sides (left, right) are aligned horizontally with obverse/reverse.
     """
+    # Auto-detect and assign standard views if exactly 4 images are provided
+    standard_keys = ["obverse", "reverse", "top", "bottom"]
+    
+    # Check if we have exactly 4 images and none of them have standard keys
+    if len(images_dict) == 4 and not any(key in standard_keys for key in images_dict.keys()):
+        print("      Layout: Found exactly 4 images without standard naming. Assigning as obverse, reverse, top, bottom.")
+        
+        # Create a new dictionary with standard names
+        keys = list(images_dict.keys())
+        standard_dict = {}
+        
+        # Map the 4 images to standard views
+        for i, std_key in enumerate(standard_keys):
+            if i < len(keys):
+                standard_dict[std_key] = images_dict[keys[i]]
+                print(f"      Renamed '{keys[i]}' to '{std_key}'")
+        
+        # Replace the input dictionary with our new standardized one
+        images_dict = standard_dict
     
     # Helper to determine which dimension is primary for a sequence based on key naming
     def get_sequence_primary_axis(view_key_for_seq):

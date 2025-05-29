@@ -11,7 +11,10 @@ try:
     from blending_mask_applier import process_intermediate_image_with_mask
     from stitch_images import process_tablet_subfolder
     from stitch_config import (INTERMEDIATE_SUFFIX_BASE, MUSEUM_CONFIGS)
-    from object_extractor import extract_and_save_center_object, extract_specific_contour_to_image_array
+    # Import the new rembg-based function
+    from object_extractor_rembg import extract_and_save_center_object
+    # Keep extract_specific_contour_to_image_array for ruler extraction
+    from object_extractor import extract_specific_contour_to_image_array
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,
         select_contour_closest_to_image_center,
@@ -28,14 +31,12 @@ try:
     from measurements_utils import load_measurements_from_json, get_tablet_width_from_measurements
     from workflow_processing_steps import determine_pixels_per_cm_from_measurement
 except ImportError as e:
-    print(
-        f"ERROR in gui_workflow_runner.py: Failed to import a processing module: {e}")
-    def _placeholder_func(
-        *args, **kwargs): print(f"Error: Missing module for {args[0] if args else 'operation'}")
-    resize_ruler = type(
-        'module', (), {'resize_and_save_ruler_template': _placeholder_func})
-    ruler_detector = type(
-        'module', (), {'estimate_pixels_per_centimeter_from_ruler': _placeholder_func})
+    print(f"ERROR in gui_workflow_runner.py: Failed to import a processing module: {e}")
+    def _placeholder_func(*args, **kwargs): 
+        print(f"Error: Missing module for {args[0] if args else 'operation'}")
+    
+    resize_ruler = type('module', (), {'resize_and_save_ruler_template': _placeholder_func})
+    ruler_detector = type('module', (), {'estimate_pixels_per_centimeter_from_ruler': _placeholder_func})
     process_tablet_subfolder = _placeholder_func
     extract_and_save_center_object = lambda *a, **kw: (None, None)
     extract_specific_contour_to_image_array = _placeholder_func
