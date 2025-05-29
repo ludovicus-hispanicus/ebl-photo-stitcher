@@ -100,7 +100,6 @@ class ImageProcessorApp:
         self.add_logo_var = tk.BooleanVar() 
         self.logo_path_var = tk.StringVar()
         self.museum_var = tk.StringVar()
-        self.bg_color_tolerance_var = tk.IntVar(value=20)  # Default value from object_extractor.py
         self.progress_var = tk.DoubleVar(value=0.0)
         self.use_measurements_var = tk.BooleanVar(value=False)
         
@@ -277,27 +276,6 @@ class ImageProcessorApp:
         self.blb = ttk.Button(sf, text="Browse...",
                               command=self.browse_logo_file, state=tk.DISABLED)
         self.blb.pack(side=tk.LEFT)
-        
-        # Background detection color tolerance slider
-        # Commented out as per the code change request
-        """
-        bg_tolerance_frame = ttk.Frame(f)
-        bg_tolerance_frame.pack(fill=tk.X, pady=(10, 0))
-        ttk.Label(bg_tolerance_frame, text="Background Detection Color Tolerance:").pack(anchor=tk.W)
-        
-        # Create slider with value label
-        slider_frame = ttk.Frame(bg_tolerance_frame)
-        slider_frame.pack(fill=tk.X, pady=(5, 0))
-        
-        self.bg_tolerance_slider = ttk.Scale(
-            slider_frame, from_=5, to=50, orient=tk.HORIZONTAL,
-            variable=self.bg_color_tolerance_var, command=self.update_tolerance_label)
-        self.bg_tolerance_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
-        
-        # Label to show current value
-        self.tolerance_value_label = ttk.Label(slider_frame, text="20")
-        self.tolerance_value_label.pack(side=tk.LEFT, padx=(0, 5))
-        """
 
     def _create_process_button_ui(self, p):
         self.prb = ttk.Button(p, text="Start Processing",
@@ -444,7 +422,6 @@ class ImageProcessorApp:
             "last_add_logo": self.add_logo_var.get(),
             "last_logo_path": self.logo_path_var.get(), 
             "last_museum": self.museum_var.get(),
-            "last_bg_color_tolerance": self.bg_color_tolerance_var.get(),
             "last_use_measurements": self.use_measurements_var.get()
         }
         save_app_config(self.config_file_path, cfg_data)
@@ -460,10 +437,6 @@ class ImageProcessorApp:
         self.logo_path_var.set(loaded_cfg.get("last_logo_path", defaults["last_logo_path"]))
         self.museum_var.set(loaded_cfg.get("last_museum", defaults["last_museum"]))
         
-        # Load bg color tolerance with fallback to default (20)
-        self.bg_color_tolerance_var.set(loaded_cfg.get("last_bg_color_tolerance", 20))
-        self.update_tolerance_label()  # Update the label to match the loaded value
-    
         # Load use measurements setting if available and measurements are loaded
         if self.measurements_loaded:
             self.use_measurements_var.set(loaded_cfg.get("last_use_measurements", False))
@@ -486,7 +459,6 @@ class ImageProcessorApp:
         lp = self.logo_path_var.get()
         ms = self.museum_var.get()
         obm = "auto"        # Background mode is set to "auto" by default
-        bg_tolerance = self.bg_color_tolerance_var.get()  # Get the tolerance value
         use_measurements = self.use_measurements_var.get()  # Get the measurements setting
 
         if not fp or not os.path.isdir(fp):
@@ -553,16 +525,12 @@ class ImageProcessorApp:
                 self.processing_finished_ui_update,
                 ms,  # museum_selection
                 self.root,  # app_root_window for dialogs
-                bg_tolerance,  # background_color_tolerance
+                None,  # background_color_tolerance
                 use_measurements,  # use_measurements_from_database
                 self.measurements_dict  # measurements_dict
             ),
             daemon=True
         ).start()
-
-    def update_tolerance_label(self, event=None):
-        value = self.bg_color_tolerance_var.get()
-        self.tolerance_value_label.config(text=str(value))
 
     def debug_measurements_loading(self):
         """Debug function to test loading the measurements file"""
@@ -621,7 +589,7 @@ if __name__ == "__main__":
         "remove_background.create_foreground_mask": create_foreground_mask if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'create_foreground_mask_from_background') else None,
         "remove_background.select_contour_closest_to_image_center": select_contour_closest_to_image_center if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_contour_closest_to_image_center') else None,
         # Check original name
-        "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour') else None,
+        "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour_from_list') else None,
         "raw_processor.convert_raw_image_to_tiff": convert_raw_image_to_tiff if 'raw_processor' in sys.modules and hasattr(sys.modules['raw_processor'], 'convert_raw_image_to_tiff') else None,
         "put_images_in_subfolders.organize_files": organize_to_subfolders,  # This is an alias
         "gui_utils.resource_path": resource_path,  # From gui_utils

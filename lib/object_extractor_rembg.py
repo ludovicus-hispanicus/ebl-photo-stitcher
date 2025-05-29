@@ -4,6 +4,7 @@ import os
 from rembg import remove
 from PIL import Image, ImageOps
 import time
+from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
 def extract_and_save_center_object(
     input_image_filepath,
@@ -38,10 +39,10 @@ def extract_and_save_center_object(
     # Remove the background using default settings
     output_img = remove(input_img)
     
-    # Get the alpha channel as a binary mask with a higher threshold
+    # Get the alpha channel as a binary mask with an appropriate threshold
     alpha = np.array(output_img.getchannel('A'))
-    # Use a higher threshold (20 instead of 0) to exclude very faint pixels
-    binary_mask = (alpha > 20).astype(np.uint8) * 255
+    # Use the default threshold value to exclude very faint pixels
+    binary_mask = (alpha > DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE / 2).astype(np.uint8) * 255
     
     # Apply morphological operations to clean up the mask
     kernel = np.ones((3, 3), np.uint8)

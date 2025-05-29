@@ -14,7 +14,7 @@ try:
     # Import the new rembg-based function
     from object_extractor_rembg import extract_and_save_center_object
     # Keep extract_specific_contour_to_image_array for ruler extraction
-    from object_extractor import extract_specific_contour_to_image_array
+    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,
         select_contour_closest_to_image_center,
@@ -65,10 +65,13 @@ def run_complete_image_processing_workflow(
     finished_callback,
     museum_selection="British Museum",
     app_root_window=None,
-    background_color_tolerance=20,
+    background_color_tolerance=None,
     use_measurements_from_database=False,
     measurements_dict=None
 ):
+    if background_color_tolerance is None:
+        background_color_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+    
     print(f"Workflow started for folder: {source_folder_path}")
     progress_callback(2)
 
@@ -288,8 +291,7 @@ def run_complete_image_processing_workflow(
                 source_background_detection_mode=gui_obj_bg_mode,
                 output_image_background_color=output_bg_color,
                 output_filename_suffix=object_artifact_suffix_config,
-                museum_selection=museum_selection,
-                background_color_tolerance_value=background_color_tolerance  # Add the parameter
+                museum_selection=museum_selection
             )
 
             accumulated_sub_progress += sub_steps_alloc["ruler_art"] * \
@@ -411,8 +413,7 @@ def run_complete_image_processing_workflow(
                     source_background_detection_mode=gui_obj_bg_mode,
                     output_image_background_color=output_bg_color,
                     output_filename_suffix=object_artifact_suffix_config,
-                    museum_selection=museum_selection,
-                    background_color_tolerance_value=background_color_tolerance  # Add the parameter
+                    museum_selection=museum_selection
                 )
 
                 if is_temp_o and os.path.exists(curr_o_path):
@@ -463,8 +464,7 @@ def run_complete_image_processing_workflow(
                             source_background_detection_mode=gui_obj_bg_mode,
                             output_image_background_color=output_bg_color,
                             output_filename_suffix=object_artifact_suffix_config,
-                            museum_selection=museum_selection,
-                            background_color_tolerance_value=background_color_tolerance
+                            museum_selection=museum_selection
                         )
 
                         object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
