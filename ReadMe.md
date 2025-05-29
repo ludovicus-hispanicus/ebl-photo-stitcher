@@ -107,14 +107,37 @@ The project is modular, with specific tasks handled by different Python scripts:
     
 ## Usage (GUI)
 
-1. **Select Image Source Folder:** Browse to the folder containing your sets of images (e.g., `BM.58103_01.cr2`, `BM.58103_02.cr2`, etc.).
+1. ## Usage (GUI)
+
+1. **Classify and rename images**: First, rename all the files in your folder according to the pattern: `TABLET_NUMBER` + `_`+ `SIDE_CODE`. You should follow these naming patterns for your `SIDE_CODE`:
+- `_01` = obverse
+- `_02` = reverse
+- `_03` = top
+- `_04` = bottom
+- `_05` = left
+- `_06` = right
+
+For intermediate views (between the obverse or the reverse and one of the side views), use:
+- `_ol` = intermediate between obverse and left
+- `_or` = intermediate between obverse and right
+- `_ot` = intermediate between obverse and top
+- `_ob` = intermediate between obverse and bottom
+- `_rl` = intermediate between reverse and left
+- `_rr` = intermediate between reverse and right
+- `_rt` = intermediate between reverse and top
+- `_rb` = intermediate between reverse and bottom
+
+For example, if your tablet has ID "IM.136546", the obverse image would be named "IM.136546_01.JPG" and an intermediate image between obverse and left would be "IM.136546_ol.JPG".
+
+2. **Select Image Source Folder:** Browse to the folder containing your sets of images (e.g., `BM.58103_01.cr2`, `BM.58103_02.cr2`, etc.).
  
 ![Folder](img/Folder.png)
 
-2. **Photographer:** Enter the photographer's name. This will be saved for future sessions.
-3. **Ruler Position:** Click on the abstract image representation to indicate where the physical ruler is located in your source images (used for scale detection).
-4. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
-5. Click **"Start Processing"**.
+3. **Photographer:** Enter the photographer's name. This will be saved for future sessions.
+4. **Ruler Position:** Click on the abstract image representation to indicate where the physical ruler is located in your source images (used for scale detection).
+5. **Use measurements from database (Sippar Collection)**: When this option is checked, the application will use the known physical dimensions of a tablet, as stored in the program’s database, instead of relying on the detection of the ruler in the photo. Only the tablets from the British Museum’s Sippar Collection are recorded in the database. For tablets not in the database, the application will fall back to standard ruler detection methods regardless of this setting.
+6. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
+7. Click **"Start Processing"**.
 
 The application will:
 1.  Organize images from the source folder into subfolders based on their base name.

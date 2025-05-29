@@ -5,42 +5,86 @@ import math
 import cv2
 import numpy as np
 
-def detect_dominant_corner_background_color(image_bgr_array, corner_fraction=0.7, brightness_threshold=127, museum_selection=None):
-    # This function should now return the actual average BGR color of the corners.
-    # The brightness_threshold parameter might become less relevant for determining the *color*,
-    # but could still be used for a logic like "if it's very dark, treat it as black background, otherwise compute average color".
-    # For now, let's just compute the average color.
+def detect_dominant_corner_background_color(
+    image_bgr_array,
+    corner_fraction=0.025,
+    dark_snap_threshold=50,
+    light_snap_threshold=205,
+    museum_selection=None # This parameter is currently unused in the logic
+):
+    """
+    Detects the dominant background color by averaging corner pixels.
+    Snaps to pure black or pure white if the average color is very dark or very bright.
 
+    Args:
+        image_bgr_array: The input image as a NumPy BGR array.
+        corner_fraction: The fraction of image dimensions to define corner sample size.
+                         Default is 0.7, which is very large and might include foreground.
+                         Recommended to use a smaller value like 0.05 or 0.1.
+        dark_snap_threshold: If avg. corner grayscale intensity < this, returns black.
+        light_snap_threshold: If avg. corner grayscale intensity > this, returns white.
+        museum_selection: Unused parameter.
+
+    Returns:
+        A tuple representing the determined background BGR color.
+    """
     img_height, img_width = image_bgr_array.shape[:2]
-    sample_size = int(min(img_height, img_width) * corner_fraction)
+    
+    # Ensure sample_size is at least 1 pixel if corner_fraction is very small
+    # and image dimensions are small.
+    sample_size_h = max(1, int(img_height * corner_fraction))
+    sample_size_w = max(1, int(img_width * corner_fraction))
 
     corner_sections_list = [
-        image_bgr_array[0:sample_size, 0:sample_size],
-        image_bgr_array[0:sample_size, img_width - sample_size:img_width],
-        image_bgr_array[img_height - sample_size:img_height, 0:sample_size],
-        image_bgr_array[img_height - sample_size:img_height, img_width - sample_size:img_width]
+        image_bgr_array[0:sample_size_h, 0:sample_size_w],
+        image_bgr_array[0:sample_size_h, img_width - sample_size_w:img_width],
+        image_bgr_array[img_height - sample_size_h:img_height, 0:sample_size_w],
+        image_bgr_array[img_height - sample_size_h:img_height, img_width - sample_size_w:img_width]
     ]
 
     all_corner_pixels = []
     for section in corner_sections_list:
         if section.size > 0:
-            # Reshape to a list of pixels (each pixel is a BGR tuple)
             reshaped_section = section.reshape(-1, 3)
             all_corner_pixels.extend(reshaped_section)
 
     if not all_corner_pixels:
-        return (0, 0, 0) # Fallback if no valid corner sections
+        # Fallback: if no corner pixels (e.g., very small image or zero fraction)
+        # Default to black, or could be more sophisticated based on thresholds
+        if dark_snap_threshold >= 0: # A simple heuristic if no pixels found
+             return (0,0,0)
+        # Or, could check light_snap_threshold, but black is a common fallback.
+        # This case should be rare with proper sample_size calculation.
 
-    # Convert to a NumPy array for easier averaging
     all_corner_pixels_np = np.array(all_corner_pixels)
+    average_bgr_color_float = np.mean(all_corner_pixels_np, axis=0)
+    
+    # Ensure the values are within the 0-255 range after averaging for BGR tuple
+    # but before grayscale conversion for accuracy.
+    # Clipping here ensures B, G, R are valid before grayscale calculation.
+    # astype(int) is deferred until after snapping decision if average is used.
+    clipped_bgr_color = np.clip(average_bgr_color_float, 0, 255)
 
-    # Calculate the mean BGR values across all sampled corner pixels
-    average_bgr_color = np.mean(all_corner_pixels_np, axis=0).astype(int)
+    # Calculate grayscale intensity of the average corner color
+    # BGR order: clipped_bgr_color[0] is B, [1] is G, [2] is R
+    # Standard grayscale conversion: Y = 0.299*R + 0.587*G + 0.114*B
+    gray_intensity = (0.114 * clipped_bgr_color[0] +    # Blue
+                      0.587 * clipped_bgr_color[1] +    # Green
+                      0.299 * clipped_bgr_color[2])     # Red
 
-    # Ensure the values are within the 0-255 range
-    average_bgr_color_tuple = tuple(np.clip(average_bgr_color, 0, 255))
+    # Apply the snapping logic
+    if gray_intensity < dark_snap_threshold:
+        final_bgr_color_tuple = (0, 0, 0)
+    elif gray_intensity > light_snap_threshold:
+        final_bgr_color_tuple = (255, 255, 255)
+    else:
+        # Use the computed average color, converting to int tuple
+        final_bgr_color_tuple = tuple(average_bgr_color_float.astype(int))
+        # Re-clip to ensure int conversion didn't cause issues (though unlikely here)
+        final_bgr_color_tuple = tuple(np.clip(final_bgr_color_tuple, 0, 255))
 
-    return average_bgr_color_tuple
+
+    return final_bgr_color_tuple
 
 # The get_museum_background_color function would also need to be adjusted
 # to respect the detected_bg_color more often, or have its own logic for output background.
@@ -57,18 +101,12 @@ def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 
     # If the detected background is dark, and it's British Museum or no museum specified,
     # we might want to keep it dark.
     if museum_selection is None or museum_selection == "British Museum":
-        # Check if the detected color is 'dark' (e.g., average brightness less than 100)
-        # Convert detected_bg_color to grayscale to check brightness
-        # Note: A simple average of BGR is a rough brightness estimate
-        if np.mean(detected_bg_color) < 100: # Example threshold for "dark"
-            return detected_bg_color
-        else:
-            return (255, 255, 255) # Otherwise, make it white for British Museum / None if it's not dark
+        return (0, 0, 0) # Otherwise, make it white for British Museum / None if it's not dark
     else:
         # For all other museums, force white output background
         return (255, 255, 255)
     
-def create_foreground_mask_from_background( # THIS IS THE CORRECT FUNCTION NAME
+def create_foreground_mask_from_background(
     image_bgr_array, background_bgr_color_tuple, color_similarity_tolerance
 ):
     low_bound = np.array([max(0, c - color_similarity_tolerance) for c in background_bgr_color_tuple])

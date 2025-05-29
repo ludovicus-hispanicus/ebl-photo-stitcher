@@ -22,14 +22,24 @@ try:
     import resize_ruler 
     import ruler_detector
     from stitch_images import process_tablet_subfolder
-    from object_extractor import extract_and_save_center_object, extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
+    # Inside gui_app.py, update imports
+    from object_extractor_rembg import extract_and_save_center_object  # Use rembg version
+    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,
         select_contour_closest_to_image_center,
         select_ruler_like_contour_from_list as select_ruler_like_contour
     )
     from raw_processor import convert_raw_image_to_tiff
+    import stitch_config
+    from stitch_config import (
+        STITCH_VIEW_PATTERNS_BASE,
+        STITCH_VIEW_PATTERNS_WITH_EXT,
+        INTERMEDIATE_SUFFIX_BASE,
+        INTERMEDIATE_SUFFIX_WITH_EXT,
+    )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
+    from measurements_utils import load_measurements_from_json  # Add this import
 except ImportError as e:
     # This error handling for imports from lib is crucial
     # Determine the expected absolute path to lib for a more informative error message
@@ -47,6 +57,7 @@ except ImportError as e:
 import cv2
 import threading
 import json
+import webbrowser  # Add this import for opening URLs
 from tkinter import filedialog, messagebox, ttk # ttk should be here
 import tkinter as tk # tk is used in the except block above, so it's fine here or earlier
 from PIL import Image, ImageTk, ImageDraw
@@ -69,23 +80,17 @@ VALID_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp')
 RAW_IMAGE_EXTENSION = '.cr2'
 # DEFAULT_PHOTOGRAPHER is now imported
 TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME = "temp_isolated_ruler.tif"
+HELP_URL = "https://github.com/ElectronicBabylonianLiterature/ebl-photo-stitcher?tab=readme-ov-file#usage-gui"
 
-# CORRECTED: Ensure this matches the numeric mapping in stitch_config.STITCH_VIEW_PATTERNS_CONFIG
-# stitch_config.py has: top: _03, bottom: _04
-GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS = {
-    "obverse": "_01.", 
-    "reverse": "_02.", 
-    "top": "_03.",      # Was _04., changed to match stitch_config for consistency
-    "bottom": "_04.",   # Was _03., changed to match stitch_config for consistency
-    "left": "_05.",      # stitch_config has _05 for left
-    "right": "_06."     # stitch_config has _06 for right
-}
+# remember the real defaults  
+_ORIG_STITCH_CREDIT    = stitch_config.STITCH_CREDIT_LINE
+_ORIG_STITCH_INSTITUTION = stitch_config.STITCH_INSTITUTION
 
 class ImageProcessorApp:
     def __init__(self, root_window):
         self.root = root_window
-        self.root.title("eBL Photo Stitcher v0.2")
-        self.root.geometry("600x780")
+        self.root.title("eBL Photo Stitcher v0.4")
+        self.root.geometry("600x900")
         
         self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
 
@@ -94,11 +99,21 @@ class ImageProcessorApp:
         self.photographer_var = tk.StringVar() 
         self.add_logo_var = tk.BooleanVar() 
         self.logo_path_var = tk.StringVar()
-        self.museum_var = tk.StringVar() 
+        self.museum_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0.0)
+        self.use_measurements_var = tk.BooleanVar(value=False)
         
+        # Load measurements data first, before creating widgets
+        self.measurements_loaded = False
+        self.measurements_dict = {}
+        measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
+        if os.path.exists(measurements_file):
+            self.measurements_dict = load_measurements_from_json(measurements_file)
+            self.measurements_loaded = len(self.measurements_dict) > 0
+
         self._setup_icon()
         self._setup_styles()
+        self._create_help_link()  # Add this before other widgets
         self._create_widgets()
         self.load_config() 
         self.on_museum_changed(None) 
@@ -116,6 +131,22 @@ class ImageProcessorApp:
         style.configure("TLabel", padding=5, font=('Helvetica', 10))
         style.configure("TButton", padding=5, font=('Helvetica', 10))
         style.configure("TFrame", padding=10)
+        # Add style for blue hyperlink
+        style.configure("Link.TLabel", foreground="blue", font=('Helvetica', 10, 'underline'))
+
+    def _create_help_link(self):
+        # Create frame for the help link at the top right
+        help_frame = ttk.Frame(self.root)
+        help_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
+        
+        # Create a spacer to push the help link to the right
+        spacer = ttk.Label(help_frame)
+        spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Create the help link
+        help_link = ttk.Label(help_frame, text="Help", style="Link.TLabel", cursor="hand2")
+        help_link.pack(side=tk.RIGHT)
+        help_link.bind("<Button-1>", lambda e: webbrowser.open_new(HELP_URL))
 
     def _create_widgets(self):
         mf = ttk.Frame(self.root, padding="10")
@@ -174,19 +205,65 @@ class ImageProcessorApp:
     def on_museum_changed(self, event):
         museum_selection = self.museum_var.get()
         print(f"Museum selected: {museum_selection}")
+        
+        # Handle ruler position for Iraq Museum
         if museum_selection == "Iraq Museum":
             self.ruler_position_var.set("bottom-left-fixed") 
         else:
             # If switching away from Iraq Museum and it was on the fixed pos, revert to a default like "top"
             if self.ruler_position_var.get() == "bottom-left-fixed":
                 self.ruler_position_var.set("top")
-        self.draw_ruler_selector() 
-        if event: # Only save config if it's a user interaction, not initial setup
+        
+        # Handle measurements database access based on museum selection
+        if museum_selection == "British Museum" and self.measurements_loaded:
+            # Enable measurements checkbox for British Museum if data is loaded
+            self.measurements_checkbox.state(['!disabled'])
+        else:
+            # For other museums, disable and uncheck the measurements checkbox
+            self.use_measurements_var.set(False)
+            self.measurements_checkbox.state(['disabled'])
+        
+        self.draw_ruler_selector()
+        if event:  # Only save config if it's a user interaction, not initial setup
             self.save_config()
 
     def _create_logo_options_ui(self, p):
-        f = ttk.LabelFrame(p, text="Logo Options", padding="10")
+        f = ttk.LabelFrame(p, text="Options", padding="10")
         f.pack(fill=tk.X, pady=5)
+        
+        # Add measurements checkbox
+        measurements_frame = ttk.Frame(f)
+        measurements_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.measurements_checkbox = ttk.Checkbutton(
+            measurements_frame, 
+            text="Use measurements from database (Sippar Collection)",
+            variable=self.use_measurements_var
+        )
+        self.measurements_checkbox.pack(anchor=tk.W)
+        
+        # Disable checkbox if measurements aren't loaded
+        if not self.measurements_loaded:
+            self.measurements_checkbox.state(['disabled'])
+            hint_label = ttk.Label(
+                measurements_frame, 
+                text="(sippar.json not found in assets folder)",
+                font=('Helvetica', 8, 'italic'),
+                foreground="gray"
+            )
+            hint_label.pack(anchor=tk.W, padx=(20, 0))
+
+        # Add a small debug button (only visible in development)
+        if os.path.exists(os.path.join(script_directory, "DEBUG")):
+            debug_btn = ttk.Button(
+                measurements_frame, 
+                text="Debug Measurements", 
+                command=self.debug_measurements_loading,
+                style="Small.TButton"
+            )
+            debug_btn.pack(side=tk.RIGHT, padx=(5, 0))
+
+        # Logo options section
         self.alc = ttk.Checkbutton(
             f, text="Add Logo", variable=self.add_logo_var, command=self.toggle_logo_path_entry)
         self.alc.pack(anchor=tk.W)
@@ -344,7 +421,8 @@ class ImageProcessorApp:
             "last_photographer": self.photographer_var.get(), 
             "last_add_logo": self.add_logo_var.get(),
             "last_logo_path": self.logo_path_var.get(), 
-            "last_museum": self.museum_var.get()
+            "last_museum": self.museum_var.get(),
+            "last_use_measurements": self.use_measurements_var.get()
         }
         save_app_config(self.config_file_path, cfg_data)
 
@@ -359,6 +437,10 @@ class ImageProcessorApp:
         self.logo_path_var.set(loaded_cfg.get("last_logo_path", defaults["last_logo_path"]))
         self.museum_var.set(loaded_cfg.get("last_museum", defaults["last_museum"]))
         
+        # Load use measurements setting if available and measurements are loaded
+        if self.measurements_loaded:
+            self.use_measurements_var.set(loaded_cfg.get("last_use_measurements", False))
+    
         self.toggle_logo_path_entry()
 
     def update_progress_bar(self, value): self.progress_var.set(
@@ -377,8 +459,7 @@ class ImageProcessorApp:
         lp = self.logo_path_var.get()
         ms = self.museum_var.get()
         obm = "auto"        # Background mode is set to "auto" by default
-        # The actual background detection logic is handled in gui_workflow_runner.py
-        # based on the museum_selection parameter
+        use_measurements = self.use_measurements_var.get()  # Get the measurements setting
 
         if not fp or not os.path.isdir(fp):
             messagebox.showerror("Error", "Select valid input folder.")
@@ -391,32 +472,110 @@ class ImageProcessorApp:
         self.lt.configure(state=tk.NORMAL)
         self.lt.delete('1.0', tk.END)
         self.lt.configure(state=tk.DISABLED)
-        print(f"Starting processing with {ms} ruler...\n")
+        
+        print(f"Starting processing with {ms} ruler...")
+        if use_measurements:
+            print(f"Using measurements from database when available.")
+        print("")
+        
         self.prb.config(state=tk.DISABLED)
         self.update_progress_bar(0)
 
-        threading.Thread(target=run_complete_image_processing_workflow,
-                         args=(
-                             fp,
-                             rp,
-                             ph,
-                             obm,
-                             al,
-                             lp,
-                             RAW_IMAGE_EXTENSION,
-                             VALID_IMAGE_EXTENSIONS,
-                             RULER_TEMPLATE_1CM_PATH_ASSET,
-                             RULER_TEMPLATE_2CM_PATH_ASSET,
-                             RULER_TEMPLATE_5CM_PATH_ASSET,
-                             GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS,
-                             TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
-                             OBJECT_ARTIFACT_SUFFIX,
-                             self.update_progress_bar,
-                             self.processing_finished_ui_update,
-                             self.museum_var.get(),
-                             self.root # ADDED: Pass the main app window as parent for dialogs
-                         ),
-                         daemon=True).start()
+        museum = self.museum_var.get()
+
+        # ——— Credit line overrides ———
+        if museum == "Iraq Museum":
+            stitch_config.STITCH_CREDIT_LINE = (
+                "Cuneiform Artefacts of Iraq in Context (CAIC), "
+                "Bayerische Akademie der Wissenschaften"
+            )
+        elif museum == "Non-eBL Ruler (VAM)":
+            stitch_config.STITCH_CREDIT_LINE = ""
+        else:
+            stitch_config.STITCH_CREDIT_LINE = _ORIG_STITCH_CREDIT
+
+        # ——— Institution overrides ———
+        if museum == "Iraq Museum":
+            stitch_config.STITCH_INSTITUTION = "The Iraq Museum – eBL Project"
+        elif museum == "Non-eBL Ruler (VAM)":
+            stitch_config.STITCH_INSTITUTION = (
+                "Staatliche Museen zu Berlin, Vorderasiatisches Museum"
+            )
+        else:
+            stitch_config.STITCH_INSTITUTION = _ORIG_STITCH_INSTITUTION
+
+        threading.Thread(
+            target=run_complete_image_processing_workflow,
+            args=(
+                fp,
+                rp,
+                ph,
+                obm,
+                al,
+                lp,
+                RAW_IMAGE_EXTENSION,
+                VALID_IMAGE_EXTENSIONS,
+                RULER_TEMPLATE_1CM_PATH_ASSET,
+                RULER_TEMPLATE_2CM_PATH_ASSET,
+                RULER_TEMPLATE_5CM_PATH_ASSET,
+                STITCH_VIEW_PATTERNS_WITH_EXT,  # Use this instead of GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS
+                TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
+                OBJECT_ARTIFACT_SUFFIX,
+                self.update_progress_bar,
+                self.processing_finished_ui_update,
+                ms,  # museum_selection
+                self.root,  # app_root_window for dialogs
+                None,  # background_color_tolerance
+                use_measurements,  # use_measurements_from_database
+                self.measurements_dict  # measurements_dict
+            ),
+            daemon=True
+        ).start()
+
+    def debug_measurements_loading(self):
+        """Debug function to test loading the measurements file"""
+        measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
+        
+        print("\n--- DEBUG: Measurements Loading ---")
+        print(f"Assets folder path: {resource_path(ASSETS_SUBFOLDER)}")
+        print(f"Measurements file path: {measurements_file}")
+        print(f"File exists: {os.path.exists(measurements_file)}")
+        
+        if os.path.exists(measurements_file):
+            try:
+                with open(measurements_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                print(f"Successfully loaded JSON data, contains {len(data)} items")
+                
+                # Check for expected format
+                if isinstance(data, list) and len(data) > 0:
+                    sample = data[0]
+                    print(f"Sample item format: {list(sample.keys())}")
+                    has_id = "_id" in sample
+                    has_width = "width" in sample
+                    print(f"Has '_id' field: {has_id}")
+                    print(f"Has 'width' field: {has_width}")
+                    
+                    if has_id and has_width:
+                        print(f"Sample: ID={sample['_id']}, width={sample['width']}")
+                else:
+                    print("Data doesn't appear to be a list or is empty")
+            except Exception as e:
+                print(f"Error testing measurements file: {e}")
+        
+        # Try reloading the measurements dictionary
+        self.measurements_dict = load_measurements_from_json(measurements_file)
+        self.measurements_loaded = len(self.measurements_dict) > 0
+        print(f"Reload result: loaded={self.measurements_loaded}, entries={len(self.measurements_dict)}")
+        
+        # Update UI based on loaded status
+        if self.measurements_loaded and hasattr(self, "measurements_checkbox"):
+            self.measurements_checkbox.state(['!disabled'])
+            # Remove any hint labels about missing file
+            for child in self.measurements_checkbox.master.winfo_children():
+                if isinstance(child, ttk.Label) and "(sippar.json not found" in child.cget("text"):
+                    child.destroy()
+        print("--- End DEBUG ---\n")
 
 
 if __name__ == "__main__":

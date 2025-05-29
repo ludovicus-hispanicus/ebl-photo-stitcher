@@ -152,7 +152,7 @@ def apply_all_metadata(
             new_xmp_data = {}
             
             # Set EXIF metadata
-            new_exif_data['Exif.Image.Artist'] = f"{photographer_name} ({institution_name})"
+            new_exif_data['Exif.Image.Artist'] = f"{photographer_name}"
             new_exif_data['Exif.Image.Copyright'] = copyright_text
             new_exif_data['Exif.Image.ImageDescription'] = image_title
             new_exif_data['Exif.Image.Software'] = "eBL Photo Stitcher"
@@ -163,10 +163,10 @@ def apply_all_metadata(
             new_exif_data['Exif.Image.ResolutionUnit'] = '2'  # Inches, pyexiv2 expects string for some numeric tags
             
             # Set XMP metadata (Dublin Core)
-            new_xmp_data['Xmp.dc.title'] = [{'lang': 'x-default', 'value': image_title}] # XMP often needs lang qualifier
+            new_xmp_data['Xmp.dc.title'] = image_title # XMP often needs lang qualifier
             new_xmp_data['Xmp.dc.creator'] = [photographer_name]
-            new_xmp_data['Xmp.dc.rights'] = [{'lang': 'x-default', 'value': copyright_text}]
-            new_xmp_data['Xmp.dc.description'] = [{'lang': 'x-default', 'value': image_title}]
+            new_xmp_data['Xmp.dc.rights'] = copyright_text
+            new_xmp_data['Xmp.dc.description'] = image_title
             
             # Set subjects/keywords
             new_xmp_data['Xmp.dc.subject'] = copyright_text
