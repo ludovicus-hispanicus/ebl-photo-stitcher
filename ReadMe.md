@@ -118,8 +118,8 @@ The project is modular, with specific tasks handled by different Python scripts:
 - `_06` = right
 
 For intermediate views (between the obverse or the reverse and one of the side views), use:
-- `_ol` = intermediate between obverse and left
-- `_or` = intermediate between obverse and right
+- `_07` or `_ol` = intermediate between obverse and left
+- `_08` or `_or` = intermediate between obverse and right
 - `_ot` = intermediate between obverse and top
 - `_ob` = intermediate between obverse and bottom
 - `_rl` = intermediate between reverse and left
