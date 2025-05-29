@@ -8,6 +8,7 @@ import traceback  # Added for error printing
 try:
     import resize_ruler
     import ruler_detector
+    from blending_mask_applier import process_intermediate_image_with_mask
     from stitch_images import process_tablet_subfolder
     from stitch_config import (INTERMEDIATE_SUFFIX_BASE, MUSEUM_CONFIGS)
     from object_extractor import extract_and_save_center_object, extract_specific_contour_to_image_array
@@ -465,6 +466,14 @@ def run_complete_image_processing_workflow(
                             background_color_tolerance_value=background_color_tolerance
                         )
 
+                        object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
+                        if os.path.exists(object_filepath):
+                            process_intermediate_image_with_mask(
+                                object_filepath,
+                                background_color=output_bg_color,
+                                gradient_width_fraction=0.5  # Adjust as needed
+                            )
+    
                         if is_temp and os.path.exists(curr_path):
                             os.remove(curr_path)
 
