@@ -11,6 +11,7 @@
 - [Usage (GUI)](#usage-gui)
 - [Configuration](#configuration)
 - [Packaging (Optional)](#packaging-optional)
+- [U2NET Model Setup](#u2net-model-setup)
 
 ## Overview
 
@@ -28,13 +29,19 @@ This project has been developed to streamline the image processing pipeline, ins
     * Converts CR2 RAW files to 16-bit TIFFs.
     * Attempts to minimize sharpening during RAW development using `rawpy`.
     * Includes experimental support for lens correction via `lensfunpy` (requires Lensfun database).
-* **Ruler Scale Detection:** Detects a physical ruler in a designated image (e.g., `_02.tif` or `_03.tif`) to determine `pixels_per_centimeter`. Supports ruler placement at top, bottom, left, or right of the image.
+* **Ruler Scale Detection:** 
+    * Detects a physical ruler in a designated image (e.g., `_02.tif` or `_03.tif`) to determine `pixels_per_centimeter`. 
+    * Supports ruler placement at top, bottom, left, or right of the image.
+    * Special Iraq Museum ruler detection with dedicated algorithm.
+    * Fallback to database measurements for British Museum Sippar Collection.
 * **Object Extraction:**
-    * Automatically detects the background color (black or white) or uses a default.
+    * Uses state-of-the-art `rembg` library with U2NET model for precise object extraction.
+    * Automatically selects the object closest to the image center among the largest detected objects.
     * Extracts the main artifact from each view image (e.g., `_01.tif`, `_04.tif`, etc.) and saves it as `NAME_VIEWNUM_object.tif`.
     * For the image used for scale detection, it extracts both the artifact and the physical ruler into separate files if needed (though the final stitched ruler is digital).
 * **Digital Ruler Replacement:**
     * Based on the detected scale and object size, selects an appropriate digital ruler template (1cm, 2cm, or 5cm).
+    * Museum-specific rulers for British Museum, Iraq Museum, eBL Ruler (CBS), and Non-eBL Ruler (VAM).
     * Scales this digital ruler and saves it as `NAME_ruler.tif`.
 * **Image Stitching/Compositing:**
     * Arranges multiple extracted object views (obverse, reverse, top, bottom, left, right, and rotated sides) and the scaled digital ruler into a final composite image layout.
@@ -43,6 +50,7 @@ This project has been developed to streamline the image processing pipeline, ins
 * **Metadata Embedding:**
     * Sets basic EXIF metadata (photographer, copyright, title, DPI) using `piexif`.
     * Applies detailed XMP metadata (DC, Photoshop, XMPRights namespaces) using `pyexiv2`.
+    * Museum-specific metadata templates.
 * **Output:** Saves the final composite image as a high-quality TIFF (`_stitched.tif`) and a JPEG (`_stitched.jpg`).
 * **Configuration Persistence:** Remembers the last used input folder, ruler position, photographer name, and logo settings via a `gui_config.json` file.
 
@@ -56,8 +64,10 @@ The project is modular, with specific tasks handled by different Python scripts:
 * `lib/put_images_in_subfolders.py`: Organizes input images into subfolders.
 * `lib/raw_processor.py`: Handles RAW (e.g., CR2) image conversion and initial processing, including Lensfunpy integration.
 * `lib/ruler_detector.py`: Detects the scale (pixels/cm) from an image containing a physical ruler.
+* `lib/ruler_detector_iraq_museum.py`: Special detector for Iraq Museum ruler format.
+* `lib/object_extractor_rembg.py`: AI-powered object extraction using rembg and U2NET model.
+* `lib/object_extractor.py`: Legacy object extraction module (still used for ruler extraction).
 * `lib/remove_background.py`: Core logic for creating masks and selecting contours (artifact, ruler).
-* `lib/object_extractor.py`: Extracts objects from images against a specified or auto-detected background.
 * `lib/resize_ruler.py`: Scales the chosen digital ruler template to the correct dimensions.
 * `lib/stitch_images.py`: Main orchestrator for the image stitching/compositing process.
 * `lib/stitch_file_utils.py`: Utilities for finding and loading files for stitching.
@@ -65,6 +75,7 @@ The project is modular, with specific tasks handled by different Python scripts:
 * `lib/stitch_enhancement_utils.py`: Handles logo addition and final cropping/margin for stitched images.
 * `lib/metadata_utils.py`: Functions for writing EXIF and XMP metadata.
 * `lib/image_utils.py`: Generic image processing helper functions.
+* `lib/measurements_utils.py`: Functions for working with tablet measurements database.
 
 ## Prerequisites
 
@@ -72,11 +83,14 @@ The project is modular, with specific tasks handled by different Python scripts:
 * The following Python libraries (install via `pip install -r requirements.txt` or individually):
     * `opencv-python` (for image processing)
     * `numpy` (for numerical operations, used by OpenCV)
+    * `pillow` (for image processing with PIL)
+    * `rembg` (for AI-powered object extraction)
     * `imageio` (for robust TIFF saving with DPI)
     * `rawpy` (for reading RAW image files)
     * `piexif` (for basic EXIF metadata handling)
     * `pyexiv2` (recommended, for comprehensive metadata handling including XMP)
     * `lensfunpy` (optional, for lens corrections in RAW processing - requires Lensfun database installed system-wide)
+
 ## Setup
 
 1.  Clone the repository:
@@ -86,16 +100,21 @@ The project is modular, with specific tasks handled by different Python scripts:
     ```
 2.  Install required Python libraries:
     ```bash
-    pip install opencv-python numpy imageio rawpy piexif lensfunpy pyexiv2
+    pip install opencv-python numpy pillow rembg imageio rawpy piexif lensfunpy pyexiv2
     ```
 3.  (Optional) Install the Lensfun database for `lensfunpy` to work. The method varies by OS.
-5.  **Asset Files:**
+4.  **Asset Files:**
     * Create an `assets` folder in the root of the project directory (same level as `gui_app.py`).
     * Place the following files inside the `assets` folder:
         * `eBL_logo.png` (or your desired logo for the Tkinter window icon)
-        * `BM_1cm_scale.tif` (digital ruler template)
-        * `BM_2cm_scale.tif` (digital ruler template)
-        * `BM_5cm_scale.tif` (digital ruler template)
+        * `BM_1cm_scale.tif` (digital ruler template for British Museum)
+        * `BM_2cm_scale.tif` (digital ruler template for British Museum)
+        * `BM_5cm_scale.tif` (digital ruler template for British Museum)
+        * `IM_photo_ruler.svg` (digital ruler template for Iraq Museum)
+        * `General_eBL_photo_ruler.svg` (digital ruler template for eBL/CBS)
+        * `General_External_photo_ruler.svg` (digital ruler template for non-eBL/VAM)
+        * `u2net.onnx` (U2NET model for object extraction - see U2NET Model Setup section)
+        * `sippar.json` (optional - tablet measurements database for British Museum Sippar Collection)
 
 ## Usage (Python)
 
@@ -106,8 +125,6 @@ The project is modular, with specific tasks handled by different Python scripts:
     ```
     
 ## Usage (GUI)
-
-1. ## Usage (GUI)
 
 1. **Classify and rename images**: First, rename all the files in your folder according to the pattern: `TABLET_NUMBER` + `_`+ `SIDE_CODE`. You should follow these naming patterns for your `SIDE_CODE`:
 - `_01` = obverse
@@ -134,19 +151,23 @@ For example, if your tablet has ID "IM.136546", the obverse image would be named
 ![Folder](img/Folder.png)
 
 3. **Photographer:** Enter the photographer's name. This will be saved for future sessions.
-4. **Ruler Position:** Click on the abstract image representation to indicate where the physical ruler is located in your source images (used for scale detection).
-5. **Use measurements from database (Sippar Collection)**: When this option is checked, the application will use the known physical dimensions of a tablet, as stored in the program’s database, instead of relying on the detection of the ruler in the photo. Only the tablets from the British Museum’s Sippar Collection are recorded in the database. For tablets not in the database, the application will fall back to standard ruler detection methods regardless of this setting.
-6. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
-7. Click **"Start Processing"**.
+4. **Museum:** Select the appropriate museum for your tablet images (affects ruler style and metadata):
+   - British Museum: Uses traditional scale rulers and standard metadata
+   - Iraq Museum: Uses specific ruler detection algorithm and custom metadata
+   - eBL Ruler (CBS): For tablets with eBL/CBS rulers
+   - Non-eBL Ruler (VAM): For tablets with external/VAM rulers
+5. **Ruler Position:** Click on the abstract image representation to indicate where the physical ruler is located in your source images (used for scale detection). For Iraq Museum, the position is fixed at bottom-left.
+6. **Use measurements from database (Sippar Collection)**: When this option is checked and available, the application will use the known physical dimensions of a tablet from the program's database instead of relying on ruler detection. Only available for British Museum's Sippar Collection.
+7. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
+8. Click **"Start Processing"**.
 
 The application will:
 1.  Organize images from the source folder into subfolders based on their base name.
 2.  For each subfolder:
     * Convert CR2 files to TIFFs, applying RAW processing (minimal sharpening, lens correction if possible).
-    * Identify the designated ruler image (`_02` or `_03` based on file count) and detect the `pixels/cm` scale.
-    * Extract the main artifact from the ruler image (e.g., `NAME_02_object.tif`).
-    * Extract main artifacts from all other view images (e.g., `NAME_01_object.tif`, `NAME_04_object.tif`, etc.).
-    * Choose an appropriate digital ruler template (1cm, 2cm, or 5cm) based on the extracted main object's size.
+    * Identify the designated ruler image and detect the `pixels/cm` scale using the appropriate method for the selected museum.
+    * Extract the main artifact from all images using the AI-powered rembg object extraction.
+    * Choose an appropriate digital ruler template based on the museum selection and object size.
     * Scale this digital ruler template and save it as `NAME_ruler.tif`.
     * Stitch all `*_object.tif` views and the scaled digital `_ruler.tif` ruler into a composite image.
     * Add padding between views, and optionally add a logo.
@@ -156,7 +177,7 @@ Logs and progress will be displayed in the GUI.
 
 ## Configuration
 
-* **GUI Settings:** The GUI remembers the last used input folder, ruler position, photographer name, and logo settings in a `gui_config.json` file. This file is typically stored in your user-specific application data directory.
+* **GUI Settings:** The GUI remembers the last used input folder, ruler position, photographer name, museum selection, and logo settings in a `gui_config.json` file. This file is typically stored in your user-specific application data directory.
 * **Script Constants:** Paths to digital ruler template assets and other default processing parameters are defined as constants at the top of `gui_app.py` and the respective utility modules (e.g., `stitch_images.py`). For a packaged application, these asset paths are resolved relative to the executable.
 
 ## Packaging (Optional)
@@ -165,3 +186,11 @@ You can package this application into a standalone executable using PyInstaller:
 
 ```bash
 pyinstaller eBLImageProcessor.spec
+
+## U2NET Model Setup
+The application uses the U2NET model for AI-powered object extraction via the rembg library. To avoid downloading the model during runtime:
+
+1. Download the U2NET model (`u2net.onnx`) from the [rembg repository](https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx)
+2. Place it in the assets folder of your project
+3. When the application runs, it will automatically copy this model to the expected location in your user directory (`~/.u2net/u2net.onnx`)
+4. This prevents the application from attempting to download the model during processing, which can be slow or fail if internet connectivity is limited.

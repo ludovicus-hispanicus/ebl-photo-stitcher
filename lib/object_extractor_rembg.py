@@ -4,7 +4,44 @@ import os
 from rembg import remove
 from PIL import Image, ImageOps
 import time
+import shutil
 from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+import sys
+
+def _ensure_local_model():
+    """
+    Ensures the U2NET model exists in the expected location by copying from assets.
+    This prevents rembg from attempting to download the model.
+    """
+    # Determine user home directory for model location
+    user_home = os.path.expanduser("~")
+    model_dir = os.path.join(user_home, ".u2net")
+    model_path = os.path.join(model_dir, "u2net.onnx")
+    
+    # Skip if model already exists
+    if os.path.exists(model_path):
+        return
+    
+    # Create directory if it doesn't exist
+    os.makedirs(model_dir, exist_ok=True)
+    
+    # Determine assets directory - handle both normal run and packaged versions
+    if getattr(sys, 'frozen', False):
+        # Running in a PyInstaller bundle
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # Running in normal Python environment
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    
+    assets_model_path = os.path.join(base_dir, "assets", "u2net.onnx")
+    
+    # Copy the model if the asset exists
+    if os.path.exists(assets_model_path):
+        print(f"  Copying U2NET model from local assets instead of downloading")
+        shutil.copy2(assets_model_path, model_path)
+    else:
+        print(f"  Warning: Local model not found at {assets_model_path}")
+        # The program will still attempt to download in this case
 
 def extract_and_save_center_object(
     input_image_filepath,
@@ -29,6 +66,9 @@ def extract_and_save_center_object(
     """
     print(f"  Extracting center object from: {os.path.basename(input_image_filepath)} using rembg")
     start_time = time.time()
+    
+    # Ensure the model exists locally before processing
+    _ensure_local_model()
     
     # Load the image using PIL (rembg works with PIL images)
     try:

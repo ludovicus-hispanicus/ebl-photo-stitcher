@@ -22,6 +22,8 @@ a = Analysis(
         'pyexiv2',
         'cairo',
         'cairosvg',
+	'rembg',
+	'onnxruntime',
     ],
     hookspath=[],
     hooksconfig={},
