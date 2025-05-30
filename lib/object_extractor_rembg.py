@@ -1,47 +1,98 @@
 import cv2
 import numpy as np
 import os
+import sys
+import shutil
+import time
 from rembg import remove
 from PIL import Image, ImageOps
-import time
-import shutil
 from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
-import sys
+
+def _download_with_progress(url, destination):
+    """Download a file with progress reporting."""
+    import requests
+    from tqdm import tqdm
+    
+    print(f"  Downloading U2NET model from {url}")
+    print(f"  This is a large file (~176MB) and may take several minutes.")
+    
+    try:
+        # Use a larger timeout to prevent premature disconnection
+        response = requests.get(url, stream=True, timeout=300)
+        response.raise_for_status()  # Raise exception for HTTP errors
+        
+        total_size = int(response.headers.get('content-length', 0))
+        
+        # Create a temporary file first to avoid corrupted downloads
+        temp_destination = destination + ".download"
+        
+        with open(temp_destination, 'wb') as f, tqdm(
+                desc="  Downloading",
+                total=total_size,
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as bar:
+            for data in response.iter_content(chunk_size=1024*1024):  # 1MB chunks
+                if data:  # Filter out keep-alive chunks
+                    size = f.write(data)
+                    bar.update(size)
+        
+        # Once download is complete, rename to final destination
+        shutil.move(temp_destination, destination)
+        print(f"  Download complete! Model saved to {destination}")
+        return True
+        
+    except Exception as e:
+        print(f"  Error downloading model: {e}")
+        # Clean up partial download if it exists
+        if os.path.exists(temp_destination):
+            os.remove(temp_destination)
+        return False
 
 def _ensure_local_model():
-    """
-    Ensures the U2NET model exists in the expected location by copying from assets.
-    This prevents rembg from attempting to download the model.
-    """
-    # Determine user home directory for model location
+    """Ensures the U2NET model exists in the expected location."""
     user_home = os.path.expanduser("~")
     model_dir = os.path.join(user_home, ".u2net")
     model_path = os.path.join(model_dir, "u2net.onnx")
     
     # Skip if model already exists
     if os.path.exists(model_path):
-        return
+        return True
     
     # Create directory if it doesn't exist
     os.makedirs(model_dir, exist_ok=True)
     
-    # Determine assets directory - handle both normal run and packaged versions
+    # Try to find it in assets first
     if getattr(sys, 'frozen', False):
-        # Running in a PyInstaller bundle
         base_dir = os.path.dirname(sys.executable)
     else:
-        # Running in normal Python environment
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     
     assets_model_path = os.path.join(base_dir, "assets", "u2net.onnx")
     
-    # Copy the model if the asset exists
+    # Copy the model if available locally
     if os.path.exists(assets_model_path):
-        print(f"  Copying U2NET model from local assets instead of downloading")
-        shutil.copy2(assets_model_path, model_path)
-    else:
-        print(f"  Warning: Local model not found at {assets_model_path}")
-        # The program will still attempt to download in this case
+        print(f"  Copying U2NET model from local assets")
+        try:
+            shutil.copy2(assets_model_path, model_path)
+            return True
+        except Exception as e:
+            print(f"  Error copying model: {e}")
+    
+    # Try to download with our custom downloader
+    url = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
+    success = _download_with_progress(url, model_path)
+    
+    if not success:
+        print("\n================================================================")
+        print("  ERROR: Could not download or find the U2NET model.")
+        print("  You can download it manually from:")
+        print("  https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx")
+        print(f"  And save it to: {model_path}")
+        print("================================================================\n")
+    
+    return success
 
 def extract_and_save_center_object(
     input_image_filepath,
@@ -68,7 +119,8 @@ def extract_and_save_center_object(
     start_time = time.time()
     
     # Ensure the model exists locally before processing
-    _ensure_local_model()
+    if not _ensure_local_model():
+        raise RuntimeError("U2NET model is required but could not be downloaded or found.")
     
     # Load the image using PIL (rembg works with PIL images)
     try:
@@ -81,8 +133,9 @@ def extract_and_save_center_object(
     
     # Get the alpha channel as a binary mask with an appropriate threshold
     alpha = np.array(output_img.getchannel('A'))
+    custom_alpha_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE * 2
     # Use the default threshold value to exclude very faint pixels
-    binary_mask = (alpha > DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE / 2).astype(np.uint8) * 255
+    binary_mask = (alpha > custom_alpha_tolerance).astype(np.uint8) * 255
     
     # Apply morphological operations to clean up the mask
     kernel = np.ones((3, 3), np.uint8)
