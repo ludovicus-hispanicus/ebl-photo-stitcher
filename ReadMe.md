@@ -116,6 +116,77 @@ The project is modular, with specific tasks handled by different Python scripts:
         * `u2net.onnx` (U2NET model for object extraction - see U2NET Model Setup section)
         * `sippar.json` (optional - tablet measurements database for British Museum Sippar Collection)
 
+## Ruler Detection Details
+
+The eBL Photo Stitcher uses several methods to determine the correct scale (pixels per centimeter) for proper image processing. This scale detection is crucial for accurate digital ruler placement and maintaining proper proportions in the final stitched image.
+
+### How Ruler Detection Works
+
+The application supports several methods of determining the scale, which vary by museum:
+
+#### British Museum Style
+
+For British Museum tablets, the application expects:
+
+1. **Ruler Placement**: A physical ruler should be placed along one edge of the image.
+2. **Ruler Image**: Scale detection is performed on the image with suffix `_02.tif` (reverse view) or `_03.tif` (top view) by default.
+3. **Detection Method**: The algorithm looks for evenly spaced ruler markings along the edge where you indicated the ruler is positioned.
+   - The ruler should have clear black/dark markings on a white/light background
+   - The markings should be evenly spaced (e.g., 1cm or 5mm apart)
+   - The ruler should be aligned as straight as possible along the edge
+   - At least 5-7cm of ruler markings should be visible for optimal detection
+
+**Example British Museum ruler placement:**
+- Place a standard archaeological scale ruler along the bottom edge of the image
+- Ensure the ruler is parallel to the image edge
+- Make sure the ruler markings are clearly visible and not obscured
+
+#### Iraq Museum Style
+
+For Iraq Museum tablets:
+
+1. **Ruler Placement**: The ruler is expected to be in the bottom-left corner.
+2. **Ruler Image**: Detection is performed on the image with suffix `_03.tif` (top view).
+3. **Detection Method**: A specialized algorithm detects the Iraq Museum's particular ruler format:
+   - The ruler appears as a white L-shaped corner ruler with black markings
+   - Each mark represents 1cm
+   - The ruler should be clearly visible and well-lit
+   - The ruler corner should be positioned at the bottom-left of the image
+
+**Example Iraq Museum ruler placement:**
+- The L-shaped corner ruler should be positioned in the bottom-left corner
+- Both horizontal and vertical arms of the ruler should be visible
+- The ruler should be correctly oriented with numbers readable
+
+#### eBL Ruler (CBS) and Non-eBL Ruler (VAM) 
+
+These options use similar detection methods to the British Museum style but apply different digital ruler templates to the final output.
+
+### Database Measurements Option
+
+For the British Museum's Sippar Collection, you can optionally use pre-recorded measurements:
+
+1. **Enable the Option**: Check "Use measurements from database" in the GUI.
+2. **How it Works**: 
+   - The program will look up the tablet's dimensions in the included database
+   - Physical dimensions are used to calculate the scale without ruler detection
+   - This can be useful when ruler detection is challenging or the ruler isn't clearly visible
+
+### Best Practices for Optimal Ruler Detection
+
+For reliable scale detection:
+
+1. **Lighting**: Ensure even lighting on the ruler to make markings clearly visible.
+2. **Positioning**: Place the ruler flat and straight along the edge you specify in the GUI.
+3. **Ruler Quality**: Use a clean, high-contrast ruler with clear markings.
+4. **Image Quality**: Ensure the ruler is in focus and takes up a reasonable portion of the image edge.
+5. **Ruler View Image**: For best results, make sure the ruler is clearly visible in the designated image (typically `_02.tif` or `_03.tif`).
+
+If ruler detection fails, the application will report an error. You can:
+- Try a different ruler position
+- Improve the lighting or clarity of the ruler in your images
+- For British Museum Sippar Collection tablets, try using the database measurements option
+
 ## Usage (Python)
 
 1.  Navigate to the project directory in your terminal.
