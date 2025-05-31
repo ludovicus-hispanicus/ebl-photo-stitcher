@@ -1,0 +1,161 @@
+"""Layout and styling functions for the eBL Photo Stitcher application."""
+
+import tkinter as tk
+from tkinter import ttk
+
+class LayoutManager:
+    """Helper class for UI layout and styling."""
+    
+    @staticmethod
+    def setup_styles(root):
+        """Set up ttk styles for the application."""
+        style = ttk.Style()
+        
+        # Basic widget styles
+        style.configure("TLabel", padding=5, font=('Helvetica', 10))
+        style.configure("TButton", padding=5, font=('Helvetica', 10))
+        style.configure("TFrame", padding=10)
+        
+        # Add style for blue hyperlink label
+        style.configure("Link.TLabel", foreground="blue", font=('Helvetica', 10, 'underline'))
+        
+        # Add style for blue hyperlink button 
+        style.configure("Link.TButton", 
+                    foreground="blue", 
+                    font=('Helvetica', 10, 'underline'),
+                    background=root.cget('bg'),
+                    relief="flat",
+                    padding=2,
+                    borderwidth=0)
+        style.map("Link.TButton",
+                background=[("active", root.cget('bg'))],
+                relief=[("active", "flat")])
+                
+        # Small button style
+        style.configure("Small.TButton", padding=2, font=('Helvetica', 8))
+        
+        return style
+
+    @staticmethod
+    def create_tabs(parent_frame):
+        """Create notebook with tabs."""
+        header_frame = ttk.Frame(parent_frame, padding=0)
+        header_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # Configure the header_frame to use grid layout
+        header_frame.columnconfigure(0, weight=1)  # Make first column expandable
+        header_frame.columnconfigure(1, weight=0)  # Second column only as big as needed
+        
+        notebook = ttk.Notebook(header_frame)
+        notebook.grid(row=0, column=0, sticky="w")  # Align to left
+        
+        return header_frame, notebook
+        
+    @staticmethod
+    def create_help_link(parent_frame, help_url):
+        """Create help link in header."""
+        # Import webbrowser at the top level
+        import webbrowser
+        
+        # Get system color from root window instead of frame
+        try:
+            bg_color = parent_frame.winfo_toplevel().cget('bg')
+        except:
+            bg_color = 'SystemButtonFace'  # Default system button face color
+        
+        help_btn = tk.Button(
+            parent_frame, 
+            text="Help",
+            fg="blue",
+            cursor="hand2",
+            font=('Helvetica', 10, 'underline'),
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
+            bg=bg_color,  # Use system color or fallback
+            activebackground=bg_color,  # Don't change color on hover
+            command=lambda: webbrowser.open_new(help_url)
+        )
+        help_btn.grid(row=0, column=0, sticky="ne")
+        
+        return help_btn
+
+    @staticmethod
+    def draw_ruler_selector(canvas, ruler_position, museum_selection, canvas_params):
+        """Draw the ruler selector canvas."""
+        # Extract canvas parameters
+        s = canvas_params['size']
+        p = canvas_params['padding']
+        bt = canvas_params['band_thickness']
+        
+        # Clear canvas
+        canvas.delete("all")
+        
+        # Draw object box
+        ox1, oy1, ox2, oy2 = p + bt, p + bt, s - p - bt, s - p - bt
+        
+        canvas.create_rectangle(
+            ox1, oy1, ox2, oy2, outline="gray", fill="whitesmoke", dash=(2, 2))
+        canvas.create_text(s / 2, s / 2, text="Object",
+                          font=('Helvetica', 9, 'italic'), fill="gray")
+        
+        is_iraq_museum = (museum_selection == "Iraq Museum")
+
+        active_fill_color = "lightblue"
+        selected_fill_color = "blue"
+        disabled_fill_color = "#e0e0e0"
+        iraq_fixed_fill_color = selected_fill_color 
+        text_color = "black"
+        nd = 4
+        lh, lv = ox2 - ox1, oy2 - oy1
+
+        # Determine colors based on selection and museum
+        top_fill = disabled_fill_color if is_iraq_museum else (
+            selected_fill_color if ruler_position == "top" else active_fill_color)
+        bottom_fill = disabled_fill_color if is_iraq_museum else (
+            selected_fill_color if ruler_position == "bottom" else active_fill_color)
+        left_fill = disabled_fill_color if is_iraq_museum else (
+            selected_fill_color if ruler_position == "left" else active_fill_color)
+        right_fill = disabled_fill_color if is_iraq_museum else (
+            selected_fill_color if ruler_position == "right" else active_fill_color)
+
+        # Top band
+        canvas.create_rectangle(ox1, p, ox2, p + bt, fill=top_fill, outline=text_color, tags="top_zone")
+        if not is_iraq_museum:
+            for i in range(nd + 1):
+                x = ox1 + i * (lh / nd)
+                canvas.create_line(x, p, x, p + bt * .6, fill=text_color)
+        
+        # Bottom band
+        canvas.create_rectangle(ox1, oy2, ox2, oy2 + bt, fill=bottom_fill, outline=text_color, tags="bottom_zone")
+        if not is_iraq_museum:
+            for i in range(nd + 1):
+                x = ox1 + i * (lh / nd)
+                canvas.create_line(x, oy2, x, oy2 + bt * .6, fill=text_color)
+
+        # Left band
+        canvas.create_rectangle(p, oy1, p + bt, oy2, fill=left_fill, outline=text_color, tags="left_zone")
+        if not is_iraq_museum:
+            for i in range(nd + 1):
+                y = oy1 + i * (lv / nd)
+                canvas.create_line(p, y, p + bt * .6, y, fill=text_color)
+
+        # Right band
+        canvas.create_rectangle(ox2, oy1, ox2 + bt, oy2, fill=right_fill, outline=text_color, tags="right_zone")
+        if not is_iraq_museum:
+            for i in range(nd + 1):
+                y = oy1 + i * (lv / nd)
+                canvas.create_line(ox2, y, ox2 + bt * .6, y, fill=text_color)
+
+        # For Iraq Museum, draw fixed position indicator
+        if is_iraq_museum:
+            cs_x1 = p
+            cs_y1 = oy2
+            cs_x2 = p + bt
+            cs_y2 = oy2 + bt
+            canvas.create_rectangle(cs_x1, cs_y1, cs_x2, cs_y2, 
+                                  fill=iraq_fixed_fill_color, outline=text_color, 
+                                  tags="iraq_fixed_pos")
+            # Add text to indicate it's fixed
+            canvas.create_text(p + bt/2, oy2 + bt/2, text="IM", 
+                              font=('Helvetica', 7, 'bold'), fill="white")

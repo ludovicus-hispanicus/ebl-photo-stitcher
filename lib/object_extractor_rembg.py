@@ -19,7 +19,7 @@ def _download_with_progress(url, destination):
     try:
         # Use a larger timeout to prevent premature disconnection
         response = requests.get(url, stream=True, timeout=300)
-        response.raise_for_status()
+        response.raise_for_status()  # Raise exception for HTTP errors
         
         total_size = int(response.headers.get('content-length', 0))
         
@@ -33,8 +33,8 @@ def _download_with_progress(url, destination):
                 unit_scale=True,
                 unit_divisor=1024,
             ) as bar:
-            for data in response.iter_content(chunk_size=1024*1024):
-                if data:
+            for data in response.iter_content(chunk_size=1024*1024):  # 1MB chunks
+                if data:  # Filter out keep-alive chunks
                     size = f.write(data)
                     bar.update(size)
         
@@ -96,13 +96,13 @@ def _ensure_local_model():
 
 def extract_and_save_center_object(
     input_image_filepath,
-    source_background_detection_mode="auto",
+    source_background_detection_mode="auto", # Kept for compatibility 
     output_image_background_color=(0, 0, 0),
-    feather_radius_px=10,
+    feather_radius_px=10, # Kept for compatibility
     output_filename_suffix="_object.tif",
-    min_object_area_as_image_fraction=0.01,
-    object_contour_smoothing_kernel_size=3,
-    museum_selection=None
+    min_object_area_as_image_fraction=0.01, # Kept for compatibility
+    object_contour_smoothing_kernel_size=3, # Kept for compatibility
+    museum_selection=None # Kept for compatibility
 ):
     """
     Extract the object closest to the center among the two largest objects.
