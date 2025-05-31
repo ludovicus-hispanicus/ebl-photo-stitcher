@@ -4,7 +4,7 @@ try:
     from image_utils import convert_to_bgr_if_needed
 except ImportError:
     print("FATAL ERROR: stitch_file_utils.py cannot import from image_utils.py")
-    def convert_to_bgr_if_needed(img): return img # Fallback
+    def convert_to_bgr_if_needed(img): return img
 from stitch_config import (
     OBJECT_FILE_SUFFIX, 
     SCALED_RULER_FILE_SUFFIX,
@@ -16,8 +16,8 @@ def find_processed_image_file(subfolder_path, base_name, view_specific_part, gen
     target_filename = f"{base_name}{view_specific_part}{general_suffix}"
     path = os.path.join(subfolder_path, target_filename)
     if os.path.exists(path): return path
-    if view_specific_part.startswith("_0") and len(view_specific_part) == 3: # e.g., "_01"
-        alt_part = "_" + view_specific_part[2] # e.g., "_1"
+    if view_specific_part.startswith("_0") and len(view_specific_part) == 3:
+        alt_part = "_" + view_specific_part[2]
         alt_filename = f"{base_name}{alt_part}{general_suffix}"
         alt_path = os.path.join(subfolder_path, alt_filename)
         if os.path.exists(alt_path): return alt_path

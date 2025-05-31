@@ -7,7 +7,7 @@ def apply_blending_mask_to_intermediate(
     image_array,
     intermediate_position,
     background_color=(0, 0, 0),
-    gradient_width_fraction=0.8  # Controls how much of the image will have the gradient applied
+    gradient_width_fraction=0.8
 ):
     """
     Apply a gradient blending mask to an intermediate image based on its position.
@@ -129,8 +129,8 @@ def process_intermediate_image_with_mask(
     # 2. intermediate_obverse_top, etc. (full position names)
     position = None
     position_patterns = [
-        r'_([or0][rltb78])_', # Match _ol_, _or_, _ot_, _ob_, _rl_, _rr_, _rt_, _rb_
-        r'intermediate_[^_]+_([^_\.]+)' # Match position after intermediate_side_
+        r'_([or0][rltb78])_',
+        r'intermediate_[^_]+_([^_\.]+)'
     ]
     
     for pattern in position_patterns:

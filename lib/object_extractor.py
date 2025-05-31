@@ -6,7 +6,7 @@ import math
 
 try:
     from remove_background import (
-        create_foreground_mask_from_background, # Import the actual function name
+        create_foreground_mask_from_background,
         select_contour_closest_to_image_center,
         detect_dominant_corner_background_color
     )
@@ -67,7 +67,7 @@ def extract_specific_contour_to_image_array(
     contour_to_extract,
     background_color=(0, 0, 0),
     padding_px=0,
-    contour_smoothing_kernel_size=None  # Added this param back to maintain compatibility
+    contour_smoothing_kernel_size=None
 ):
     """
     Extract a specific contour from the source image into a new image array.
@@ -100,8 +100,8 @@ def extract_specific_contour_to_image_array(
     cv2.drawContours(mask, [contour_to_extract], -1, 255, -1)
     
     # Copy the source image to the new image where the mask is 255
-    for c in range(3):  # For each channel
-        result[:, :, c] = background_color[c]  # Set background color
+    for c in range(3):
+        result[:, :, c] = background_color[c]
         
         # Get ROI from source and copy it
         roi_source = source_image_array[y:y+h, x:x+w, c]
@@ -110,7 +110,7 @@ def extract_specific_contour_to_image_array(
     
     return result
 
-def extract_and_save_center_object( # Renamed from your provided file for consistency with other modules
+def extract_and_save_center_object(
     input_image_filepath,
     source_background_detection_mode="auto", 
     output_image_background_color=DEFAULT_OUTPUT_CANVAS_BACKGROUND_BGR,

@@ -6,7 +6,7 @@ import sys
 script_directory = os.path.dirname(os.path.abspath(__file__))
 lib_directory = os.path.join(script_directory, "lib")
 if lib_directory not in sys.path:
-    sys.path.insert(0, lib_directory) # Try insert at the beginning again
+    sys.path.insert(0, lib_directory)
 # --- End of sys.path modification ---
 
 # Imports from our 'lib' directory - these MUST be resolvable now
@@ -19,12 +19,12 @@ try:
         DEFAULT_PHOTOGRAPHER
     )
     from gui_workflow_runner import run_complete_image_processing_workflow
-    import resize_ruler 
+    import resize_ruler
     import ruler_detector
     from stitch_images import process_tablet_subfolder
     # Inside gui_app.py, update imports
-    from object_extractor_rembg import extract_and_save_center_object  # Use rembg version
-    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
+    from object_extractor_rembg import extract_and_save_center_object
+    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,
         select_contour_closest_to_image_center,
@@ -39,17 +39,18 @@ try:
         INTERMEDIATE_SUFFIX_WITH_EXT,
     )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
-    from measurements_utils import load_measurements_from_json  # Add this import
+    from measurements_utils import load_measurements_from_json
+    from gui_advanced import AdvancedTab
 except ImportError as e:
     # This error handling for imports from lib is crucial
     # Determine the expected absolute path to lib for a more informative error message
     expected_lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
     # Attempt to show a Tkinter error box, but have a print fallback if Tkinter itself fails.
     try:
-        root_err_tk = tk.Tk() # This line might fail if tk is not yet imported or if display is not available
+        root_err_tk = tk.Tk()
         root_err_tk.withdraw()
         messagebox.showerror("Startup Error", f"Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
-    except Exception: # Broad except because Tkinter might not be initializable
+    except Exception:
         print(f"ERROR: Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
     sys.exit(1)
 
@@ -57,9 +58,9 @@ except ImportError as e:
 import cv2
 import threading
 import json
-import webbrowser  # Add this import for opening URLs
-from tkinter import filedialog, messagebox, ttk # ttk should be here
-import tkinter as tk # tk is used in the except block above, so it's fine here or earlier
+import webbrowser
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk, ImageDraw
 
 # Constants not related to save/load config can remain or be managed elsewhere if appropriate
@@ -89,7 +90,7 @@ _ORIG_STITCH_INSTITUTION = stitch_config.STITCH_INSTITUTION
 class ImageProcessorApp:
     def __init__(self, root_window):
         self.root = root_window
-        self.root.title("eBL Photo Stitcher v0.4")
+        self.root.title("eBL Photo Stitcher v0.5")
         self.root.geometry("600x900")
         
         self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
@@ -102,8 +103,7 @@ class ImageProcessorApp:
         self.museum_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0.0)
         self.use_measurements_var = tk.BooleanVar(value=False)
-        
-        # Load measurements data first, before creating widgets
+        self.gradient_width_fraction = 0.5
         self.measurements_loaded = False
         self.measurements_dict = {}
         measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
@@ -113,11 +113,10 @@ class ImageProcessorApp:
 
         self._setup_icon()
         self._setup_styles()
-        self._create_help_link()  # Add this before other widgets
         self._create_widgets()
         self.load_config() 
         self.on_museum_changed(None) 
-
+        
     def _setup_icon(self):
         try:
             if os.path.exists(ICON_FILE_ASSET_PATH):
@@ -131,34 +130,76 @@ class ImageProcessorApp:
         style.configure("TLabel", padding=5, font=('Helvetica', 10))
         style.configure("TButton", padding=5, font=('Helvetica', 10))
         style.configure("TFrame", padding=10)
-        # Add style for blue hyperlink
+        
+        # Add style for blue hyperlink label
         style.configure("Link.TLabel", foreground="blue", font=('Helvetica', 10, 'underline'))
+        
+        # Add style for blue hyperlink button 
+        style.configure("Link.TButton", 
+                    foreground="blue", 
+                    font=('Helvetica', 10, 'underline'),
+                    background=self.root.cget('bg'),
+                    relief="flat",
+                    padding=2,
+                    borderwidth=0)
+        style.map("Link.TButton",
+                background=[("active", self.root.cget('bg'))],
+                relief=[("active", "flat")])
 
-    def _create_help_link(self):
-        # Create frame for the help link at the top right
-        help_frame = ttk.Frame(self.root)
-        help_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
-        
-        # Create a spacer to push the help link to the right
-        spacer = ttk.Label(help_frame)
-        spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        # Create the help link
-        help_link = ttk.Label(help_frame, text="Help", style="Link.TLabel", cursor="hand2")
-        help_link.pack(side=tk.RIGHT)
-        help_link.bind("<Button-1>", lambda e: webbrowser.open_new(HELP_URL))
+        # Update the _create_widgets method, specifically the top_frame and help button code
 
     def _create_widgets(self):
+        # Create the main container frame
         mf = ttk.Frame(self.root, padding="10")
         mf.pack(expand=True, fill=tk.BOTH)
-        self._create_folder_selection_ui(mf)
-        self._create_photographer_ui(mf)
-        self._create_ruler_pos_ui(mf)
-        self._create_logo_options_ui(mf)
-        self._create_process_button_ui(mf)
-        self._create_progress_bar_ui(mf)
-        self._create_log_area_ui(mf)
-
+        
+        # Create a frame that will contain both the tabs and help link
+        # Use a regular Tkinter frame for more direct control over appearance
+        top_frame = ttk.Frame(mf, padding=0)
+        top_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # Create notebook with tabs
+        self.notebook = ttk.Notebook(top_frame)
+        
+        # Create a help button that will align right
+        # Use a regular Tkinter button for more control
+        help_btn = tk.Button(
+            top_frame, 
+            text="Help",
+            fg="blue",
+            cursor="hand2",
+            font=('Helvetica', 10, 'underline'),
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
+            bg=self.root.cget('bg'),  # Match parent background
+            activebackground=self.root.cget('bg'),  # Don't change color on hover
+            command=lambda: webbrowser.open_new(HELP_URL)
+        )
+        top_frame.columnconfigure(0, weight=1)  # Make first column expandable
+        
+        # Create main tab
+        self.main_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.main_tab, text="Main")
+        self.notebook.grid(row=0, column=0, sticky="w")  # Align to left
+        help_btn.grid(row=0, column=0, sticky="ne") 
+    
+        # Create widgets in the main tab
+        self._create_folder_selection_ui(self.main_tab)
+        self._create_photographer_ui(self.main_tab)
+        self._create_ruler_pos_ui(self.main_tab)
+        self._create_logo_options_ui(self.main_tab)
+        self._create_process_button_ui(self.main_tab)
+        self._create_progress_bar_ui(self.main_tab)
+        self._create_log_area_ui(self.main_tab)
+        
+        # Create advanced tab
+        settings = {
+            'gradient_width_fraction': self.gradient_width_fraction,
+            'background_color_tolerance': DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+        }
+        self.advanced_tab = AdvancedTab(self.notebook, settings)
+        
     def _create_folder_selection_ui(self, p):
         f = ttk.LabelFrame(p, text="Input Folder", padding="10")
         f.pack(fill=tk.X, pady=5)
@@ -199,7 +240,7 @@ class ImageProcessorApp:
         self.rc = tk.Canvas(f, width=self.rcs, height=self.rcs,
                             bg="lightgray", relief=tk.SUNKEN, borderwidth=1)
         self.rc.pack(pady=5)
-        self.draw_ruler_selector() # Initial draw
+        self.draw_ruler_selector()
         self.rc.bind("<Button-1>", self.on_ruler_canvas_click)
     
     def on_museum_changed(self, event):
@@ -224,7 +265,7 @@ class ImageProcessorApp:
             self.measurements_checkbox.state(['disabled'])
         
         self.draw_ruler_selector()
-        if event:  # Only save config if it's a user interaction, not initial setup
+        if event:
             self.save_config()
 
     def _create_logo_options_ui(self, p):
@@ -314,10 +355,10 @@ class ImageProcessorApp:
 
     def draw_ruler_selector(self):
         self.rc.delete("all")
-        s = self.rcs # canvas_size
-        p = self.rcp # padding
-        bt = self.rbt # band_thickness
-        ox1, oy1, ox2, oy2 = p + bt, p + bt, s - p - bt, s - p - bt # Object box corners
+        s = self.rcs
+        p = self.rcp
+        bt = self.rbt
+        ox1, oy1, ox2, oy2 = p + bt, p + bt, s - p - bt, s - p - bt
         
         self.rc.create_rectangle(
             ox1, oy1, ox2, oy2, outline="gray", fill="whitesmoke", dash=(2, 2))
@@ -327,14 +368,14 @@ class ImageProcessorApp:
         current_museum = self.museum_var.get()
         is_iraq_museum = (current_museum == "Iraq Museum")
 
-        sp = self.ruler_position_var.get() # selected_position
+        sp = self.ruler_position_var.get()
         active_fill_color = "lightblue"
         selected_fill_color = "blue"
         disabled_fill_color = "#e0e0e0"
         iraq_fixed_fill_color = selected_fill_color 
         text_color = "black"
-        nd = 4 # number of divisions for ticks
-        lh, lv = ox2 - ox1, oy2 - oy1 # object box width and height
+        nd = 4
+        lh, lv = ox2 - ox1, oy2 - oy1
 
         top_fill = disabled_fill_color if is_iraq_museum else (selected_fill_color if sp == "top" else active_fill_color)
         bottom_fill = disabled_fill_color if is_iraq_museum else (selected_fill_color if sp == "bottom" else active_fill_color)
@@ -372,10 +413,10 @@ class ImageProcessorApp:
         if is_iraq_museum:
             # For Iraq Museum, draw a selected square in the bottom-left corner area
             # This square should fill the corner from the padding to the object box.
-            cs_x1 = p # Outer padding edge on the left
-            cs_y1 = oy2 # Top edge of the bottom band (aligned with object bottom)
-            cs_x2 = p + bt # Inner edge of the left band (aligned with object left)
-            cs_y2 = oy2 + bt # Bottom edge of the bottom band
+            cs_x1 = p
+            cs_y1 = oy2
+            cs_x2 = p + bt
+            cs_y2 = oy2 + bt
             self.rc.create_rectangle(cs_x1, cs_y1, cs_x2, cs_y2, fill=iraq_fixed_fill_color, outline=text_color, tags="iraq_fixed_pos")
             # Optional: Add text to indicate it's fixed
             self.rc.create_text(p + bt/2, oy2 + bt/2, text="IM", font=('Helvetica', 7, 'bold'), fill="white")
@@ -414,6 +455,7 @@ class ImageProcessorApp:
         if fsel:
             self.input_folder_var.set(fsel)
 
+    # Update the save_config method to include the gradient width setting
     def save_config(self):
         cfg_data = {
             "last_folder": self.input_folder_var.get(), 
@@ -422,10 +464,13 @@ class ImageProcessorApp:
             "last_add_logo": self.add_logo_var.get(),
             "last_logo_path": self.logo_path_var.get(), 
             "last_museum": self.museum_var.get(),
-            "last_use_measurements": self.use_measurements_var.get()
+            "last_use_measurements": self.use_measurements_var.get(),
+            "gradient_width_fraction": self.advanced_tab.gradient_width_fraction.get(),
+            "background_color_tolerance": self.advanced_tab.background_color_tolerance.get(),
         }
         save_app_config(self.config_file_path, cfg_data)
 
+    # Update the load_config method to load the gradient width setting
     def load_config(self):
         loaded_cfg = load_app_config(self.config_file_path)
         defaults = get_default_config_values()
@@ -440,7 +485,20 @@ class ImageProcessorApp:
         # Load use measurements setting if available and measurements are loaded
         if self.measurements_loaded:
             self.use_measurements_var.set(loaded_cfg.get("last_use_measurements", False))
-    
+        
+        # Load gradient width if available
+        self.gradient_width_fraction = loaded_cfg.get("gradient_width_fraction", 0.5)
+        
+        # Load background color tolerance if available
+        background_tolerance = loaded_cfg.get("background_color_tolerance", DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE)
+        
+        # If the advanced tab already exists, apply the settings
+        if hasattr(self, 'advanced_tab'):
+            self.advanced_tab.apply_settings({
+                'gradient_width_fraction': self.gradient_width_fraction,
+                'background_color_tolerance': background_tolerance
+            })
+        
         self.toggle_logo_path_entry()
 
     def update_progress_bar(self, value): self.progress_var.set(
@@ -451,6 +509,7 @@ class ImageProcessorApp:
         messagebox.showinfo("Processing Complete", "Workflow finished.")
         self.update_progress_bar(0)
 
+    # Finally, update the start_processing_thread method to pass the gradient width fraction to the workflow runner
     def start_processing_thread(self):
         fp = self.input_folder_var.get()
         rp = self.ruler_position_var.get()
@@ -458,8 +517,11 @@ class ImageProcessorApp:
         al = self.add_logo_var.get()
         lp = self.logo_path_var.get()
         ms = self.museum_var.get()
-        obm = "auto"        # Background mode is set to "auto" by default
-        use_measurements = self.use_measurements_var.get()  # Get the measurements setting
+        obm = "auto"
+        use_measurements = self.use_measurements_var.get()
+        
+        # Get gradient width from advanced tab
+        gradient_width = self.advanced_tab.gradient_width_fraction.get()
 
         if not fp or not os.path.isdir(fp):
             messagebox.showerror("Error", "Select valid input folder.")
@@ -518,16 +580,17 @@ class ImageProcessorApp:
                 RULER_TEMPLATE_1CM_PATH_ASSET,
                 RULER_TEMPLATE_2CM_PATH_ASSET,
                 RULER_TEMPLATE_5CM_PATH_ASSET,
-                STITCH_VIEW_PATTERNS_WITH_EXT,  # Use this instead of GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS
+                STITCH_VIEW_PATTERNS_WITH_EXT,
                 TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
                 OBJECT_ARTIFACT_SUFFIX,
                 self.update_progress_bar,
                 self.processing_finished_ui_update,
-                ms,  # museum_selection
-                self.root,  # app_root_window for dialogs
-                None,  # background_color_tolerance
-                use_measurements,  # use_measurements_from_database
-                self.measurements_dict  # measurements_dict
+                ms,
+                self.root,
+                self.advanced_tab.background_color_tolerance.get(),
+                use_measurements,
+                self.measurements_dict,
+                gradient_width,
             ),
             daemon=True
         ).start()
@@ -577,39 +640,100 @@ class ImageProcessorApp:
                     child.destroy()
         print("--- End DEBUG ---\n")
 
+# At the bottom of the file, around line 648, replace the if __name__ == "__main__": block with this:
 
 if __name__ == "__main__":
-    modules_to_check = {
-        "resize_ruler_module": resize_ruler,
-        "ruler_detector_module": ruler_detector,
-        "stitch_images.process_tablet_subfolder": process_tablet_subfolder if 'stitch_images' in sys.modules and hasattr(sys.modules['stitch_images'], 'process_tablet_subfolder') else None,
-        "object_extractor.extract_and_save_center_object": extract_and_save_center_object if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_and_save_center_object') else None,
-        "object_extractor.extract_specific_contour_to_image_array": extract_specific_contour_to_image_array if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_specific_contour_to_image_array') else None,
-        # Check original name
-        "remove_background.create_foreground_mask": create_foreground_mask if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'create_foreground_mask_from_background') else None,
-        "remove_background.select_contour_closest_to_image_center": select_contour_closest_to_image_center if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_contour_closest_to_image_center') else None,
-        # Check original name
-        "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour_from_list') else None,
-        "raw_processor.convert_raw_image_to_tiff": convert_raw_image_to_tiff if 'raw_processor' in sys.modules and hasattr(sys.modules['raw_processor'], 'convert_raw_image_to_tiff') else None,
-        "put_images_in_subfolders.organize_files": organize_to_subfolders,  # This is an alias
-        "gui_utils.resource_path": resource_path,  # From gui_utils
-        "gui_utils.get_persistent_config_dir_path": get_persistent_config_dir_path,
-        "gui_utils.TextRedirector_class": TextRedirector,
-        "gui_workflow_runner.run_complete_image_processing_workflow": run_complete_image_processing_workflow if 'gui_workflow_runner' in sys.modules and hasattr(sys.modules['gui_workflow_runner'], 'run_complete_image_processing_workflow') else None
-    }
-    missing = [name for name, mod_or_func in modules_to_check.items()
-               if mod_or_func is None]
-    if missing:
-        msg = "FATAL: Critical components missing:\n" + "\n".join(missing) + \
-              "\nEnsure all .py files are in the same directory/Python path and error-free."
-        try:
-            root_chk = tk.Tk()
-            root_chk.withdraw()
-            messagebox.showerror("Startup Error", msg)
-        except tk.TclError:
+    # Set up error handling to prevent immediate window closing
+    try:
+        modules_to_check = {
+            "resize_ruler_module": resize_ruler,
+            "ruler_detector_module": ruler_detector,
+            "stitch_images.process_tablet_subfolder": process_tablet_subfolder if 'stitch_images' in sys.modules and hasattr(sys.modules['stitch_images'], 'process_tablet_subfolder') else None,
+            "object_extractor.extract_and_save_center_object": extract_and_save_center_object if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_and_save_center_object') else None,
+            "object_extractor.extract_specific_contour_to_image_array": extract_specific_contour_to_image_array if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_specific_contour_to_image_array') else None,
+            # Check original name
+            "remove_background.create_foreground_mask": create_foreground_mask if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'create_foreground_mask_from_background') else None,
+            "remove_background.select_contour_closest_to_image_center": select_contour_closest_to_image_center if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_contour_closest_to_image_center') else None,
+            # Check original name
+            "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour_from_list') else None,
+            "raw_processor.convert_raw_image_to_tiff": convert_raw_image_to_tiff if 'raw_processor' in sys.modules and hasattr(sys.modules['raw_processor'], 'convert_raw_image_to_tiff') else None,
+            "put_images_in_subfolders.organize_files": organize_to_subfolders,
+            "gui_utils.resource_path": resource_path,
+            "gui_utils.get_persistent_config_dir_path": get_persistent_config_dir_path,
+            "gui_utils.TextRedirector_class": TextRedirector,
+            "gui_workflow_runner.run_complete_image_processing_workflow": run_complete_image_processing_workflow if 'gui_workflow_runner' in sys.modules and hasattr(sys.modules['gui_workflow_runner'], 'run_complete_image_processing_workflow') else None
+        }
+        missing = [name for name, mod_or_func in modules_to_check.items()
+                  if mod_or_func is None]
+        
+        # Create the root window first
+        root = tk.Tk()
+        
+        # If modules are missing, show error in the window instead of closing
+        if missing:
+            msg = "ERROR: Critical components missing:\n" + "\n".join(missing) + \
+                "\nEnsure all .py files are in the same directory/Python path and error-free."
+            
+            error_frame = ttk.Frame(root, padding=20)
+            error_frame.pack(fill=tk.BOTH, expand=True)
+            
+            ttk.Label(error_frame, text="Application Error", font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+            
+            # Create scrollable text area for error message
+            error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
+            error_text.pack(fill=tk.BOTH, expand=True, pady=5)
+            error_text.insert(tk.END, msg)
+            error_text.config(state=tk.DISABLED)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(error_text, command=error_text.yview)
+            error_text.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Add a button to close the application
+            ttk.Button(error_frame, text="Close Application", command=root.destroy).pack(pady=10)
+            
             print(msg)
-        sys.exit(1)
-
-    root = tk.Tk()
-    app = ImageProcessorApp(root)
-    root.mainloop()
+        else:
+            # If no modules are missing, start the app normally
+            app = ImageProcessorApp(root)
+        
+        # Start the main loop even if there are errors
+        root.mainloop()
+        
+    except Exception as e:
+        # If an unexpected exception occurs, show it in a window
+        try:
+            import traceback
+            root = tk.Tk()
+            root.title("Unexpected Error")
+            
+            error_frame = ttk.Frame(root, padding=20)
+            error_frame.pack(fill=tk.BOTH, expand=True)
+            
+            ttk.Label(error_frame, text="Unexpected Error", font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+            
+            # Create scrollable text area for error message
+            error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
+            error_text.pack(fill=tk.BOTH, expand=True, pady=5)
+            
+            error_trace = f"An unexpected error occurred:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+            error_text.insert(tk.END, error_trace)
+            error_text.config(state=tk.DISABLED)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(error_text, command=error_text.yview)
+            error_text.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Add a button to close the application
+            ttk.Button(error_frame, text="Close Application", command=root.destroy).pack(pady=10)
+            
+            print(error_trace)
+            root.mainloop()
+        except:
+            # Last resort if even the error window fails
+            import traceback
+            print("CRITICAL ERROR: Application failed to start")
+            print(traceback.format_exc())
+            input("Press Enter to close...")

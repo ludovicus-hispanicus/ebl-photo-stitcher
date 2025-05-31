@@ -98,7 +98,7 @@ def add_logo_to_image(content_img, logo_path, bg_color, max_w_frac, pad_above, p
 def crop_and_add_final_margin(image_array, bg_color, margin_px):
     gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
     content = image_array
-    if np.any(gray > np.min(bg_color) + 5): # Check if there is content
+    if np.any(gray > np.min(bg_color) + 5):
         mask = cv2.inRange(gray, np.min(bg_color) + 1, 255)
         coords = cv2.findNonZero(mask)
         if coords is not None:
@@ -120,7 +120,7 @@ def set_piexif_metadata(image_path, title, photographer, institution, copyright,
     exif_data["0th"][piexif.ImageIFD.ImageDescription] = title.encode('utf-8')
     exif_data["0th"][piexif.ImageIFD.Software] = "eBL Img Proc Python".encode('utf-8')
     exif_data["0th"][piexif.ImageIFD.XResolution]=(dpi,1); exif_data["0th"][piexif.ImageIFD.YResolution]=(dpi,1)
-    exif_data["0th"][piexif.ImageIFD.ResolutionUnit]=2 # Inches
+    exif_data["0th"][piexif.ImageIFD.ResolutionUnit]=2
     try: piexif.insert(piexif.dump(exif_data), image_path)
     except Exception as e: print(f"Warn piexif: {e}")
 

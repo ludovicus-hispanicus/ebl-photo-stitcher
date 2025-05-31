@@ -9,14 +9,14 @@ CONFIG_FILENAME_ONLY = "gui_config.json"
 # or assume it's passed in, or that this module is only called by gui_app.py which handles the path.
 # Let's assume functions here will receive the full config_file_path.
 
-DEFAULT_PHOTOGRAPHER = "Ivor Kerslake" # Also from gui_app.py
+DEFAULT_PHOTOGRAPHER = "Ivor Kerslake"
 
 def save_config(config_file_path, config_data):
     """Saves the configuration data to a JSON file."""
     try:
         os.makedirs(os.path.dirname(config_file_path), exist_ok=True)
         with open(config_file_path, "w") as f:
-            json.dump(config_data, f, indent=4) # Added indent for readability
+            json.dump(config_data, f, indent=4)
         print(f"Config saved: {config_file_path}")
         return True
     except Exception as e:

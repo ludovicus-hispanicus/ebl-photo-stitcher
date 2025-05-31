@@ -3,7 +3,8 @@ import sys
 import cv2
 import tkinter as tk
 import re
-import traceback  # Added for error printing
+import traceback
+import time
 
 try:
     import resize_ruler
@@ -44,7 +45,7 @@ except ImportError as e:
     select_contour_closest_to_image_center = _placeholder_func
     select_ruler_like_contour = _placeholder_func
     convert_raw_image_to_tiff = _placeholder_func
-    organize_files_func = lambda *a: []  # Placeholder for the renamed import
+    organize_files_func = lambda *a: []
     organize_project_subfolders = lambda *a, **kw: []
     determine_ruler_image_for_scaling = lambda *a, **kw: None
     # Placeholder for new import
@@ -52,14 +53,19 @@ except ImportError as e:
 
 
 def run_complete_image_processing_workflow(
-    source_folder_path, gui_ruler_position, gui_photographer,
-    gui_obj_bg_mode, gui_add_logo, gui_logo_path,
-    raw_ext_config, valid_img_exts_config,
+    source_folder_path,
+    ruler_position,
+    photographer_name,
+    object_extraction_bg_mode,
+    add_logo,
+    logo_path,
+    raw_ext_config,
+    image_extensions_config,
     ruler_template_1cm_asset_path,
     ruler_template_2cm_asset_path,
     ruler_template_5cm_asset_path,
-    view_original_suffix_patterns_config,
-    temp_extracted_ruler_filename_config,
+    view_file_patterns_config,
+    temp_ruler_filename,
     object_artifact_suffix_config,
     progress_callback,
     finished_callback,
@@ -67,16 +73,26 @@ def run_complete_image_processing_workflow(
     app_root_window=None,
     background_color_tolerance=None,
     use_measurements_from_database=False,
-    measurements_dict=None
+    measurements_dict=None,
+    gradient_width_fraction=0.5
 ):
+    # Start timing
+    start_time = time.time()
+    total_objects_processed = 0
+    
+    # Track objects that failed processing
+    failed_objects = []
+    
     if background_color_tolerance is None:
         background_color_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+
+    temp_extracted_ruler_filename_config = temp_ruler_filename
     
     print(f"Workflow started for folder: {source_folder_path}")
     progress_callback(2)
 
     # Prepare all image extensions for checking
-    image_extensions_tuple = tuple(ext.lower() for ext in valid_img_exts_config) + \
+    image_extensions_tuple = tuple(ext.lower() for ext in image_extensions_config) + \
         ((raw_ext_config.lower(),) if isinstance(raw_ext_config, str)
          else tuple(r_ext.lower() for r_ext in raw_ext_config))
 
@@ -138,7 +154,9 @@ def run_complete_image_processing_workflow(
 
         accumulated_sub_progress += sub_steps_alloc["layout_dialog"] * prog_per_folder
         progress_callback(current_prog_base + accumulated_sub_progress)
-
+        
+        view_original_suffix_patterns_config = view_file_patterns_config if view_file_patterns_config else {}
+    
         rel_count = 0
         pr02_reverse, pr03_top, pr04_bottom = None, None, None
         orig_views_fps = {}
@@ -176,6 +194,7 @@ def run_complete_image_processing_workflow(
 
         if not ruler_for_scale_fp:
             print(f"   No ruler image found for {subfolder_name_item}. Skip.")
+            failed_objects.append(subfolder_name_item)
             total_err += 1
             print("-" * 40)
             continue
@@ -226,7 +245,7 @@ def run_complete_image_processing_workflow(
                         f"     Iraq Museum ruler detector returned px/cm: {px_cm_val}")
                 else:
                     px_cm_val = ruler_detector.estimate_pixels_per_centimeter_from_ruler(
-                        curr_scale_fp, ruler_position=gui_ruler_position)
+                        curr_scale_fp, ruler_position=ruler_position)
 
                 if is_temp_s_file and os.path.exists(curr_scale_fp):
                     os.remove(curr_scale_fp)
@@ -257,6 +276,7 @@ def run_complete_image_processing_workflow(
                 if px_cm_val is None:
                     print(
                         f"   ERROR: Could not determine ruler scale for {subfolder_name_item}. Skip.")
+                    failed_objects.append(subfolder_name_item)
                     total_err += 1
                     print("-" * 40)
                     continue
@@ -288,7 +308,7 @@ def run_complete_image_processing_workflow(
 
             art_fp, art_cont = extract_and_save_center_object(
                 path_ruler_extract_img,
-                source_background_detection_mode=gui_obj_bg_mode,
+                source_background_detection_mode=object_extraction_bg_mode,
                 output_image_background_color=output_bg_color,
                 output_filename_suffix=object_artifact_suffix_config,
                 museum_selection=museum_selection
@@ -410,7 +430,7 @@ def run_complete_image_processing_workflow(
                     cr2_conv_total += 1
                 extract_and_save_center_object(
                     curr_o_path,
-                    source_background_detection_mode=gui_obj_bg_mode,
+                    source_background_detection_mode=object_extraction_bg_mode,
                     output_image_background_color=output_bg_color,
                     output_filename_suffix=object_artifact_suffix_config,
                     museum_selection=museum_selection
@@ -461,7 +481,7 @@ def run_complete_image_processing_workflow(
                         # Extract object from intermediate image
                         extract_and_save_center_object(
                             curr_path,
-                            source_background_detection_mode=gui_obj_bg_mode,
+                            source_background_detection_mode=object_extraction_bg_mode,
                             output_image_background_color=output_bg_color,
                             output_filename_suffix=object_artifact_suffix_config,
                             museum_selection=museum_selection
@@ -472,13 +492,13 @@ def run_complete_image_processing_workflow(
                             process_intermediate_image_with_mask(
                                 object_filepath,
                                 background_color=output_bg_color,
-                                gradient_width_fraction=0.5  # Adjust as needed
+                                gradient_width_fraction=gradient_width_fraction
                             )
     
                         if is_temp and os.path.exists(curr_path):
                             os.remove(curr_path)
 
-                        break  # Found a match, no need to check other suffixes
+                        break
 
             accumulated_sub_progress += sub_steps_alloc["other_obj"] * prog_per_folder
 
@@ -492,26 +512,57 @@ def run_complete_image_processing_workflow(
                 main_input_folder_path=source_folder_path,
                 output_base_name=subfolder_name_item,
                 pixels_per_cm=px_cm_val,
-                photographer_name=gui_photographer,
+                photographer_name=photographer_name,
                 ruler_image_for_scale_path=ruler_for_scale_fp,
-                add_logo=gui_add_logo,
-                logo_path=gui_logo_path if gui_add_logo else None,
-                object_extraction_background_mode=gui_obj_bg_mode,
+                add_logo=add_logo,
+                logo_path=logo_path if add_logo else None,
+                object_extraction_background_mode=object_extraction_bg_mode,
                 stitched_bg_color=stitched_output_bg_color,
                 custom_layout=custom_layout_config
             )
             total_ok += 1
         except Exception as e:
             print(f"   ERROR processing set '{subfolder_name_item}': {e}")
-            traceback.print_exc()  # Add this to print the full traceback
+            traceback.print_exc()
+            failed_objects.append(subfolder_name_item)
             total_err += 1
-        finally:
-            progress_callback(current_prog_base + prog_per_folder)
-            print("-" * 40)
 
     print(
         f"\n--- Processing Complete ---\nRAW converted: {cr2_conv_total}\nSets OK: {total_ok}\nSets Error: {total_err}\n")
 
+    # Calculate total objects processed (count all successfully processed objects)
+    total_objects_processed = total_ok
+    
+    # Calculate time statistics
+    end_time = time.time()
+    elapsed_seconds = end_time - start_time
+    minutes, seconds = divmod(elapsed_seconds, 60)
+    
+    # Calculate average time per object
+    avg_seconds = elapsed_seconds / total_objects_processed if total_objects_processed > 0 else 0
+    avg_minutes, avg_seconds = divmod(avg_seconds, 60)
+    
+    # Print the statistics
+    print(f"\n--- Processing Statistics ---")
+    print(f"Time elapsed: {int(minutes):02d} m {int(seconds):02d} s")
+    print(f"Objects processed: {total_objects_processed}")
+    
+    # Display failed objects with their names
+    if total_err > 0:
+        # Extract the base name without numerical suffixes like _01, _02
+        cleaned_failed_objects = []
+        for obj in failed_objects:
+            # Remove suffix patterns like _01, _02, etc.
+            base_name = re.sub(r'_\d+$', '', obj)
+            if base_name not in cleaned_failed_objects:
+                cleaned_failed_objects.append(base_name)
+        
+        print(f"Objects that could not be processed ({total_err}):")
+        for obj_name in cleaned_failed_objects:
+            print(f"  - {obj_name}")
+    
+    print(f"Average time per object: {int(avg_minutes):02d} m {int(avg_seconds):02d} s")
+    
     # Add the cleanup step here
     if total_ok > 0:
         cleanup_intermediate_files(processed_subfolders, object_artifact_suffix_config)

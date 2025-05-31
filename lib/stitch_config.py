@@ -71,7 +71,7 @@ JPEG_SAVE_QUALITY = 85
 # Museum configurations
 MUSEUM_CONFIGS = {
     "British Museum": {
-        "background_color": (0, 0, 0),  # Black
+        "background_color": (0, 0, 0),
         "ruler_type": "tif",
         "ruler_templates": {
             "1cm": "BM_1cm_scale.tif",
@@ -80,19 +80,19 @@ MUSEUM_CONFIGS = {
         }
     },
     "Iraq Museum": {
-        "background_color": (255, 255, 255),  # White
+        "background_color": (255, 255, 255),
         "ruler_type": "svg",
         "ruler_template": "IM_photo_ruler.svg",
         "ruler_size_cm": 4.599
     },
     "eBL Ruler (CBS)": {
-        "background_color": (255, 255, 255),  # White
+        "background_color": (255, 255, 255),
         "ruler_type": "svg",
         "ruler_template": "General_eBL_photo_ruler.svg",
         "ruler_size_cm": 4.317
     },
     "Non-eBL Ruler (VAM)": {
-        "background_color": (255, 255, 255),  # White
+        "background_color": (255, 255, 255),
         "ruler_type": "svg",
         "ruler_template": "General_External_photo_ruler.svg",
         "ruler_size_cm": 3.248

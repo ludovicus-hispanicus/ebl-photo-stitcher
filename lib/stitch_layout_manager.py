@@ -23,7 +23,7 @@ def get_image_dimension(image_or_list, axis_index, blend_overlap_px=0):
         if not image_or_list: return 0
         # For a list, calculate the dimension after hypothetical blending.
         # Axis_index: 0 for height, 1 for width.
-        if axis_index == 0: # Vertical blending - sum of heights minus overlaps, width is min width
+        if axis_index == 0:
             total_height = 0
             min_common_width = float('inf')
             for i, img in enumerate(image_or_list):
@@ -36,7 +36,7 @@ def get_image_dimension(image_or_list, axis_index, blend_overlap_px=0):
             # return min_common_width if min_common_width != float('inf') else 0
             # However, the primary use here is to get the length along the blending axis.
             return total_height
-        else: # Horizontal blending - sum of widths minus overlaps, height is min height
+        else:
             total_width = 0
             min_common_height = float('inf')
             for i, img in enumerate(image_or_list):
@@ -90,35 +90,35 @@ def resize_tablet_views_for_layout(loaded_images_dictionary):
     # Standard resize config relative to obverse
     resize_config = {
         # view_key: {axis_to_match_obverse_dim, obverse_dim_to_match}
-        "left": {"axis": 0, "match_dim": obv_h},   # Match obverse height
-        "right": {"axis": 0, "match_dim": obv_h},  # Match obverse height
-        "top": {"axis": 1, "match_dim": obv_w},    # Match obverse width
-        "bottom": {"axis": 1, "match_dim": obv_w}, # Match obverse width
-        "reverse": {"axis": 1, "match_dim": obv_w} # Match obverse width
+        "left": {"axis": 0, "match_dim": obv_h},
+        "right": {"axis": 0, "match_dim": obv_h},
+        "top": {"axis": 1, "match_dim": obv_w},
+        "bottom": {"axis": 1, "match_dim": obv_w},
+        "reverse": {"axis": 1, "match_dim": obv_w}
         # Intermediate sequences will also be resized based on these rules if their keys match.
         # E.g., "obverse_top_intermediate_sequence" would align with "top" rule if not explicitly handled.
     }
 
     output_resized_images = {}
     for view_key, image_data in loaded_images_dictionary.items():
-        if view_key == "obverse": # Obverse is the reference, already handled
+        if view_key == "obverse":
             output_resized_images[view_key] = obverse_image_data
             continue
 
         params = None
         # Find matching resize rule (e.g. "obverse_top_intermediate" uses "top" rule)
         for r_key, r_params in resize_config.items():
-            if r_key in view_key: # Simple substring match, might need refinement
+            if r_key in view_key:
                 params = r_params
                 break
-        if not params and "ruler" not in view_key: # Ruler is not typically resized relative to obverse
+        if not params and "ruler" not in view_key:
              # If no specific rule, and not obverse or ruler, decide a default or skip.
              # For now, keep original if no rule applies (e.g. for custom arbitrary view names)
             print(f"      Resize: No specific resize rule for '{view_key}'. Keeping original.")
             output_resized_images[view_key] = image_data
             continue
         elif "ruler" in view_key:
-            output_resized_images[view_key] = image_data # Keep ruler as is
+            output_resized_images[view_key] = image_data
             continue
 
         if isinstance(image_data, np.ndarray) and image_data.size > 0:
@@ -134,13 +134,13 @@ def resize_tablet_views_for_layout(loaded_images_dictionary):
                     )
                     resized_sequence.append(resized_img)
                 else:
-                    resized_sequence.append(None) # Keep placeholder for failed loads
+                    resized_sequence.append(None)
             output_resized_images[view_key] = [rs for rs in resized_sequence if rs is not None] if any(rs is not None for rs in resized_sequence) else None
-        elif image_data is not None: # Was loaded, but not array or list (should not happen)
+        elif image_data is not None:
             output_resized_images[view_key] = None
             print(f"      Warn: Resize - Unexpected data type for {view_key}: {type(image_data)}")
         else:
-            output_resized_images[view_key] = None # Was None initially
+            output_resized_images[view_key] = None
             
     return output_resized_images
 
@@ -192,9 +192,9 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
             # are intended to be blended horizontally. For now, assume side pieces are vertically blended if sequences.
             # Typically, intermediates are single images after processing.
             if "intermediate" in view_key_for_seq.lower() and ("top" in view_key_for_seq.lower() or "bottom" in view_key_for_seq.lower()):
-                 return 1 # intermediate_obverse_top/bottom are likely horizontal strips
-            return 0 # Vertical blending for main left/right, primary dimension is height
-        return 1 # Horizontal blending for top/bottom/obverse/reverse, primary dimension is width
+                 return 1
+            return 0
+        return 1
 
     # Get dimensions of main tablet views, considering they might be sequences
     obv_data = images_dict.get("obverse")
@@ -204,7 +204,7 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     if obv_h == 0 or obv_w == 0:
         if custom_layout:
             for key, data in images_dict.items():
-                if data is not None and "ruler" not in key: # Found an alternative primary image
+                if data is not None and "ruler" not in key:
                     print(f"      Layout: 'obverse' missing/invalid. Using '{key}' as primary for layout ref.")
                     obv_data = data
                     obv_h = get_image_dimension(obv_data, 0, blend_overlap_px if isinstance(obv_data, list) and get_sequence_primary_axis(key) == 0 else 0)
@@ -228,13 +228,13 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     t_h = get_image_dimension(images_dict.get("top"), 0, blend_overlap_px if isinstance(images_dict.get("top"), list) and get_sequence_primary_axis("top") == 0 else 0)
     t_w = get_image_dimension(images_dict.get("top"), 1, blend_overlap_px if isinstance(images_dict.get("top"), list) and get_sequence_primary_axis("top") == 1 else 0)
     
-    rul_h = get_image_dimension(images_dict.get("ruler"), 0) # Ruler is assumed to be a single image
+    rul_h = get_image_dimension(images_dict.get("ruler"), 0)
     rul_w = get_image_dimension(images_dict.get("ruler"), 1)
 
     # Get dimensions of intermediate images
     intermediate_dims = {}
     for key, img_data in images_dict.items():
-        if "intermediate" in key and img_data is not None: # Process only existing intermediates
+        if "intermediate" in key and img_data is not None:
             # Assuming intermediates are single images or already blended if they were sequences.
             h = get_image_dimension(img_data, 0, blend_overlap_px if isinstance(img_data, list) and get_sequence_primary_axis(key) == 0 else 0)
             w = get_image_dimension(img_data, 1, blend_overlap_px if isinstance(img_data, list) and get_sequence_primary_axis(key) == 1 else 0)
@@ -242,10 +242,10 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
                 intermediate_dims[key] = {"h": h, "w": w, "data": img_data}
 
     # Define keys for intermediates
-    int_obv_t_key = "intermediate_obverse_top"     # _ot
-    int_obv_b_key = "intermediate_obverse_bottom"  # _ob
-    int_rev_t_key = "intermediate_reverse_top"     # _rt
-    int_rev_b_key = "intermediate_reverse_bottom"  # _rb
+    int_obv_t_key = "intermediate_obverse_top"
+    int_obv_b_key = "intermediate_obverse_bottom"
+    int_rev_t_key = "intermediate_reverse_top"
+    int_rev_b_key = "intermediate_reverse_bottom"
     int_obv_l_key = "intermediate_obverse_left"
     int_obv_r_key = "intermediate_obverse_right"
     int_rev_l_key = "intermediate_reverse_left"
@@ -306,12 +306,12 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     if rul_w > 0: potential_canvas_widths.append(rul_w)
     
     canvas_w = max(potential_canvas_widths) if potential_canvas_widths else 800
-    canvas_w += 200  # Add margins
+    canvas_w += 200
     
     # Layout calculation
     coords = {}
     rotation_flags = {}
-    y_curr = 100  # Starting Y margin
+    y_curr = 100
     
     # Calculate center positions for the column views
     # The center of the layout is based on the widest row
@@ -362,7 +362,7 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     
     if has_obverse:
         coords["obverse"] = (current_x, obv_row_y)
-        central_column_x = current_x  # Update central column reference
+        central_column_x = current_x
         central_column_width = obv_w
         current_x += obv_w + view_gap_px
     
@@ -414,7 +414,7 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     
     if has_left:
         # Rotated left aligned with reverse row
-        rotated_left_y = rev_row_y + (rev_h - l_h) // 2  # Vertically center with reverse
+        rotated_left_y = rev_row_y + (rev_h - l_h) // 2
         coords["left_rotated"] = (current_x, rotated_left_y)
         rotation_flags["left_rotated"] = True
         current_x += l_w + view_gap_px
@@ -439,7 +439,7 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     
     if has_right:
         # Rotated right aligned with reverse row
-        rotated_right_y = rev_row_y + (rev_h - r_h) // 2  # Vertically center with reverse
+        rotated_right_y = rev_row_y + (rev_h - r_h) // 2
         coords["right_rotated"] = (current_x, rotated_right_y)
         rotation_flags["right_rotated"] = True
     
@@ -460,12 +460,12 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     
     # --- Step 9: Place Ruler ---
     if images_dict.get("ruler") is not None and rul_h > 0:
-        y_curr += ruler_padding_px - view_gap_px  # Adjust for the special ruler padding
+        y_curr += ruler_padding_px - view_gap_px
         ruler_x = central_column_x + (central_column_width - rul_w) // 2
         coords["ruler"] = (ruler_x, y_curr)
         y_curr += rul_h
     
-    canvas_h = y_curr + 100  # Final canvas height with bottom margin
+    canvas_h = y_curr + 100
     
     # Create rotated versions of left and right for the reverse row
     modified_images_dict = dict(images_dict)
@@ -486,7 +486,7 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     
     # Add intermediate images to modified_images_dict
     for key, data in intermediate_dims.items():
-        if key in coords:  # Only include intermediates that were actually placed
+        if key in coords:
             modified_images_dict[key] = data["data"]
     
     return int(canvas_w), int(canvas_h), coords, modified_images_dict

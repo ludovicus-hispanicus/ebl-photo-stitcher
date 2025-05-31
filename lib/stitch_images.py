@@ -32,7 +32,7 @@ except ImportError as e:
     print(f"CRITICAL ERROR in stitch_images.py: Could not import local utils: {e}")
     raise
 
-DEFAULT_BLEND_OVERLAP_PX = 50 # Default overlap for gradient blending
+DEFAULT_BLEND_OVERLAP_PX = 50
 
 def _blend_images_horizontally(base_image_segment, new_image_segment, overlap_px):
     """Blends the new_image_segment onto the right side of base_image_segment with a horizontal gradient."""
@@ -60,7 +60,7 @@ def _blend_images_horizontally(base_image_segment, new_image_segment, overlap_px
     new_overlap = new_segment_cropped[:, :overlap_px]
 
     # Create gradient mask
-    alpha = np.linspace(0, 1, overlap_px)[np.newaxis, :, np.newaxis] # Shape (1, overlap_px, 1)
+    alpha = np.linspace(0, 1, overlap_px)[np.newaxis, :, np.newaxis]
     
     # Blend
     blended_overlap = cv2.addWeighted(base_overlap.astype(np.float32), 1 - alpha, new_overlap.astype(np.float32), alpha, 0).astype(np.uint8)
@@ -92,7 +92,7 @@ def _blend_images_vertically(base_image_segment, new_image_segment, overlap_px):
     base_overlap = base_segment_cropped[base_h - overlap_px:, :]
     new_overlap = new_segment_cropped[:overlap_px, :]
 
-    alpha = np.linspace(0, 1, overlap_px)[:, np.newaxis, np.newaxis] # Shape (overlap_px, 1, 1)
+    alpha = np.linspace(0, 1, overlap_px)[:, np.newaxis, np.newaxis]
     
     blended_overlap = cv2.addWeighted(base_overlap.astype(np.float32), 1 - alpha, new_overlap.astype(np.float32), alpha, 0).astype(np.uint8)
     
@@ -136,8 +136,8 @@ def process_tablet_subfolder(
         subfolder_path, 
         output_base_name, 
         STITCH_VIEW_PATTERNS_BASE,
-        include_intermediates=True,  # Explicitly include intermediates
-        intermediate_suffix_patterns=INTERMEDIATE_SUFFIX_BASE  # Pass this parameter
+        include_intermediates=True,
+        intermediate_suffix_patterns=INTERMEDIATE_SUFFIX_BASE
     )
     if not loaded_images or loaded_images.get("obverse") is None and (custom_layout is None or custom_layout.get("obverse") is None): 
         print(f"Warning/Error: Stitching requires a primary image (e.g. 'obverse'). Loaded: {list(loaded_images.keys()) if loaded_images else 'None'}")
@@ -191,7 +191,7 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
     # Create initial canvas with background color
     canvas = np.full((canvas_height, canvas_width, 3), bg_color, dtype=np.uint8)
     
-    processed_view_segments = {} # To store the fully stitched segment for each view_key
+    processed_view_segments = {}
 
     # Place each image or sequence onto the canvas
     for view_key, coords_tuple in layout_coords.items():
@@ -201,9 +201,9 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
 
         start_x, start_y = coords_tuple[0], coords_tuple[1]
 
-        if isinstance(image_data, list): # It's an intermediate sequence
+        if isinstance(image_data, list):
             current_segment = None
-            blend_axis = 'horizontal' # Default
+            blend_axis = 'horizontal'
             if "left" in view_key.lower() or "right" in view_key.lower():
                 blend_axis = 'vertical'
             
@@ -214,14 +214,14 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
                 else:
                     if blend_axis == 'horizontal':
                         current_segment = _blend_images_horizontally(current_segment, img_in_sequence, blend_overlap_px)
-                    else: # vertical
+                    else:
                         current_segment = _blend_images_vertically(current_segment, img_in_sequence, blend_overlap_px)
             
             if current_segment is not None:
                 paste_image_onto_canvas(canvas, current_segment, start_x, start_y)
                 processed_view_segments[view_key] = (current_segment, start_x, start_y)
 
-        else: # It's a single image
+        else:
             img_to_paste = image_data
             paste_image_onto_canvas(canvas, img_to_paste, start_x, start_y)
             processed_view_segments[view_key] = (img_to_paste, start_x, start_y)
@@ -230,8 +230,8 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
     min_x_coord, min_y_coord = canvas_width, canvas_height
     max_x_coord, max_y_coord = 0, 0
     
-    if not processed_view_segments: # No images pasted
-        return canvas # Return empty or bg-filled canvas
+    if not processed_view_segments:
+        return canvas
 
     for seg_img, seg_x, seg_y in processed_view_segments.values():
         min_x_coord = min(min_x_coord, seg_x)
@@ -248,7 +248,7 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
     if max_x_coord > min_x_coord and max_y_coord > min_y_coord:
         return canvas[min_y_coord:max_y_coord, min_x_coord:max_x_coord]
     
-    return canvas # Should ideally not happen if images were pasted
+    return canvas
 
 def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path, 
                  photographer_name, ruler_position="bottom", 
@@ -343,19 +343,19 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
             gradient_width_y = max(1, resized_inter.shape[0] // 4)
             
             # Create mask with gradient edges
-            mask.fill(255)  # Full opacity in center
+            mask.fill(255)
             
             # Apply horizontal gradients (left/right edges)
             for x in range(gradient_width_x):
                 opacity = int(255 * x / gradient_width_x)
-                mask[:, x] = opacity  # Left edge gradient
-                mask[:, resized_inter.shape[1]-x-1] = opacity  # Right edge gradient
+                mask[:, x] = opacity
+                mask[:, resized_inter.shape[1]-x-1] = opacity
                 
             # Apply vertical gradients (top/bottom edges)
             for y in range(gradient_width_y):
                 opacity = int(255 * y / gradient_width_y)
-                mask[y, :] = np.minimum(mask[y, :], opacity)  # Top edge gradient
-                mask[resized_inter.shape[0]-y-1, :] = np.minimum(mask[resized_inter.shape[0]-y-1, :], opacity)  # Bottom edge
+                mask[y, :] = np.minimum(mask[y, :], opacity)
+                mask[resized_inter.shape[0]-y-1, :] = np.minimum(mask[resized_inter.shape[0]-y-1, :], opacity)
         
             # Convert mask to 3-channel for alpha blending
             mask_3ch = cv2.merge([mask, mask, mask])
@@ -378,7 +378,7 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
                 mask_3ch = mask_3ch[:h, :w]
         
             # Apply the alpha blend
-            for c in range(3):  # RGB channels
+            for c in range(3):
                 blend_region[:, :, c] = (resized_inter[:, :, c] * mask_3ch[:, :, c] // 255 + 
                                        blend_region[:, :, c] * (255 - mask_3ch[:, :, c]) // 255)
             

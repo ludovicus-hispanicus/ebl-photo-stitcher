@@ -58,7 +58,7 @@ def crop_canvas_to_content_with_margin(
                 if w > 0 and h > 0: 
                     final_content_img = image_array_to_crop[y : y + h, x : x + w]
         except cv2.error as e:
-            print(f"      OpenCV Error during crop: {e}") # Keep original if error
+            print(f"      OpenCV Error during crop: {e}")
             final_content_img = image_array_to_crop
             
     content_h_px, content_w_px = final_content_img.shape[:2]

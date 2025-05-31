@@ -51,7 +51,7 @@ def extract_tablet_id_from_path(folder_path):
     # You may need to adjust this regex based on your actual file naming conventions
     match = re.search(r'(?:BM[_\s])?(\d+)', folder_name, re.IGNORECASE)
     if match:
-        return match.group(1)  # Return just the number part
+        return match.group(1)
     
     return None
 

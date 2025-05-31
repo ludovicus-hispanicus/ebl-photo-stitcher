@@ -46,7 +46,7 @@ def extract_pixel_runs_from_scanline_data(scanline_data_array, binarization_cuto
             })
     return list_of_pixel_runs
 
-def estimate_pixels_per_centimeter_from_ruler(image_file_path, ruler_position="top"): # ruler_position parameter IS DEFINED HERE
+def estimate_pixels_per_centimeter_from_ruler(image_file_path, ruler_position="top"):
     input_image_array = cv2.imread(image_file_path)
     if input_image_array is None:
         raise FileNotFoundError(f"Image file not found: {image_file_path}")

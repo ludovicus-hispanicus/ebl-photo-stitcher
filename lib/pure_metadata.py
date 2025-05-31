@@ -56,10 +56,10 @@ def set_basic_exif_metadata(image_path, image_title, photographer_name, institut
             exif_dictionary["0th"][piexif.ImageIFD.Software] = "eBL Photo Stitcher".encode('utf-8')
             exif_dictionary["0th"][piexif.ImageIFD.XResolution] = (image_dpi, 1)
             exif_dictionary["0th"][piexif.ImageIFD.YResolution] = (image_dpi, 1)
-            exif_dictionary["0th"][piexif.ImageIFD.ResolutionUnit] = 2  # Inches
+            exif_dictionary["0th"][piexif.ImageIFD.ResolutionUnit] = 2
             
             # Additional metadata for Title field (some viewers use this)
-            exif_dictionary["0th"][270] = image_title.encode('utf-8')  # Image Description
+            exif_dictionary["0th"][270] = image_title.encode('utf-8')
             
             # Dump exif data with enhanced error handling
             exif_bytes = piexif.dump(exif_dictionary)
@@ -129,8 +129,8 @@ def apply_all_metadata(
         
     # If exiv2 module is available, use it for comprehensive metadata handling
     if pyexiv2:
-        img = None # Initialize img to None for the finally block
-        backup_path = None # Initialize backup_path for the finally block
+        img = None
+        backup_path = None
         try:
             print(f"      Using {exiv2_module_name} for advanced metadata...")
             
@@ -140,10 +140,10 @@ def apply_all_metadata(
                 shutil.copy2(image_path, backup_path)
             except Exception as e_backup:
                 print(f"      Warning: Could not create backup for {image_path}: {e_backup}")
-                backup_path = None # Ensure backup_path is None if creation failed
+                backup_path = None
                 
             # Open the image
-            img = pyexiv2.Image(image_path) # Correct API for pyexiv2
+            img = pyexiv2.Image(image_path)
             existing_exif = img.read_exif()
             existing_xmp = img.read_xmp()
             
@@ -160,10 +160,10 @@ def apply_all_metadata(
             # pyexiv2 expects resolution as string "value/1"
             new_exif_data['Exif.Image.XResolution'] = f"{image_dpi}/1"
             new_exif_data['Exif.Image.YResolution'] = f"{image_dpi}/1"
-            new_exif_data['Exif.Image.ResolutionUnit'] = '2'  # Inches, pyexiv2 expects string for some numeric tags
+            new_exif_data['Exif.Image.ResolutionUnit'] = '2'
             
             # Set XMP metadata (Dublin Core)
-            new_xmp_data['Xmp.dc.title'] = image_title # XMP often needs lang qualifier
+            new_xmp_data['Xmp.dc.title'] = image_title
             new_xmp_data['Xmp.dc.creator'] = [photographer_name]
             new_xmp_data['Xmp.dc.rights'] = copyright_text
             new_xmp_data['Xmp.dc.description'] = image_title
@@ -176,7 +176,7 @@ def apply_all_metadata(
             new_xmp_data['Xmp.photoshop.Source'] = institution_name
             
             # Set XMP Rights Management metadata
-            new_xmp_data['Xmp.xmpRights.Marked'] = 'True' # pyexiv2 often expects string booleans
+            new_xmp_data['Xmp.xmpRights.Marked'] = 'True'
             if usage_terms_text:
                 new_xmp_data['Xmp.xmpRights.UsageTerms'] = [{'lang': 'x-default', 'value': usage_terms_text}]
             
@@ -191,7 +191,7 @@ def apply_all_metadata(
             # Explicitly close the image to ensure file handles are released
             # This is done before removing the backup, in the main try block
             img.close()
-            img = None # Set to None after successful close
+            img = None
 
             print(f"      All metadata (EXIF, XMP) applied successfully via {exiv2_module_name}.")
             
@@ -239,7 +239,7 @@ def apply_all_metadata(
                     print(f"      Warning: Error closing pyexiv2.Image in finally block: {e_close_final}")
             # Clean up backup file if it still exists and something went wrong before normal removal
             # This case is mostly for unexpected errors not covered by the main try/except for restoration.
-            if backup_path and os.path.exists(backup_path) and not os.path.exists(image_path): # Original was deleted but not restored
+            if backup_path and os.path.exists(backup_path) and not os.path.exists(image_path):
                  try:
                     print(f"      Final cleanup: Restoring backup {backup_path} as original is missing.")
                     shutil.copy2(backup_path, image_path)

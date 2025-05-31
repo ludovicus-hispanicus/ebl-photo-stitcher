@@ -24,7 +24,7 @@ def apply_lens_correction_if_available(raw_image_obj, image_rgb_array):
         cam_model_name = getattr(raw_image_obj, 'camera_model', getattr(raw_image_obj, 'model', ''))
         
         # Get lens information
-        lens_model_name = ''  # Initialize
+        lens_model_name = ''
 
         # Attempt 1: from specific lens_make and lens_model attributes on raw_image_obj
         _lens_make_attr = getattr(raw_image_obj, 'lens_make', '')
@@ -38,7 +38,7 @@ def apply_lens_correction_if_available(raw_image_obj, image_rgb_array):
             lens_obj = raw_image_obj.lens
             if hasattr(lens_obj, 'name') and lens_obj.name:
                 lens_model_name = lens_obj.name
-            elif hasattr(lens_obj, 'model') and lens_obj.model:  # Fallback within lens object
+            elif hasattr(lens_obj, 'model') and lens_obj.model:
                 lens_model_name = lens_obj.model
 
         if not cam_manufacturer or not cam_model_name:
@@ -56,7 +56,7 @@ def apply_lens_correction_if_available(raw_image_obj, image_rgb_array):
             lens_matches = database.find_lenses(camera, lens_model_name)
             if lens_matches: 
                 found_lens_profile = lens_matches[0]
-            else: # Try a more generic search if exact match fails
+            else:
                 print(f"      Lensfun: Exact lens '{lens_model_name}' not found, trying broader search...")
                 all_lenses_for_cam = database.find_lenses(camera)
                 for l in all_lenses_for_cam:
@@ -86,13 +86,13 @@ def apply_lens_correction_if_available(raw_image_obj, image_rgb_array):
         # Common is FLOAT, and mode can often be inferred or set to ALL.
         modifier.initialize(focal_length, aperture, distance, pixel_format=lensfunpy.PixelFormat.FLOAT, mode=lensfunpy.CorrectionMode.ALL)
 
-        image_float32 = image_rgb_array.astype(np.float32) / (2**raw_image_obj.output_bps - 1) # Normalize based on output_bps
+        image_float32 = image_rgb_array.astype(np.float32) / (2**raw_image_obj.output_bps - 1)
         
         # Apply corrections - check your lensfunpy version for exact method names if these fail
         # Some versions use apply_แก้ไข()
         # For clarity, applying geometry first, then color.
         corrected_image_float32 = modifier.apply_geometry_distortion(image_float32)
-        corrected_image_float32 = modifier.apply_color_modification(corrected_image_float32) # Handles TCA and vignetting
+        corrected_image_float32 = modifier.apply_color_modification(corrected_image_float32)
         
         # Convert back to original bit depth using a standard type
         corrected_rgb_array = (np.clip(corrected_image_float32, 0.0, 1.0) * (2**raw_image_obj.output_bps -1)).astype(np.uint16)

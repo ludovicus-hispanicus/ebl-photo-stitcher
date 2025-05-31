@@ -78,14 +78,14 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
     canvas_h = current_height_sum + 200
 
     layout_coords = {}
-    y_curr = 50  # Stores (x,y) for actual image elements
+    y_curr = 50
     # Store bottom y coordinates separately for alignment reference
     view_bottom_y_coords = {}
 
     start_x_row1 = (
         canvas_w - row1_w)//2 if row1_w > 0 else (canvas_w - obv_w)//2
 
-    current_x_offset_for_lor_row = start_x_row1  # Used for L-O-R placement
+    current_x_offset_for_lor_row = start_x_row1
     if images_dict.get("left") is not None and images_dict.get("left").size > 0:
         layout_coords["left"] = (current_x_offset_for_lor_row, y_curr)
         current_x_offset_for_lor_row += l_w + view_separation_px
@@ -93,13 +93,13 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
     # X where obverse actually starts
     obverse_x_actual_pos = current_x_offset_for_lor_row
     layout_coords["obverse"] = (obverse_x_actual_pos, y_curr)
-    current_x_offset_for_lor_row += obv_w  # Advance past obverse
+    current_x_offset_for_lor_row += obv_w
 
     if images_dict.get("right") is not None and images_dict.get("right").size > 0:
         layout_coords["right"] = (
             current_x_offset_for_lor_row + view_separation_px, y_curr)
 
-    y_curr += obv_h  # Advance Y past the first row (obverse, left, right)
+    y_curr += obv_h
     view_bottom_y_coords["obverse"] = y_curr
 
     for vk in ["bottom", "reverse", "top"]:
@@ -109,13 +109,13 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
             view_x_pos = obverse_x_actual_pos+(obv_w-img_view.shape[1])//2
             layout_coords[vk] = (view_x_pos, y_curr)
             y_curr += img_view.shape[0]
-            view_bottom_y_coords[vk] = y_curr  # Store bottom y of this view
+            view_bottom_y_coords[vk] = y_curr
 
     if images_dict.get("ruler") is not None and images_dict.get("ruler").size > 0:
         y_curr += ruler_top_padding_px
         ruler_x_pos = obverse_x_actual_pos+(obv_w-rul_w)//2
         layout_coords["ruler"] = (ruler_x_pos, y_curr)
-        view_bottom_y_coords["ruler"] = y_curr + rul_h  # Store ruler bottom
+        view_bottom_y_coords["ruler"] = y_curr + rul_h
 
     # Align with bottom of reverse, or current_y if reverse not present
     y_align_for_rotated = view_bottom_y_coords.get("reverse", y_curr)

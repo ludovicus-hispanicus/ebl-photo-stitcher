@@ -13,18 +13,18 @@ def get_mask_bounding_box(mask_array):
 
 def convert_to_bgr_if_needed(image_array):
     if image_array is None or image_array.size == 0: 
-        return None # Explicitly return None for empty or None input
+        return None
     
-    if len(image_array.shape) == 2: # Grayscale
+    if len(image_array.shape) == 2:
         converted = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
         return converted if converted.size > 0 else None
-    elif len(image_array.shape) == 3 and image_array.shape[2] == 4: # BGRA
-        return image_array # Return as is, paste_image_onto_canvas will handle alpha
-    elif len(image_array.shape) == 3 and image_array.shape[2] == 3: # BGR
+    elif len(image_array.shape) == 3 and image_array.shape[2] == 4:
+        return image_array
+    elif len(image_array.shape) == 3 and image_array.shape[2] == 3:
         return image_array
     
     print(f"Warning: Image has unsupported shape {image_array.shape}. Cannot convert to BGR.")
-    return None # Return None for unhandled shapes
+    return None
 
 def resize_image_maintain_aspect(image_to_resize, target_dimension_px, match_axis, interpolation_method=cv2.INTER_AREA):
     if image_to_resize is None or image_to_resize.size == 0: 
@@ -32,17 +32,17 @@ def resize_image_maintain_aspect(image_to_resize, target_dimension_px, match_axi
     
     height, width = image_to_resize.shape[:2]
     if height == 0 or width == 0: 
-        return None # Cannot resize image with zero dimension
+        return None
     
     scale_factor = 1.0
-    if match_axis == 0: # Match height
+    if match_axis == 0:
         if height != target_dimension_px: scale_factor = target_dimension_px / height
-    elif match_axis == 1: # Match width
+    elif match_axis == 1:
         if width != target_dimension_px: scale_factor = target_dimension_px / width
     else: 
-        return image_to_resize # Invalid axis, return original (or None if it was None)
+        return image_to_resize
         
-    if abs(scale_factor - 1.0) < 1e-3: # If scale factor is effectively 1
+    if abs(scale_factor - 1.0) < 1e-3:
         return image_to_resize
 
     new_width = int(round(width * scale_factor))
@@ -50,7 +50,7 @@ def resize_image_maintain_aspect(image_to_resize, target_dimension_px, match_axi
 
     if new_width <= 0 or new_height <= 0: 
         print(f"Warning: Resize resulted in invalid dimensions ({new_width}x{new_height}).")
-        return None # Return None for invalid resize dimensions
+        return None
         
     resized_image = cv2.resize(image_to_resize, (new_width, new_height), interpolation=interpolation_method)
     return resized_image if resized_image.size > 0 else None
@@ -84,14 +84,14 @@ def paste_image_onto_canvas(canvas_array, image_to_paste, top_left_x, top_left_y
         # This can happen if the source image is larger than the available space in the clipped ROI
         # Adjust the cropped source image to fit the target ROI
         h_target_roi, w_target_roi = target_roi.shape[:2]
-        if h_target_roi <= 0 or w_target_roi <=0 : return # Target ROI has no area
+        if h_target_roi <= 0 or w_target_roi <=0 : return
         
         img_cropped_resized = cv2.resize(img_cropped, (w_target_roi, h_target_roi), interpolation=cv2.INTER_AREA)
         if img_cropped_resized.size == 0: return
-        img_cropped = img_cropped_resized # Use the resized version
+        img_cropped = img_cropped_resized
 
-    if len(img_cropped.shape) == 3 and img_cropped.shape[2] == 4: # BGRA
+    if len(img_cropped.shape) == 3 and img_cropped.shape[2] == 4:
         alpha = img_cropped[:,:,3]/255.0; bgr = img_cropped[:,:,:3]
         for c in range(3): target_roi[:,:,c] = bgr[:,:,c]*alpha + target_roi[:,:,c]*(1.0-alpha)
-    elif len(img_cropped.shape) == 3 and img_cropped.shape[2] == 3: target_roi[:] = img_cropped # BGR
-    elif len(img_cropped.shape) == 2 : target_roi[:] = cv2.cvtColor(img_cropped, cv2.COLOR_GRAY2BGR) # Grayscale
+    elif len(img_cropped.shape) == 3 and img_cropped.shape[2] == 3: target_roi[:] = img_cropped
+    elif len(img_cropped.shape) == 2 : target_roi[:] = cv2.cvtColor(img_cropped, cv2.COLOR_GRAY2BGR)

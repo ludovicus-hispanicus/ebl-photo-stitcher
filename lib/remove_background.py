@@ -10,7 +10,7 @@ def detect_dominant_corner_background_color(
     corner_fraction=0.025,
     dark_snap_threshold=50,
     light_snap_threshold=205,
-    museum_selection=None # This parameter is currently unused in the logic
+    museum_selection=None
 ):
     """
     Detects the dominant background color by averaging corner pixels.
@@ -51,7 +51,7 @@ def detect_dominant_corner_background_color(
     if not all_corner_pixels:
         # Fallback: if no corner pixels (e.g., very small image or zero fraction)
         # Default to black, or could be more sophisticated based on thresholds
-        if dark_snap_threshold >= 0: # A simple heuristic if no pixels found
+        if dark_snap_threshold >= 0:
              return (0,0,0)
         # Or, could check light_snap_threshold, but black is a common fallback.
         # This case should be rare with proper sample_size calculation.
@@ -68,9 +68,9 @@ def detect_dominant_corner_background_color(
     # Calculate grayscale intensity of the average corner color
     # BGR order: clipped_bgr_color[0] is B, [1] is G, [2] is R
     # Standard grayscale conversion: Y = 0.299*R + 0.587*G + 0.114*B
-    gray_intensity = (0.114 * clipped_bgr_color[0] +    # Blue
-                      0.587 * clipped_bgr_color[1] +    # Green
-                      0.299 * clipped_bgr_color[2])     # Red
+    gray_intensity = (0.114 * clipped_bgr_color[0] +
+                      0.587 * clipped_bgr_color[1] +
+                      0.299 * clipped_bgr_color[2])
 
     # Apply the snapping logic
     if gray_intensity < dark_snap_threshold:
@@ -101,7 +101,7 @@ def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 
     # If the detected background is dark, and it's British Museum or no museum specified,
     # we might want to keep it dark.
     if museum_selection is None or museum_selection == "British Museum":
-        return (0, 0, 0) # Otherwise, make it white for British Museum / None if it's not dark
+        return (0, 0, 0)
     else:
         # For all other museums, force white output background
         return (255, 255, 255)

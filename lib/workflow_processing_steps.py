@@ -37,7 +37,7 @@ def organize_project_subfolders(source_folder_path: str, image_extensions: tuple
     else:
         if images_in_root:
             print("   Images found in root folder. Running file organization...")
-        elif not subfolders_with_images: # No images in root AND no subfolders with images
+        elif not subfolders_with_images:
             print("   No images in root and no subfolders with images found. Running file organization...")
         # If images_in_root and subfolders_with_images, organization will also run.
         
@@ -53,7 +53,7 @@ def organize_project_subfolders(source_folder_path: str, image_extensions: tuple
         except Exception as e:
             print(f"   ERROR during file organization: {e}")
             # Re-raise or handle as appropriate for the workflow to stop
-            raise # Or return an empty list and let the caller handle
+            raise
             
     return processed_subfolders
 
@@ -73,10 +73,10 @@ def determine_ruler_image_for_scaling(
             ruler_for_scale_fp = custom_layout_config["obverse"]
         elif custom_layout_config.get("reverse"):
             ruler_for_scale_fp = custom_layout_config["reverse"]
-        elif custom_layout_config.get("bottom"): # Typically, ruler is on obv, rev, or bottom
+        elif custom_layout_config.get("bottom"):
             ruler_for_scale_fp = custom_layout_config["bottom"]
         
-        if not ruler_for_scale_fp: # If not found in primary slots, check any assigned image
+        if not ruler_for_scale_fp:
             for view_designation, path_or_list in custom_layout_config.items():
                 if isinstance(path_or_list, str) and os.path.exists(path_or_list):
                     ruler_for_scale_fp = path_or_list
@@ -94,7 +94,7 @@ def determine_ruler_image_for_scaling(
             ruler_for_scale_fp = image_files_for_layout[0]
             print(f"   WARNING: No specific ruler image identifiable from custom layout. Using first available image: {os.path.basename(ruler_for_scale_fp)} for scaling. This may be incorrect.")
 
-    if not ruler_for_scale_fp: # Standard logic if no custom layout or custom layout didn't specify
+    if not ruler_for_scale_fp:
         if rel_count == 2 and pr02_reverse:
             ruler_for_scale_fp = pr02_reverse
         elif rel_count >= 6 and pr03_top:

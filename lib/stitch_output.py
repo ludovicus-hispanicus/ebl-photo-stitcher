@@ -4,7 +4,7 @@ import numpy as np
 import os
 import imageio
 import datetime
-import time  # Import time for sleep
+import time
 import stitch_config
 from stitch_config import FINAL_TIFF_SUBFOLDER_NAME, FINAL_JPG_SUBFOLDER_NAME, JPEG_SAVE_QUALITY
 
@@ -45,7 +45,7 @@ def save_stitched_output(
     # ADD A SMALL DELAY before attempting metadata operations
     if tiff_save_success or jpg_save_success:
         print("    Brief pause before metadata application...")
-        time.sleep(0.5)  # Wait for 0.5 seconds
+        time.sleep(0.5)
 
     # Apply metadata to successfully saved files
     saved_files = []
