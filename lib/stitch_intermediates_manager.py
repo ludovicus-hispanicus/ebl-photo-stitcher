@@ -8,15 +8,17 @@ try:
 except ImportError as e:
     print(f"FATAL ERROR: stitch_intermediates_manager.py cannot import: {e}")
     def get_extended_intermediate_suffixes(): return {}
-    def generate_position_patterns(): return [r'_([a-z]{2}\d*)_', r'intermediate_[^_]+_([^_\.]+)(?:_\d+)?']
+    def generate_position_patterns(): return [
+        r'_([a-z]{2}\d*)_', r'intermediate_[^_]+_([^_\.]+)(?:_\d+)?']
+
 
 def group_intermediate_images(intermediate_dims):
     """
     Group intermediate images by their base position and sort by suffix number.
-    
+
     Args:
         intermediate_dims: Dictionary of intermediate image dimensions
-        
+
     Returns:
         Dictionary of grouped intermediate images
     """
@@ -72,7 +74,7 @@ def group_intermediate_images(intermediate_dims):
                         })
                         position_found = True
                         break
-                
+
                 if position_found:
                     break
 
@@ -89,14 +91,14 @@ def group_intermediate_images(intermediate_dims):
                     })
                     position_found = True
                     break
-            
+
             if not position_found:
 
                 match = re.match(r'intermediate_([a-z]+_[a-z]+)_(\d+)', key)
                 if match:
                     position_part = match.group(1)
                     suffix_number = int(match.group(2))
-                    
+
                     if position_part in grouped_intermediates:
                         grouped_intermediates[position_part].append({
                             "key": key,
@@ -110,7 +112,8 @@ def group_intermediate_images(intermediate_dims):
 
             for position_name in grouped_intermediates.keys():
                 if position_name in key:
-                    print(f"      Layout: Found intermediate with non-standard naming: {key}")
+                    print(
+                        f"      Layout: Found intermediate with non-standard naming: {key}")
                     grouped_intermediates[position_name].append({
                         "key": key,
                         "number": 99,
@@ -121,20 +124,21 @@ def group_intermediate_images(intermediate_dims):
 
     for group_key in grouped_intermediates:
         grouped_intermediates[group_key].sort(key=lambda x: x["number"])
-        
+
     return grouped_intermediates
 
-def calculate_row_widths(grouped_intermediates, has_left, has_obverse, has_right, has_reverse, 
-                        l_w, obv_w, r_w, rev_w, view_gap_px):
+
+def calculate_row_widths(grouped_intermediates, has_left, has_obverse, has_right, has_reverse,
+                         l_w, obv_w, r_w, rev_w, view_gap_px):
     """
     Calculate widths for the obverse and reverse rows including all intermediate images.
-    
+
     Args:
         grouped_intermediates: Dictionary of grouped intermediate images
         has_left, has_obverse, has_right, has_reverse: Boolean flags for presence of main views
         l_w, obv_w, r_w, rev_w: Widths of main views
         view_gap_px: Gap between views in pixels
-        
+
     Returns:
         Tuple of (obv_row_full_width, rev_row_full_width, potential_canvas_widths)
     """
@@ -185,5 +189,5 @@ def calculate_row_widths(grouped_intermediates, has_left, has_obverse, has_right
         rev_row_full_width -= view_gap_px
 
     potential_canvas_widths.append(rev_row_full_width)
-    
+
     return obv_row_full_width, rev_row_full_width, potential_canvas_widths

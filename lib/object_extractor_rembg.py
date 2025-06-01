@@ -8,31 +8,32 @@ from rembg import remove
 from PIL import Image, ImageOps
 from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
+
 def _download_with_progress(url, destination):
     """Download a file with progress reporting."""
     import requests
     from tqdm import tqdm
-    
+
     print(f"  Downloading U2NET model from {url}")
     print(f"  This is a large file (~176MB) and may take several minutes.")
-    
+
     try:
 
         response = requests.get(url, stream=True, timeout=300)
         response.raise_for_status()
-        
+
         total_size = int(response.headers.get('content-length', 0))
 
         temp_destination = destination + ".download"
-        
+
         with open(temp_destination, 'wb') as f, tqdm(
-                desc="  Downloading",
-                total=total_size,
-                unit='B',
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as bar:
-            for data in response.iter_content(chunk_size=1024*1024):
+            desc="  Downloading",
+            total=total_size,
+            unit='B',
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar:
+            for data in response.iter_content(chunk_size=1024 * 1024):
                 if data:
                     size = f.write(data)
                     bar.update(size)
@@ -40,13 +41,14 @@ def _download_with_progress(url, destination):
         shutil.move(temp_destination, destination)
         print(f"  Download complete! Model saved to {destination}")
         return True
-        
+
     except Exception as e:
         print(f"  Error downloading model: {e}")
 
         if os.path.exists(temp_destination):
             os.remove(temp_destination)
         return False
+
 
 def _ensure_local_model():
     """Ensures the U2NET model exists in the expected location."""
@@ -63,7 +65,7 @@ def _ensure_local_model():
         base_dir = os.path.dirname(sys.executable)
     else:
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    
+
     assets_model_path = os.path.join(base_dir, "assets", "u2net.onnx")
 
     if os.path.exists(assets_model_path):
@@ -76,7 +78,7 @@ def _ensure_local_model():
 
     url = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
     success = _download_with_progress(url, model_path)
-    
+
     if not success:
         print("\n================================================================")
         print("  ERROR: Could not download or find the U2NET model.")
@@ -84,8 +86,9 @@ def _ensure_local_model():
         print("  https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx")
         print(f"  And save it to: {model_path}")
         print("================================================================\n")
-    
+
     return success
+
 
 def extract_and_save_center_object(
     input_image_filepath,
@@ -99,25 +102,28 @@ def extract_and_save_center_object(
 ):
     """
     Extract the object closest to the center among the two largest objects.
-    
+
     Args:
         input_image_filepath: Path to the input image
         output_image_background_color: BGR tuple for background color (OpenCV format)
         output_filename_suffix: Suffix for the output filename
-        
+
     Returns:
         Tuple of (output_filepath, dummy_contour) for compatibility
     """
-    print(f"  Extracting center object from: {os.path.basename(input_image_filepath)} using rembg")
+    print(
+        f"  Extracting center object from: {os.path.basename(input_image_filepath)} using rembg")
     start_time = time.time()
 
     if not _ensure_local_model():
-        raise RuntimeError("U2NET model is required but could not be downloaded or found.")
+        raise RuntimeError(
+            "U2NET model is required but could not be downloaded or found.")
 
     try:
         input_img = Image.open(input_image_filepath)
     except Exception as e:
-        raise FileNotFoundError(f"Could not load image for object extraction: {input_image_filepath} - {e}")
+        raise FileNotFoundError(
+            f"Could not load image for object extraction: {input_image_filepath} - {e}")
 
     output_img = remove(input_img)
 
@@ -129,8 +135,9 @@ def extract_and_save_center_object(
     kernel = np.ones((3, 3), np.uint8)
     binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
 
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask, connectivity=8)
-    
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        binary_mask, connectivity=8)
+
     if num_labels <= 1:
         print("    Warning: No objects detected in the image!")
         bbox = (0, 0, output_img.width, output_img.height)
@@ -185,7 +192,7 @@ def extract_and_save_center_object(
             y_min = max(0, y_min - padding)
             x_max = min(output_img.width, x_max + padding)
             y_max = min(output_img.height, y_max + padding)
-            
+
             bbox = (x_min, y_min, x_max, y_max)
 
     selected_mask_pil = Image.fromarray(selected_object_mask)
@@ -195,8 +202,8 @@ def extract_and_save_center_object(
 
     cropped_img = filtered_output.crop(bbox)
 
-    bg_color_rgb = (output_image_background_color[2], 
-                    output_image_background_color[1], 
+    bg_color_rgb = (output_image_background_color[2],
+                    output_image_background_color[1],
                     output_image_background_color[0])
 
     bg_img = Image.new('RGB', cropped_img.size, bg_color_rgb)
@@ -205,15 +212,18 @@ def extract_and_save_center_object(
 
     base_filepath, _ = os.path.splitext(input_image_filepath)
     output_image_filepath = f"{base_filepath}{output_filename_suffix}"
-    
+
     try:
 
         bg_img.save(output_image_filepath)
         elapsed = time.time() - start_time
-        print(f"    Successfully saved extracted artifact: {output_image_filepath} (took {elapsed:.2f}s)")
+        print(
+            f"    Successfully saved extracted artifact: {output_image_filepath} (took {elapsed:.2f}s)")
 
-        dummy_contour = np.array([[[0, 0]], [[0, 1]], [[1, 1]], [[1, 0]]], dtype=np.int32)
-        
+        dummy_contour = np.array(
+            [[[0, 0]], [[0, 1]], [[1, 1]], [[1, 0]]], dtype=np.int32)
+
         return output_image_filepath, dummy_contour
     except Exception as e:
-        raise IOError(f"Error saving extracted artifact to {output_image_filepath}: {e}")
+        raise IOError(
+            f"Error saving extracted artifact to {output_image_filepath}: {e}")

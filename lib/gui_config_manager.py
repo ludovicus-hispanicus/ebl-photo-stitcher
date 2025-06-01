@@ -6,6 +6,7 @@ CONFIG_FILENAME_ONLY = "gui_config.json"
 
 DEFAULT_PHOTOGRAPHER = "Ivor Kerslake"
 
+
 def save_config(config_file_path, config_data):
     """Saves the configuration data to a JSON file."""
     try:
@@ -17,6 +18,7 @@ def save_config(config_file_path, config_data):
     except Exception as e:
         print(f"Error saving config to {config_file_path}: {e}")
         return False
+
 
 def load_config(config_file_path):
     """Loads configuration data from a JSON file."""
@@ -30,6 +32,7 @@ def load_config(config_file_path):
         print(f"Warn: Could not load config from {config_file_path}: {e}")
 
     return config_data
+
 
 def get_default_config_values():
     """Returns a dictionary of default configuration values."""

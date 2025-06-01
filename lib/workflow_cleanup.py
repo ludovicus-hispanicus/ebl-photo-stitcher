@@ -1,5 +1,6 @@
 import os
 
+
 def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix="_ruler.tif"):
     """
     Remove intermediate processing files from each processed subfolder.
@@ -33,17 +34,19 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
                         print(f"  Error removing {filename}: {e}")
 
             if files_removed > 0:
-                print(f"  Removed {files_removed} intermediate files from {folder_name}")
-                
+                print(
+                    f"  Removed {files_removed} intermediate files from {folder_name}")
+
         except Exception as e:
             print(f"  Error accessing folder {folder_name}: {e}")
 
     print(f"--- Cleanup complete: {total_removed} files removed ---")
 
+
 def cleanup_temp_files(*file_paths):
     """
     Clean up temporary files if they exist.
-    
+
     Args:
         *file_paths: Variable number of file paths to clean up
     """

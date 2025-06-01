@@ -1,8 +1,10 @@
 import os
 import sys
 
-def _placeholder_func(*args, **kwargs): 
+
+def _placeholder_func(*args, **kwargs):
     print(f"Error: Missing module for {args[0] if args else 'operation'}")
+
 
 try:
     import resize_ruler
@@ -10,7 +12,7 @@ try:
     from blending_mask_applier import process_intermediate_image_with_mask
     from stitch_images import process_tablet_subfolder
     from stitch_config import (
-        MUSEUM_CONFIGS, 
+        MUSEUM_CONFIGS,
         MAX_ADDITIONAL_INTERMEDIATES,
         get_extended_intermediate_suffixes
     )
@@ -31,12 +33,14 @@ try:
     from workflow_processing_steps import determine_pixels_per_cm_from_measurement
 
     IMPORTS_AVAILABLE = True
-    
+
 except ImportError as e:
     print(f"ERROR in workflow_imports.py: Failed to import a processing module: {e}")
 
-    resize_ruler = type('module', (), {'resize_and_save_ruler_template': _placeholder_func})
-    ruler_detector = type('module', (), {'estimate_pixels_per_centimeter_from_ruler': _placeholder_func})
+    resize_ruler = type(
+        'module', (), {'resize_and_save_ruler_template': _placeholder_func})
+    ruler_detector = type(
+        'module', (), {'estimate_pixels_per_centimeter_from_ruler': _placeholder_func})
     process_tablet_subfolder = _placeholder_func
     extract_and_save_center_object = lambda *a, **kw: (None, None)
     extract_specific_contour_to_image_array = _placeholder_func
@@ -50,17 +54,18 @@ except ImportError as e:
     detect_dominant_corner_background_color = lambda *a, **kw: (0, 0, 0)
     process_intermediate_image_with_mask = _placeholder_func
     get_museum_background_color = lambda *a, **kw: (0, 0, 0)
-    get_extended_intermediate_suffixes = lambda: {}
-    ruler_detector_iraq_museum = type('module', (), {'detect_1cm_distance_iraq': _placeholder_func})
+    def get_extended_intermediate_suffixes(): return {}
+    ruler_detector_iraq_museum = type(
+        'module', (), {'detect_1cm_distance_iraq': _placeholder_func})
     get_tablet_width_from_measurements = lambda *a, **kw: None
     determine_pixels_per_cm_from_measurement = lambda *a, **kw: None
     MUSEUM_CONFIGS = {}
     DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE = 20
-    
+
     IMPORTS_AVAILABLE = False
 
 __all__ = [
-    'resize_ruler', 'ruler_detector', 'process_tablet_subfolder', 
+    'resize_ruler', 'ruler_detector', 'process_tablet_subfolder',
     'extract_and_save_center_object', 'extract_specific_contour_to_image_array',
     'create_foreground_mask', 'select_contour_closest_to_image_center',
     'select_ruler_like_contour', 'convert_raw_image_to_tiff', 'organize_files_func',

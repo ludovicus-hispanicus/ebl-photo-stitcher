@@ -7,7 +7,8 @@ try:
     from stitch_intermediates_manager import group_intermediate_images, calculate_row_widths
     from stitch_layout_calculation import calculate_stitching_layout
 except ImportError as e:
-    print(f"FATAL ERROR: stitch_layout_manager.py cannot import modular components: {e}")
+    print(
+        f"FATAL ERROR: stitch_layout_manager.py cannot import modular components: {e}")
     from stitch_config import (
         STITCH_VIEW_GAP_PX,
         STITCH_RULER_PADDING_PX,

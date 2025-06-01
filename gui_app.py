@@ -38,18 +38,19 @@ try:
     from gui_events import EventHandlers
     from gui_config_handlers import ConfigManager
     from gui_museum_options import MuseumOptionsManager
-    
-except ImportError as e:
 
+except ImportError as e:
 
     expected_lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
 
     try:
         root_err_tk = tk.Tk()
         root_err_tk.withdraw()
-        messagebox.showerror("Startup Error", f"Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
+        messagebox.showerror(
+            "Startup Error", f"Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
     except Exception:
-        print(f"ERROR: Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
+        print(
+            f"ERROR: Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
     sys.exit(1)
 
 ASSETS_SUBFOLDER = "assets"
@@ -73,6 +74,7 @@ HELP_URL = "https://github.com/ElectronicBabylonianLiterature/ebl-photo-stitcher
 _ORIG_STITCH_CREDIT = stitch_config.STITCH_CREDIT_LINE
 _ORIG_STITCH_INSTITUTION = stitch_config.STITCH_INSTITUTION
 
+
 class ImageProcessorApp:
     def __init__(self, root_window):
 
@@ -91,12 +93,13 @@ class ImageProcessorApp:
         self.root.title("eBL Photo Stitcher v0.5")
         self.root.geometry("600x900")
 
-        self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
+        self.config_file_path = os.path.join(
+            get_persistent_config_dir_path(), "gui_config.json")
 
         self.input_folder_var = tk.StringVar()
-        self.ruler_position_var = tk.StringVar() 
-        self.photographer_var = tk.StringVar() 
-        self.add_logo_var = tk.BooleanVar() 
+        self.ruler_position_var = tk.StringVar()
+        self.photographer_var = tk.StringVar()
+        self.add_logo_var = tk.BooleanVar()
         self.logo_path_var = tk.StringVar()
         self.museum_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0.0)
@@ -113,9 +116,9 @@ class ImageProcessorApp:
         self._setup_icon()
         self._setup_styles()
         self._create_widgets()
-        self.load_config() 
-        self.on_museum_changed(None) 
-        
+        self.load_config()
+        self.on_museum_changed(None)
+
     def _setup_icon(self):
         """Set up application icon."""
         try:
@@ -144,26 +147,26 @@ class ImageProcessorApp:
 
         self.folder_frame, self.fe = UIComponents.create_folder_selection_ui(
             self.main_tab, self.input_folder_var, self.browse_folder)
-            
+
         self.metadata_frame, self.pe = UIComponents.create_photographer_ui(
             self.main_tab, self.photographer_var)
-            
+
         self.ruler_frame, self.rc, self.canvas_params, self.museum_combo = UIComponents.create_ruler_pos_ui(
-            self.main_tab, self.museum_var, self.ruler_position_var, 
+            self.main_tab, self.museum_var, self.ruler_position_var,
             self.on_museum_changed, self.on_ruler_canvas_click)
-            
+
         self.options_frame, self.logo_checkbox, self.logo_path_entry, self.browse_logo_btn, self.measurements_checkbox = UIComponents.create_logo_options_ui(
-            self.main_tab, self.add_logo_var, self.logo_path_var, 
-            self.toggle_logo_path_entry, self.browse_logo_file, 
-            self.use_measurements_var, self.measurements_loaded, 
+            self.main_tab, self.add_logo_var, self.logo_path_var,
+            self.toggle_logo_path_entry, self.browse_logo_file,
+            self.use_measurements_var, self.measurements_loaded,
             script_directory, self.debug_measurements_loading)
-            
+
         self.prb = UIComponents.create_process_button_ui(
             self.main_tab, self.start_processing_thread)
-            
+
         self.progress_frame, self.progress_bar, self.progress_var = UIComponents.create_progress_bar_ui(
             self.main_tab)
-            
+
         self.log_frame, self.lt = UIComponents.create_log_area_ui(
             self.main_tab, TextRedirector)
 
@@ -172,7 +175,7 @@ class ImageProcessorApp:
             'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
         }
         self.advanced_tab = AdvancedTab(self.notebook, settings)
-    
+
     def toggle_logo_path_entry(self):
         """Toggle logo path entry enabled/disabled state."""
         EventHandlers.toggle_logo_path_entry(
@@ -185,20 +188,20 @@ class ImageProcessorApp:
     def draw_ruler_selector(self):
         """Draw the ruler selector canvas."""
         LayoutManager.draw_ruler_selector(
-            self.rc, self.ruler_position_var.get(), 
+            self.rc, self.ruler_position_var.get(),
             self.museum_var.get(), self.canvas_params)
-    
+
     def on_ruler_canvas_click(self, event):
         """Handle clicks on the ruler canvas."""
         EventHandlers.handle_ruler_canvas_click(
-            event, self.canvas_params, self.ruler_position_var, 
+            event, self.canvas_params, self.ruler_position_var,
             self.museum_var, self.draw_ruler_selector)
 
     def on_museum_changed(self, event):
         """Handle museum selection changes."""
         EventHandlers.handle_museum_change(
-            event, self.museum_var, self.ruler_position_var, 
-            self.measurements_checkbox, self.measurements_loaded, 
+            event, self.museum_var, self.ruler_position_var,
+            self.measurements_checkbox, self.measurements_loaded,
             self.draw_ruler_selector, self.save_config)
 
     def browse_folder(self):
@@ -227,7 +230,7 @@ class ImageProcessorApp:
     def configure_museum_settings(self, museum_selection):
         """Configure museum-specific settings."""
         MuseumOptionsManager.configure_museum_settings(
-            museum_selection, stitch_config, 
+            museum_selection, stitch_config,
             _ORIG_STITCH_CREDIT, _ORIG_STITCH_INSTITUTION)
 
     def start_processing_thread(self):
@@ -273,20 +276,21 @@ if __name__ == "__main__":
             "gui_utils.TextRedirector_class": TextRedirector,
             "gui_workflow_runner.run_complete_image_processing_workflow": run_complete_image_processing_workflow if 'gui_workflow_runner' in sys.modules and hasattr(sys.modules['gui_workflow_runner'], 'run_complete_image_processing_workflow') else None
         }
-        
+
         missing = [name for name, mod_or_func in modules_to_check.items()
-                  if mod_or_func is None]
+                   if mod_or_func is None]
 
         root = tk.Tk()
 
         if missing:
             msg = "ERROR: Critical components missing:\n" + "\n".join(missing) + \
                 "\nEnsure all .py files are in the same directory/Python path and error-free."
-            
+
             error_frame = ttk.Frame(root, padding=20)
             error_frame.pack(fill=tk.BOTH, expand=True)
-            
-            ttk.Label(error_frame, text="Application Error", font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+            ttk.Label(error_frame, text="Application Error", font=(
+                "Helvetica", 14, "bold")).pack(pady=(0, 10))
 
             error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
             error_text.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -297,30 +301,32 @@ if __name__ == "__main__":
             error_text.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-            ttk.Button(error_frame, text="Close Application", command=root.destroy).pack(pady=10)
-            
+            ttk.Button(error_frame, text="Close Application",
+                       command=root.destroy).pack(pady=10)
+
             print(msg)
         else:
 
             app = ImageProcessorApp(root)
 
         root.mainloop()
-        
+
     except Exception as e:
 
         try:
             import traceback
             root = tk.Tk()
             root.title("Unexpected Error")
-            
+
             error_frame = ttk.Frame(root, padding=20)
             error_frame.pack(fill=tk.BOTH, expand=True)
-            
-            ttk.Label(error_frame, text="Unexpected Error", font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+            ttk.Label(error_frame, text="Unexpected Error", font=(
+                "Helvetica", 14, "bold")).pack(pady=(0, 10))
 
             error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
             error_text.pack(fill=tk.BOTH, expand=True, pady=5)
-            
+
             error_trace = f"An unexpected error occurred:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
             error_text.insert(tk.END, error_trace)
             error_text.config(state=tk.DISABLED)
@@ -329,8 +335,9 @@ if __name__ == "__main__":
             error_text.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-            ttk.Button(error_frame, text="Close Application", command=root.destroy).pack(pady=10)
-            
+            ttk.Button(error_frame, text="Close Application",
+                       command=root.destroy).pack(pady=10)
+
             print(error_trace)
             root.mainloop()
         except:

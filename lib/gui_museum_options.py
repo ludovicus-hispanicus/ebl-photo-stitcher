@@ -1,8 +1,9 @@
 """Museum-specific settings for the eBL Photo Stitcher."""
 
+
 class MuseumOptionsManager:
     """Manager for museum-specific options and settings."""
-    
+
     @staticmethod
     def configure_museum_settings(museum_selection, stitch_config, original_credit, original_institution):
         """Configure museum-specific settings for stitching."""

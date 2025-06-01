@@ -1,5 +1,5 @@
 # Output management for the stitching process
-import cv2 
+import cv2
 import numpy as np
 import os
 import imageio
@@ -14,9 +14,10 @@ except ImportError as e:
     print(f"CRITICAL ERROR in stitch_output.py: Could not import metadata utils: {e}")
     raise
 
+
 def save_stitched_output(
-    final_image, 
-    main_input_folder_path, 
+    final_image,
+    main_input_folder_path,
     output_base_name,
     photographer_name,
     output_dpi
@@ -25,8 +26,10 @@ def save_stitched_output(
     if not isinstance(final_image, np.ndarray) or final_image.size == 0:
         raise ValueError("Invalid image for saving")
 
-    final_tiff_output_dir = os.path.join(main_input_folder_path, FINAL_TIFF_SUBFOLDER_NAME)
-    final_jpg_output_dir = os.path.join(main_input_folder_path, FINAL_JPG_SUBFOLDER_NAME)
+    final_tiff_output_dir = os.path.join(
+        main_input_folder_path, FINAL_TIFF_SUBFOLDER_NAME)
+    final_jpg_output_dir = os.path.join(
+        main_input_folder_path, FINAL_JPG_SUBFOLDER_NAME)
     os.makedirs(final_tiff_output_dir, exist_ok=True)
     os.makedirs(final_jpg_output_dir, exist_ok=True)
 
@@ -63,12 +66,15 @@ def save_stitched_output(
         )
 
     if not tiff_save_success:
-        print(f"    Skipping metadata for TIFF as save failed: {os.path.basename(tiff_filepath)}")
+        print(
+            f"    Skipping metadata for TIFF as save failed: {os.path.basename(tiff_filepath)}")
     if not jpg_save_success:
-        print(f"    Skipping metadata for JPG as save failed: {os.path.basename(jpg_filepath)}")
-    
-    return (tiff_filepath if tiff_save_success else None, 
+        print(
+            f"    Skipping metadata for JPG as save failed: {os.path.basename(jpg_filepath)}")
+
+    return (tiff_filepath if tiff_save_success else None,
             jpg_filepath if jpg_save_success else None)
+
 
 def save_tiff_output(image, output_path):
     """Save image as TIFF format using primary and fallback methods."""
@@ -79,27 +85,30 @@ def save_tiff_output(image, output_path):
             raise ValueError("Color conversion failed")
 
         imageio.imwrite(output_path, image_rgb, format='TIFF')
-        print(f"      Successfully saved TIFF (image data): {os.path.basename(output_path)}")
+        print(
+            f"      Successfully saved TIFF (image data): {os.path.basename(output_path)}")
         return True
-    except Exception as e_imageio: 
+    except Exception as e_imageio:
         print(f"ERROR saving stitched TIFF with imageio: {e_imageio}")
 
-        try: 
+        try:
             print(f"      Attempting fallback cv2.imwrite for TIFF: {output_path}")
             if not cv2.imwrite(output_path, image):
-                 raise IOError("cv2.imwrite for TIFF fallback returned False.")
+                raise IOError("cv2.imwrite for TIFF fallback returned False.")
             print(f"      Saved TIFF via cv2 (fallback).")
             return True
         except Exception as e_cv2_tiff:
             print(f"      ERROR saving final TIFF with cv2 fallback: {e_cv2_tiff}")
             return False
 
+
 def save_jpg_output(image, output_path):
     """Save image as JPEG format."""
     try:
         if not cv2.imwrite(output_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_SAVE_QUALITY]):
             raise IOError("cv2.imwrite for JPG returned False.")
-        print(f"      Successfully saved JPG: {os.path.basename(output_path)} with quality {JPEG_SAVE_QUALITY}")
+        print(
+            f"      Successfully saved JPG: {os.path.basename(output_path)} with quality {JPEG_SAVE_QUALITY}")
         return True
     except Exception as e_jpg:
         print(f"      ERROR saving final JPG: {e_jpg}")

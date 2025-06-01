@@ -19,6 +19,7 @@ OUTPUT_RULER_SUFFIX = "_ruler"
 OUTPUT_RULER_FILE_EXTENSION = ".tif"
 IMAGE_RESIZE_INTERPOLATION_METHOD = cv2.INTER_CUBIC
 
+
 def svg_to_image(svg_file_path):
     """
     Convert SVG file to a NumPy array suitable for use with OpenCV.
@@ -50,12 +51,14 @@ def svg_to_image(svg_file_path):
             rgb = img[:, :, :3]
 
             alpha_factor = alpha[:, :, np.newaxis].astype(np.float32) / 255.0
-            blended = (rgb * alpha_factor + white_background * (1 - alpha_factor)).astype(np.uint8)
+            blended = (rgb * alpha_factor + white_background
+                       * (1 - alpha_factor)).astype(np.uint8)
             return blended
-        
+
         return img
     except Exception as e:
         raise ValueError(f"Error converting SVG to image: {e}")
+
 
 def resize_and_save_ruler_template(
     pixels_per_centimeter_scale,
@@ -67,14 +70,14 @@ def resize_and_save_ruler_template(
     """
     Resizes a digital ruler template to match the detected physical scale, 
     and saves it to the output directory.
-    
+
     Args:
         pixels_per_centimeter_scale: The number of pixels per centimeter in the source image
         chosen_digital_ruler_template_path: Path to the digital ruler template to scale
         output_base_name: Base name for the output file
         output_directory_path: Directory to save the scaled ruler
         custom_ruler_size_cm: Optional, custom size of the ruler in cm (for SVG rulers)
-    
+
     Returns:
         The path to the scaled ruler file that was created
     """
@@ -114,7 +117,7 @@ def resize_and_save_ruler_template(
     else:
         digital_ruler_image_array = cv2.imread(
             chosen_digital_ruler_template_path, cv2.IMREAD_UNCHANGED)
-    
+
     if digital_ruler_image_array is None:
         raise ValueError(
             f"Could not load digital ruler template image from: {chosen_digital_ruler_template_path}")

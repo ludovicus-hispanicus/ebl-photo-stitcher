@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 
+
 def detect_1cm_distance_iraq(image_path):
     """
     Detects the pixel distance corresponding to 1 cm on a ruler in an image,
@@ -34,27 +35,30 @@ def detect_1cm_distance_iraq(image_path):
 
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         blurred_roi = cv2.GaussianBlur(gray_roi, (3, 3), 0)
-        
+
         alpha_contrast = 2.0
         beta_brightness = 0
-        contrast_adjusted_roi = cv2.convertScaleAbs(blurred_roi, alpha=alpha_contrast, beta=beta_brightness)
+        contrast_adjusted_roi = cv2.convertScaleAbs(
+            blurred_roi, alpha=alpha_contrast, beta=beta_brightness)
 
         edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 
-        lines_roi = cv2.HoughLinesP(edges_roi, 1, np.pi / 180, 60, minLineLength=30, maxLineGap=10)
+        lines_roi = cv2.HoughLinesP(edges_roi, 1, np.pi / 180,
+                                    60, minLineLength=30, maxLineGap=10)
         if lines_roi is None or len(lines_roi) < 2:
             print("Error: Could not detect enough lines in the ROI.")
             return None
 
-        potential_ticks_props = [] 
+        potential_ticks_props = []
         for line in lines_roi:
             x1, y1, x2, y2 = line[0]
             line_height = abs(y2 - y1)
             line_width = abs(x2 - x1)
-            
+
             if line_width < 20 and line_height > 20:
                 avg_x = (x1 + x2) / 2.0
-                potential_ticks_props.append({'x': avg_x, 'y1': min(y1, y2), 'y2': max(y1, y2), 'h': line_height})
+                potential_ticks_props.append({'x': avg_x, 'y1': min(
+                    y1, y2), 'y2': max(y1, y2), 'h': line_height})
 
         if not potential_ticks_props:
             print("Error: No potential tick lines found after initial filtering.")
@@ -64,39 +68,40 @@ def detect_1cm_distance_iraq(image_path):
 
         merged_tick_x_values = []
         if not potential_ticks_props:
-             return None 
+            return None
 
         MAX_TICK_THICKNESS_PX = 20
-        
+
         i = 0
         while i < len(potential_ticks_props):
             current_group_ticks_x = [potential_ticks_props[i]['x']]
-            group_scan_idx = i 
-            
+            group_scan_idx = i
+
             for j in range(i + 1, len(potential_ticks_props)):
                 if (potential_ticks_props[j]['x'] - potential_ticks_props[i]['x']) < MAX_TICK_THICKNESS_PX:
                     current_group_ticks_x.append(potential_ticks_props[j]['x'])
                     group_scan_idx = j
                 else:
                     break
-            
+
             merged_x = np.mean(current_group_ticks_x)
             merged_tick_x_values.append(merged_x)
-            
+
             i = group_scan_idx + 1
 
         if len(merged_tick_x_values) < 11:
-            print(f"Error: Not enough merged tick marks found ({len(merged_tick_x_values)}). Need at least 11.")
+            print(
+                f"Error: Not enough merged tick marks found ({len(merged_tick_x_values)}). Need at least 11.")
             return None
-        
-        tick_x_coords = merged_tick_x_values 
+
+        tick_x_coords = merged_tick_x_values
 
         num_ticks_for_1cm = 11
         candidate_1cm_distances = []
-        
+
         if len(tick_x_coords) >= num_ticks_for_1cm:
             for i in range(len(tick_x_coords) - num_ticks_for_1cm + 1):
-                current_tick_segment = tick_x_coords[i : i + num_ticks_for_1cm]
+                current_tick_segment = tick_x_coords[i: i + num_ticks_for_1cm]
                 span_start_x = current_tick_segment[0]
                 span_end_x = current_tick_segment[-1]
                 current_span_distance = span_end_x - span_start_x
@@ -105,32 +110,33 @@ def detect_1cm_distance_iraq(image_path):
                     continue
 
                 internal_spacings = np.diff(current_tick_segment)
-                
+
                 if internal_spacings.size != (num_ticks_for_1cm - 1):
                     continue
 
                 median_internal_spacing = np.median(internal_spacings)
                 if median_internal_spacing <= 0:
                     continue
-                
+
                 std_dev_internal_spacing = np.std(internal_spacings)
-                relative_std_dev_threshold = 0.6 
+                relative_std_dev_threshold = 0.6
                 consistency_threshold = median_internal_spacing * relative_std_dev_threshold
 
                 if std_dev_internal_spacing < consistency_threshold:
                     candidate_1cm_distances.append(current_span_distance)
-        
+
         if not candidate_1cm_distances:
             print("Error: Could not find any suitable 1cm segments after consistency checks.")
             return None
-        
+
         one_cm_distance = np.median(candidate_1cm_distances)
 
         if one_cm_distance <= 0:
-            print(f"Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive.")
+            print(
+                f"Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive.")
             return None
 
-        one_cm_text_info = find_1cm_text_location(roi) 
+        one_cm_text_info = find_1cm_text_location(roi)
         if one_cm_text_info is not None:
 
             pass
@@ -174,20 +180,21 @@ def find_1cm_text_location(roi):
     text_size, _ = cv2.getTextSize("1 cm", cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
     text_x_offset = (template_width - text_size[0]) // 2
     text_y_offset = (template_height + text_size[1]) // 2
-    cv2.putText(template, "1 cm", (text_x_offset, text_y_offset), 
+    cv2.putText(template, "1 cm", (text_x_offset, text_y_offset),
                 cv2.FONT_HERSHEY_SIMPLEX, font_scale, 255, 1, cv2.LINE_AA)
 
     template_gray = template
 
     try:
-        result = cv2.matchTemplate(roi_gray_for_match, template_gray, cv2.TM_CCOEFF_NORMED)
+        result = cv2.matchTemplate(
+            roi_gray_for_match, template_gray, cv2.TM_CCOEFF_NORMED)
     except cv2.error as e:
         print(f"OpenCV error during matchTemplate: {e}")
         return None
-        
+
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
-    if max_val > 0.6:  
+    if max_val > 0.6:
         top_left = max_loc
         text_center_x = top_left[0] + template_width // 2
         text_center_y = top_left[1] + template_height // 2
