@@ -222,7 +222,7 @@ def extract_and_save_center_object(
 
         dummy_contour = np.array(
             [[[0, 0]], [[0, 1]], [[1, 1]], [[1, 0]]], dtype=np.int32)
-
+        
         return output_image_filepath, dummy_contour
     except Exception as e:
         raise IOError(

@@ -381,7 +381,14 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
 
     if images_dict.get("ruler") is not None and rul_h > 0:
         y_curr += ruler_padding_px - view_gap_px
-        ruler_x = central_column_x + (central_column_width - rul_w) // 2
+
+        if rul_w > central_column_width:
+
+            ruler_x = (canvas_w - rul_w) // 2
+        else:
+
+            ruler_x = central_column_x + (central_column_width - rul_w) // 2
+
         coords["ruler"] = (ruler_x, y_curr)
         y_curr += rul_h
 

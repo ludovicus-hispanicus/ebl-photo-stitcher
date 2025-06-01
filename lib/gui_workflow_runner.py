@@ -4,7 +4,8 @@ import traceback
 
 from workflow_imports import (
     organize_project_subfolders, process_tablet_subfolder,
-    MUSEUM_CONFIGS, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+    MUSEUM_CONFIGS, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+    organize_files_func
 )
 from workflow_scale_detection import determine_pixels_per_cm
 from workflow_object_processing import (
@@ -17,6 +18,7 @@ from workflow_ruler_generation import (
 from workflow_cleanup import cleanup_intermediate_files, cleanup_temp_files
 from workflow_file_processing import find_ruler_and_views
 from workflow_statistics import print_final_statistics
+from extract_measurements import add_measurement_record
 
 
 def run_complete_image_processing_workflow(
@@ -59,7 +61,7 @@ def run_complete_image_processing_workflow(
 
     try:
         processed_subfolders = organize_project_subfolders(
-            source_folder_path, image_extensions_tuple, lambda x: [])
+            source_folder_path, image_extensions_tuple, organize_files_func)
     except Exception as e_org:
         print(f"   Workflow halted due to error during file organization: {e_org}")
         progress_callback(100)
@@ -251,6 +253,23 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
         stitched_bg_color=stitched_output_bg_color,
         custom_layout=None
     )
+
+    if px_cm_val is not None and art_fp:
+        object_image_path = art_fp
+        gap_pixels = 50
+
+        success = add_measurement_record(
+            object_image_path=object_image_path,
+            pixels_per_cm=px_cm_val,
+            file_id=subfolder_name_item,
+            gap_pixels=gap_pixels,
+            output_dir=source_folder_path
+        )
+
+        if success:
+            print(f"Measurements calculated and saved for {subfolder_name_item}")
+        else:
+            print(f"Failed to calculate measurements for {subfolder_name_item}")
 
     result['success'] = True
     return result

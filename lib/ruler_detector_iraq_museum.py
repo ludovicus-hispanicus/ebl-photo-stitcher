@@ -1,7 +1,15 @@
 import cv2
 import numpy as np
 import os
-
+import math
+from remove_background import (
+    detect_dominant_corner_background_color,
+    get_museum_background_color,
+    create_foreground_mask_from_background,
+    select_contour_closest_to_image_center
+)
+# Add import for rembg-based object extraction
+from object_extractor_rembg import extract_and_save_center_object
 
 def detect_1cm_distance_iraq(image_path):
     """
@@ -14,6 +22,9 @@ def detect_1cm_distance_iraq(image_path):
     Returns:
         float: Pixel distance representing 1 cm, or None if not found.
     """
+    debug_filename = os.path.splitext(os.path.basename(image_path))[0] + "_debugging.jpg"
+    debug_path = os.path.join(os.path.dirname(image_path), debug_filename)
+            
     try:
 
         img = cv2.imread(image_path)
@@ -28,25 +39,74 @@ def detect_1cm_distance_iraq(image_path):
         roi_y = height - roi_height
         initial_roi = img[roi_y:height, roi_x:roi_x + roi_width]
 
-        roi_h, roi_w, _ = initial_roi.shape
-        start_y_roi = roi_h // 4
-        end_y_roi = 2 * (roi_h // 4)
-        roi = initial_roi[start_y_roi:end_y_roi, 0:roi_w]
+        roi = initial_roi
+
+        # Save ROI temporarily for rembg processing
+        roi_temp_path = os.path.join(os.path.dirname(image_path), "_temp_roi.jpg")
+        cv2.imwrite(roi_temp_path, roi)
+        
+        try:
+            # Use rembg to extract objects and remove background
+            print("Applying AI-based background removal...")
+            bg_removed_path, _ = extract_and_save_center_object(
+                roi_temp_path,
+                output_image_background_color=(255, 255, 255),  # White background for Iraq Museum
+                output_filename_suffix="_bg_removed.tif",
+                feather_radius_px=5,
+                min_object_area_as_image_fraction=0.01
+            )
+            
+            # Load the background-removed image
+            bg_removed_img = cv2.imread(bg_removed_path)
+            if bg_removed_img is not None:
+                roi = bg_removed_img
+                print("AI background removal applied successfully")
+            else:
+                print("Warning: Could not load AI-processed image, using original ROI")
+            
+            # Clean up temporary files
+            if os.path.exists(roi_temp_path):
+                os.remove(roi_temp_path)
+            if os.path.exists(bg_removed_path):
+                os.remove(bg_removed_path)
+                
+        except Exception as e:
+            print(f"AI background removal failed: {e}, using original ROI")
+            # Clean up temporary file
+            if os.path.exists(roi_temp_path):
+                os.remove(roi_temp_path)
 
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         blurred_roi = cv2.GaussianBlur(gray_roi, (3, 3), 0)
-
+        
+        contrast_factor = 10 
+        lookup_table = np.array([
+            255 / (1 + math.exp(-contrast_factor * (i - 128) / 255)) 
+            for i in np.arange(0, 256)
+        ]).astype("uint8")
+        linear_contrast_roi = cv2.LUT(blurred_roi, lookup_table)
+        height, width = linear_contrast_roi.shape[:2]
+        left_margin = int(width * 0.10)
+        right_margin = int(width * 0.90)
+        bottom_margin = int(height * 0.50)
+        top_margin = int(height * 0.10)
+        
+        trimmed_roi = linear_contrast_roi[top_margin:bottom_margin, left_margin:right_margin]
+        
         alpha_contrast = 2.0
         beta_brightness = 0
-        contrast_adjusted_roi = cv2.convertScaleAbs(
-            blurred_roi, alpha=alpha_contrast, beta=beta_brightness)
+        contrast_adjusted_roi = cv2.convertScaleAbs(trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
+        
+        cv2.imwrite(os.path.join(os.path.dirname(image_path), "_contrast.jpg"), contrast_adjusted_roi)
 
         edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 
         lines_roi = cv2.HoughLinesP(edges_roi, 1, np.pi / 180,
                                     60, minLineLength=30, maxLineGap=10)
+
         if lines_roi is None or len(lines_roi) < 2:
             print("Error: Could not detect enough lines in the ROI.")
+            cv2.imwrite(debug_path, roi)
             return None
 
         potential_ticks_props = []
@@ -62,6 +122,7 @@ def detect_1cm_distance_iraq(image_path):
 
         if not potential_ticks_props:
             print("Error: No potential tick lines found after initial filtering.")
+            cv2.imwrite(debug_path, roi)
             return None
 
         potential_ticks_props.sort(key=lambda tick: tick['x'])
@@ -70,7 +131,7 @@ def detect_1cm_distance_iraq(image_path):
         if not potential_ticks_props:
             return None
 
-        MAX_TICK_THICKNESS_PX = 20
+        MAX_TICK_THICKNESS_PX = 30
 
         i = 0
         while i < len(potential_ticks_props):
@@ -92,6 +153,7 @@ def detect_1cm_distance_iraq(image_path):
         if len(merged_tick_x_values) < 11:
             print(
                 f"Error: Not enough merged tick marks found ({len(merged_tick_x_values)}). Need at least 11.")
+            cv2.imwrite(debug_path, roi)
             return None
 
         tick_x_coords = merged_tick_x_values
@@ -127,6 +189,7 @@ def detect_1cm_distance_iraq(image_path):
 
         if not candidate_1cm_distances:
             print("Error: Could not find any suitable 1cm segments after consistency checks.")
+            cv2.imwrite(debug_path, roi)
             return None
 
         one_cm_distance = np.median(candidate_1cm_distances)
@@ -134,6 +197,7 @@ def detect_1cm_distance_iraq(image_path):
         if one_cm_distance <= 0:
             print(
                 f"Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive.")
+            cv2.imwrite(debug_path, roi)
             return None
 
         one_cm_text_info = find_1cm_text_location(roi)
@@ -148,6 +212,7 @@ def detect_1cm_distance_iraq(image_path):
 
     except Exception as e:
         print(f"An error occurred in detect_1cm_distance_iraq: {e}")
+        cv2.imwrite(debug_path, roi)
         return None
 
 
@@ -163,6 +228,7 @@ def find_1cm_text_location(roi):
     """
     if roi is None or roi.size == 0:
         print("Error: ROI is empty in find_1cm_text_location.")
+        cv2.imwrite(debug_path, roi)
         return None
 
     if len(roi.shape) == 3 and roi.shape[2] == 3:
@@ -171,6 +237,7 @@ def find_1cm_text_location(roi):
         roi_gray_for_match = roi
     else:
         print(f"Error: ROI has unexpected shape {roi.shape} for template matching.")
+        cv2.imwrite(debug_path, roi)
         return None
 
     template_height = 30
