@@ -5,12 +5,13 @@ import math
 import cv2
 import numpy as np
 
+
 def detect_dominant_corner_background_color(
     image_bgr_array,
     corner_fraction=0.025,
     dark_snap_threshold=50,
     light_snap_threshold=205,
-    museum_selection=None # This parameter is currently unused in the logic
+    museum_selection=None
 ):
     """
     Detects the dominant background color by averaging corner pixels.
@@ -29,9 +30,7 @@ def detect_dominant_corner_background_color(
         A tuple representing the determined background BGR color.
     """
     img_height, img_width = image_bgr_array.shape[:2]
-    
-    # Ensure sample_size is at least 1 pixel if corner_fraction is very small
-    # and image dimensions are small.
+
     sample_size_h = max(1, int(img_height * corner_fraction))
     sample_size_w = max(1, int(img_width * corner_fraction))
 
@@ -39,7 +38,8 @@ def detect_dominant_corner_background_color(
         image_bgr_array[0:sample_size_h, 0:sample_size_w],
         image_bgr_array[0:sample_size_h, img_width - sample_size_w:img_width],
         image_bgr_array[img_height - sample_size_h:img_height, 0:sample_size_w],
-        image_bgr_array[img_height - sample_size_h:img_height, img_width - sample_size_w:img_width]
+        image_bgr_array[img_height - sample_size_h:img_height,
+                        img_width - sample_size_w:img_width]
     ]
 
     all_corner_pixels = []
@@ -49,76 +49,59 @@ def detect_dominant_corner_background_color(
             all_corner_pixels.extend(reshaped_section)
 
     if not all_corner_pixels:
-        # Fallback: if no corner pixels (e.g., very small image or zero fraction)
-        # Default to black, or could be more sophisticated based on thresholds
-        if dark_snap_threshold >= 0: # A simple heuristic if no pixels found
-             return (0,0,0)
-        # Or, could check light_snap_threshold, but black is a common fallback.
-        # This case should be rare with proper sample_size calculation.
+
+        if dark_snap_threshold >= 0:
+            return (0, 0, 0)
 
     all_corner_pixels_np = np.array(all_corner_pixels)
     average_bgr_color_float = np.mean(all_corner_pixels_np, axis=0)
-    
-    # Ensure the values are within the 0-255 range after averaging for BGR tuple
-    # but before grayscale conversion for accuracy.
-    # Clipping here ensures B, G, R are valid before grayscale calculation.
-    # astype(int) is deferred until after snapping decision if average is used.
+
     clipped_bgr_color = np.clip(average_bgr_color_float, 0, 255)
 
-    # Calculate grayscale intensity of the average corner color
-    # BGR order: clipped_bgr_color[0] is B, [1] is G, [2] is R
-    # Standard grayscale conversion: Y = 0.299*R + 0.587*G + 0.114*B
-    gray_intensity = (0.114 * clipped_bgr_color[0] +    # Blue
-                      0.587 * clipped_bgr_color[1] +    # Green
-                      0.299 * clipped_bgr_color[2])     # Red
+    gray_intensity = (0.114 * clipped_bgr_color[0]
+                      + 0.587 * clipped_bgr_color[1]
+                      + 0.299 * clipped_bgr_color[2])
 
-    # Apply the snapping logic
     if gray_intensity < dark_snap_threshold:
         final_bgr_color_tuple = (0, 0, 0)
     elif gray_intensity > light_snap_threshold:
         final_bgr_color_tuple = (255, 255, 255)
     else:
-        # Use the computed average color, converting to int tuple
-        final_bgr_color_tuple = tuple(average_bgr_color_float.astype(int))
-        # Re-clip to ensure int conversion didn't cause issues (though unlikely here)
-        final_bgr_color_tuple = tuple(np.clip(final_bgr_color_tuple, 0, 255))
 
+        final_bgr_color_tuple = tuple(average_bgr_color_float.astype(int))
+
+        final_bgr_color_tuple = tuple(np.clip(final_bgr_color_tuple, 0, 255))
 
     return final_bgr_color_tuple
 
-# The get_museum_background_color function would also need to be adjusted
-# to respect the detected_bg_color more often, or have its own logic for output background.
-# For now, if you want the output to be the detected background, you'd ensure
-# that get_museum_background_color actually uses detected_bg_color for all cases
-# or for a specific "original background" setting.
-# For example, if you wanted the *output* background to always be white unless
-# it's the British Museum and the detected background was dark:
 
 def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 0)):
-    # This function determines the FINAL background color for the output image.
-    # It can be different from the *detected* background color used for removal.
 
-    # If the detected background is dark, and it's British Museum or no museum specified,
-    # we might want to keep it dark.
     if museum_selection is None or museum_selection == "British Museum":
-        return (0, 0, 0) # Otherwise, make it white for British Museum / None if it's not dark
+        return (0, 0, 0)
     else:
-        # For all other museums, force white output background
+
         return (255, 255, 255)
-    
+
+
 def create_foreground_mask_from_background(
     image_bgr_array, background_bgr_color_tuple, color_similarity_tolerance
 ):
-    low_bound = np.array([max(0, c - color_similarity_tolerance) for c in background_bgr_color_tuple])
-    high_bound = np.array([min(255, c + color_similarity_tolerance) for c in background_bgr_color_tuple])
-    
+    low_bound = np.array([max(0, c - color_similarity_tolerance)
+                         for c in background_bgr_color_tuple])
+    high_bound = np.array([min(255, c + color_similarity_tolerance)
+                          for c in background_bgr_color_tuple])
+
     background_only_mask = cv2.inRange(image_bgr_array, low_bound, high_bound)
     foreground_objects_mask = cv2.bitwise_not(background_only_mask)
-    
+
     morphology_kernel = np.ones((3, 3), np.uint8)
-    cleaned_foreground_mask = cv2.morphologyEx(foreground_objects_mask, cv2.MORPH_OPEN, morphology_kernel, iterations=2)
-    cleaned_foreground_mask = cv2.morphologyEx(cleaned_foreground_mask, cv2.MORPH_CLOSE, morphology_kernel, iterations=2)
+    cleaned_foreground_mask = cv2.morphologyEx(
+        foreground_objects_mask, cv2.MORPH_OPEN, morphology_kernel, iterations=2)
+    cleaned_foreground_mask = cv2.morphologyEx(
+        cleaned_foreground_mask, cv2.MORPH_CLOSE, morphology_kernel, iterations=2)
     return cleaned_foreground_mask
+
 
 def select_contour_closest_to_image_center(
     image_bgr_array, foreground_objects_mask, min_contour_area_as_image_fraction
@@ -126,32 +109,38 @@ def select_contour_closest_to_image_center(
     img_height, img_width = image_bgr_array.shape[:2]
     img_center_x, img_center_y = img_width / 2, img_height / 2
     img_total_area = img_height * img_width
-    
-    contours_found, _ = cv2.findContours(foreground_objects_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours_found: return None
-    
+
+    contours_found, _ = cv2.findContours(
+        foreground_objects_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours_found:
+        return None
+
     qualifying_contours = [
-        cnt for cnt in contours_found 
+        cnt for cnt in contours_found
         if cv2.contourArea(cnt) >= img_total_area * min_contour_area_as_image_fraction
     ]
-    if not qualifying_contours: return None
-    
+    if not qualifying_contours:
+        return None
+
     best_contour, shortest_distance = None, float('inf')
     for contour_candidate in qualifying_contours:
         moments_data = cv2.moments(contour_candidate)
-        if moments_data["m00"] == 0: continue 
-        
+        if moments_data["m00"] == 0:
+            continue
+
         centroid_x_pos = int(moments_data["m10"] / moments_data["m00"])
         centroid_y_pos = int(moments_data["m01"] / moments_data["m00"])
-        
-        current_distance = math.sqrt((centroid_x_pos - img_center_x)**2 + (centroid_y_pos - img_center_y)**2)
+
+        current_distance = math.sqrt(
+            (centroid_x_pos - img_center_x)**2 + (centroid_y_pos - img_center_y)**2)
         if current_distance < shortest_distance:
             shortest_distance, best_contour = current_distance, contour_candidate
     return best_contour
 
+
 def select_ruler_like_contour_from_list(
-    list_of_all_contours, image_pixel_width, image_pixel_height, 
-    excluded_obj_contour=None, min_aspect_ratio_for_ruler=2.5, 
+    list_of_all_contours, image_pixel_width, image_pixel_height,
+    excluded_obj_contour=None, min_aspect_ratio_for_ruler=2.5,
     max_width_fraction_of_image=0.95, min_width_fraction_of_image=0.05,
     min_height_fraction_of_image=0.01, max_height_fraction_of_image=0.25
 ):
@@ -159,21 +148,25 @@ def select_ruler_like_contour_from_list(
     for current_contour in list_of_all_contours:
         if excluded_obj_contour is not None and \
            cv2.matchShapes(current_contour, excluded_obj_contour, cv2.CONTOURS_MATCH_I1, 0.0) < 0.1:
-            continue 
-            
+            continue
+
         x_val, y_val, width_val, height_val = cv2.boundingRect(current_contour)
-        if width_val == 0 or height_val == 0: continue
-        
-        actual_aspect_ratio = float(width_val) / height_val if width_val > height_val else float(height_val) / width_val
+        if width_val == 0 or height_val == 0:
+            continue
+
+        actual_aspect_ratio = float(
+            width_val) / height_val if width_val > height_val else float(height_val) / width_val
         width_as_image_fraction = float(width_val) / image_pixel_width
         height_as_image_fraction = float(height_val) / image_pixel_height
-        
+
         is_plausible_width = min_width_fraction_of_image < width_as_image_fraction < max_width_fraction_of_image
         is_plausible_height = min_height_fraction_of_image < height_as_image_fraction < max_height_fraction_of_image
-        
+
         if actual_aspect_ratio >= min_aspect_ratio_for_ruler and is_plausible_width and is_plausible_height:
-            plausible_ruler_contours.append({"contour": current_contour, "area": cv2.contourArea(current_contour)})
-            
-    if not plausible_ruler_contours: return None
-    plausible_ruler_contours.sort(key=lambda c: c["area"], reverse=True) 
+            plausible_ruler_contours.append(
+                {"contour": current_contour, "area": cv2.contourArea(current_contour)})
+
+    if not plausible_ruler_contours:
+        return None
+    plausible_ruler_contours.sort(key=lambda c: c["area"], reverse=True)
     return plausible_ruler_contours[0]["contour"]

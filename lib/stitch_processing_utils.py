@@ -78,46 +78,44 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
     canvas_h = current_height_sum + 200
 
     layout_coords = {}
-    y_curr = 50  # Stores (x,y) for actual image elements
-    # Store bottom y coordinates separately for alignment reference
+    y_curr = 50
+
     view_bottom_y_coords = {}
 
     start_x_row1 = (
-        canvas_w - row1_w)//2 if row1_w > 0 else (canvas_w - obv_w)//2
+        canvas_w - row1_w) // 2 if row1_w > 0 else (canvas_w - obv_w) // 2
 
-    current_x_offset_for_lor_row = start_x_row1  # Used for L-O-R placement
+    current_x_offset_for_lor_row = start_x_row1
     if images_dict.get("left") is not None and images_dict.get("left").size > 0:
         layout_coords["left"] = (current_x_offset_for_lor_row, y_curr)
         current_x_offset_for_lor_row += l_w + view_separation_px
 
-    # X where obverse actually starts
     obverse_x_actual_pos = current_x_offset_for_lor_row
     layout_coords["obverse"] = (obverse_x_actual_pos, y_curr)
-    current_x_offset_for_lor_row += obv_w  # Advance past obverse
+    current_x_offset_for_lor_row += obv_w
 
     if images_dict.get("right") is not None and images_dict.get("right").size > 0:
         layout_coords["right"] = (
             current_x_offset_for_lor_row + view_separation_px, y_curr)
 
-    y_curr += obv_h  # Advance Y past the first row (obverse, left, right)
+    y_curr += obv_h
     view_bottom_y_coords["obverse"] = y_curr
 
     for vk in ["bottom", "reverse", "top"]:
         img_view = images_dict.get(vk)
         if img_view is not None and img_view.size > 0:
             y_curr += view_separation_px
-            view_x_pos = obverse_x_actual_pos+(obv_w-img_view.shape[1])//2
+            view_x_pos = obverse_x_actual_pos + (obv_w - img_view.shape[1]) // 2
             layout_coords[vk] = (view_x_pos, y_curr)
             y_curr += img_view.shape[0]
-            view_bottom_y_coords[vk] = y_curr  # Store bottom y of this view
+            view_bottom_y_coords[vk] = y_curr
 
     if images_dict.get("ruler") is not None and images_dict.get("ruler").size > 0:
         y_curr += ruler_top_padding_px
-        ruler_x_pos = obverse_x_actual_pos+(obv_w-rul_w)//2
+        ruler_x_pos = obverse_x_actual_pos + (obv_w - rul_w) // 2
         layout_coords["ruler"] = (ruler_x_pos, y_curr)
-        view_bottom_y_coords["ruler"] = y_curr + rul_h  # Store ruler bottom
+        view_bottom_y_coords["ruler"] = y_curr + rul_h
 
-    # Align with bottom of reverse, or current_y if reverse not present
     y_align_for_rotated = view_bottom_y_coords.get("reverse", y_curr)
 
     for side_key, original_coord_key in [("left", "left"), ("right", "right")]:
@@ -126,12 +124,11 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
             bgr_img = convert_to_bgr_if_needed(side_img)
             if isinstance(bgr_img, np.ndarray) and bgr_img.size > 0:
                 rot_img = cv2.rotate(bgr_img, cv2.ROTATE_180)
-                images_dict[side_key+"_rotated"] = rot_img
-                # Use start_x_row1 for left_rotated's x if original 'left' wasn't placed
-                # Use (obverse_x_actual_pos + obv_w) for right_rotated's x if original 'right' wasn't placed
+                images_dict[side_key + "_rotated"] = rot_img
+
                 orig_x_val = layout_coords.get(
                     original_coord_key, (start_x_row1 if side_key == "left" else obverse_x_actual_pos + obv_w, 0))[0]
-                layout_coords[side_key+"_rotated"] = (
+                layout_coords[side_key + "_rotated"] = (
                     orig_x_val, y_align_for_rotated - rot_img.shape[0])
 
     return int(canvas_w), int(canvas_h), layout_coords, images_dict
@@ -141,7 +138,7 @@ def get_layout_bounding_box(images_dict_with_positions, layout_coordinates):
     min_x, min_y = float('inf'), float('inf')
     max_x, max_y = float('-inf'), float('-inf')
     found_any_placed_element = False
-    # Iterate only over items with (x,y) tuples
+
     for key, (x_coord, y_coord) in layout_coordinates.items():
         image_array = images_dict_with_positions.get(key)
         if isinstance(image_array, np.ndarray) and image_array.size > 0:
@@ -155,7 +152,7 @@ def get_layout_bounding_box(images_dict_with_positions, layout_coordinates):
 
 
 def add_logo_to_image_array(content_img_array, logo_image_path, canvas_bg_color, max_width_fraction, padding_above, padding_below):
-    # (Unchanged)
+
     if not logo_image_path or not os.path.exists(logo_image_path):
         return content_img_array
     logo_original = cv2.imread(logo_image_path, cv2.IMREAD_UNCHANGED)
@@ -166,24 +163,24 @@ def add_logo_to_image_array(content_img_array, logo_image_path, canvas_bg_color,
     logo_res = logo_original
     if low > 0 and content_w > 0 and low > content_w * max_width_fraction:
         nlw = int(content_w * max_width_fraction)
-        sr = nlw/low if low > 0 else 1.0
-        nlh = int(loh*sr)
+        sr = nlw / low if low > 0 else 1.0
+        nlh = int(loh * sr)
         if nlw > 0 and nlh > 0:
             logo_res = cv2.resize(logo_original, (nlw, nlh),
                                   interpolation=cv2.INTER_AREA)
     lh, lw = logo_res.shape[:2]
     cnv_lw = max(content_w, lw)
-    cnv_lh = content_h+padding_above+lh+padding_below
+    cnv_lh = content_h + padding_above + lh + padding_below
     cnv_w_logo = np.full((cnv_lh, cnv_lw, 3), canvas_bg_color, dtype=np.uint8)
     paste_image_onto_canvas(
-        cnv_w_logo, content_img_array, (cnv_lw-content_w)//2, 0)
+        cnv_w_logo, content_img_array, (cnv_lw - content_w) // 2, 0)
     paste_image_onto_canvas(cnv_w_logo, logo_res,
-                            (cnv_lw-lw)//2, content_h+padding_above)
+                            (cnv_lw - lw) // 2, content_h + padding_above)
     return cnv_w_logo
 
 
 def crop_canvas_to_content_with_margin(image_array_to_crop, background_color_bgr_tuple, margin_px_around):
-    # (Unchanged)
+
     if image_array_to_crop is None or image_array_to_crop.size == 0:
         return image_array_to_crop
     grayscale_image = cv2.cvtColor(image_array_to_crop, cv2.COLOR_BGR2GRAY)
@@ -191,15 +188,15 @@ def crop_canvas_to_content_with_margin(image_array_to_crop, background_color_bgr
         return image_array_to_crop
     final_content_image = image_array_to_crop
     mean_bg_intensity = np.mean(background_color_bgr_tuple)
-    lower_b, upper_b = (int(mean_bg_intensity+1),
-                        255) if mean_bg_intensity < 128 else (0, int(mean_bg_intensity-1))
+    lower_b, upper_b = (int(mean_bg_intensity + 1),
+                        255) if mean_bg_intensity < 128 else (0, int(mean_bg_intensity - 1))
     if background_color_bgr_tuple == (0, 0, 0):
         lower_b, upper_b = 1, 255
     elif background_color_bgr_tuple == (255, 255, 255):
         lower_b, upper_b = 0, 254
     elif lower_b > upper_b:
-        lower_b, upper_b = (int(mean_bg_intensity)+1,
-                            255) if mean_bg_intensity < 128 else (0, int(mean_bg_intensity)-1)
+        lower_b, upper_b = (int(mean_bg_intensity) + 1,
+                            255) if mean_bg_intensity < 128 else (0, int(mean_bg_intensity) - 1)
     is_content_present = np.any(grayscale_image > (int(
         mean_bg_intensity) + 5 if mean_bg_intensity < 128 else int(mean_bg_intensity) - 5))
     if is_content_present:
@@ -208,14 +205,14 @@ def crop_canvas_to_content_with_margin(image_array_to_crop, background_color_bgr
             coords = cv2.findNonZero(mask)
             if coords is not None:
                 x, y, w, h = cv2.boundingRect(coords)
-                final_content_image = image_array_to_crop[y:y+h,
-                                                          x:x+w] if w > 0 and h > 0 else final_content_image
+                final_content_image = image_array_to_crop[y:y + h,
+                                                          x:x + w] if w > 0 and h > 0 else final_content_image
         except cv2.error as e:
             print(f" Error during crop: {e}")
     ch, cw = final_content_image.shape[:2]
     if ch == 0 or cw == 0:
         return final_content_image
-    oh, ow = ch+2*margin_px_around, cw+2*margin_px_around
+    oh, ow = ch + 2 * margin_px_around, cw + 2 * margin_px_around
     out_canvas = np.full(
         (oh, ow, 3), background_color_bgr_tuple, dtype=np.uint8)
     paste_image_onto_canvas(out_canvas, final_content_image,

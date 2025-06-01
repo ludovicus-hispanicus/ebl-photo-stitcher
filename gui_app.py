@@ -1,68 +1,58 @@
 import os
 import sys
+import tkinter as tk
+from tkinter import messagebox, ttk
+import webbrowser
 
-# --- Start of sys.path modification ---
-# Ensure lib_directory is added to sys.path absolutely first for this script's context
 script_directory = os.path.dirname(os.path.abspath(__file__))
 lib_directory = os.path.join(script_directory, "lib")
 if lib_directory not in sys.path:
-    sys.path.insert(0, lib_directory) # Try insert at the beginning again
-# --- End of sys.path modification ---
+    sys.path.insert(0, lib_directory)
 
-# Imports from our 'lib' directory - these MUST be resolvable now
 try:
     from gui_utils import resource_path, get_persistent_config_dir_path, TextRedirector
     from gui_config_manager import (
-        save_config as save_app_config, 
-        load_config as load_app_config, 
-        get_default_config_values, 
-        DEFAULT_PHOTOGRAPHER
+        DEFAULT_PHOTOGRAPHER,
     )
     from gui_workflow_runner import run_complete_image_processing_workflow
-    import resize_ruler 
-    import ruler_detector
-    from stitch_images import process_tablet_subfolder
-    # Inside gui_app.py, update imports
-    from object_extractor_rembg import extract_and_save_center_object  # Use rembg version
-    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
-    from remove_background import (
-        create_foreground_mask_from_background as create_foreground_mask,
-        select_contour_closest_to_image_center,
-        select_ruler_like_contour_from_list as select_ruler_like_contour
+    from workflow_imports import (
+        resize_ruler, ruler_detector, extract_and_save_center_object,
+        extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+        create_foreground_mask, select_contour_closest_to_image_center,
+        select_ruler_like_contour, convert_raw_image_to_tiff
     )
-    from raw_processor import convert_raw_image_to_tiff
+    from object_extractor import DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
+    from stitch_images import process_tablet_subfolder
     import stitch_config
     from stitch_config import (
         STITCH_VIEW_PATTERNS_BASE,
         STITCH_VIEW_PATTERNS_WITH_EXT,
-        INTERMEDIATE_SUFFIX_BASE,
         INTERMEDIATE_SUFFIX_WITH_EXT,
     )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
-    from measurements_utils import load_measurements_from_json  # Add this import
+    from measurements_utils import load_measurements_from_json
+    from gui_advanced import AdvancedTab
+
+    from gui_components import UIComponents
+    from gui_layout import LayoutManager
+    from gui_events import EventHandlers
+    from gui_config_handlers import ConfigManager
+    from gui_museum_options import MuseumOptionsManager
+
 except ImportError as e:
-    # This error handling for imports from lib is crucial
-    # Determine the expected absolute path to lib for a more informative error message
+
     expected_lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
-    # Attempt to show a Tkinter error box, but have a print fallback if Tkinter itself fails.
+
     try:
-        root_err_tk = tk.Tk() # This line might fail if tk is not yet imported or if display is not available
+        root_err_tk = tk.Tk()
         root_err_tk.withdraw()
-        messagebox.showerror("Startup Error", f"Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
-    except Exception: # Broad except because Tkinter might not be initializable
-        print(f"ERROR: Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
+        messagebox.showerror(
+            "Startup Error", f"Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
+    except Exception:
+        print(
+            f"ERROR: Critical library module import failed: {e}\nAttempted to load from 'lib' package. Ensure 'lib' directory exists at '{expected_lib_path}' and contains all required modules and an __init__.py file.")
     sys.exit(1)
 
-# Standard library imports (can come after lib imports if there are no further dependencies from lib back to them at import time)
-import cv2
-import threading
-import json
-import webbrowser  # Add this import for opening URLs
-from tkinter import filedialog, messagebox, ttk # ttk should be here
-import tkinter as tk # tk is used in the except block above, so it's fine here or earlier
-from PIL import Image, ImageTk, ImageDraw
-
-# Constants not related to save/load config can remain or be managed elsewhere if appropriate
 ASSETS_SUBFOLDER = "assets"
 ICON_FILENAME_ONLY = "eBL_logo.png"
 RULER_1CM_FILENAME_ONLY = "BM_1cm_scale.tif"
@@ -78,32 +68,44 @@ RULER_TEMPLATE_5CM_PATH_ASSET = resource_path(
     os.path.join(ASSETS_SUBFOLDER, RULER_5CM_FILENAME_ONLY))
 VALID_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp')
 RAW_IMAGE_EXTENSION = '.cr2'
-# DEFAULT_PHOTOGRAPHER is now imported
 TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME = "temp_isolated_ruler.tif"
 HELP_URL = "https://github.com/ElectronicBabylonianLiterature/ebl-photo-stitcher?tab=readme-ov-file#usage-gui"
 
-# remember the real defaults  
-_ORIG_STITCH_CREDIT    = stitch_config.STITCH_CREDIT_LINE
+_ORIG_STITCH_CREDIT = stitch_config.STITCH_CREDIT_LINE
 _ORIG_STITCH_INSTITUTION = stitch_config.STITCH_INSTITUTION
+
 
 class ImageProcessorApp:
     def __init__(self, root_window):
+
+        self.RAW_IMAGE_EXTENSION = RAW_IMAGE_EXTENSION
+        self.VALID_IMAGE_EXTENSIONS = VALID_IMAGE_EXTENSIONS
+        self.RULER_TEMPLATE_1CM_PATH_ASSET = RULER_TEMPLATE_1CM_PATH_ASSET
+        self.RULER_TEMPLATE_2CM_PATH_ASSET = RULER_TEMPLATE_2CM_PATH_ASSET
+        self.RULER_TEMPLATE_5CM_PATH_ASSET = RULER_TEMPLATE_5CM_PATH_ASSET
+        self.STITCH_VIEW_PATTERNS_WITH_EXT = STITCH_VIEW_PATTERNS_WITH_EXT
+        self.TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME = TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME
+        self.OBJECT_ARTIFACT_SUFFIX = OBJECT_ARTIFACT_SUFFIX
+        self.HELP_URL = HELP_URL
+        self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+
         self.root = root_window
-        self.root.title("eBL Photo Stitcher v0.4")
+        self.root.title("eBL Photo Stitcher v0.5")
         self.root.geometry("600x900")
-        
-        self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
+
+        self.config_file_path = os.path.join(
+            get_persistent_config_dir_path(), "gui_config.json")
 
         self.input_folder_var = tk.StringVar()
-        self.ruler_position_var = tk.StringVar() 
-        self.photographer_var = tk.StringVar() 
-        self.add_logo_var = tk.BooleanVar() 
+        self.ruler_position_var = tk.StringVar()
+        self.photographer_var = tk.StringVar()
+        self.add_logo_var = tk.BooleanVar()
         self.logo_path_var = tk.StringVar()
         self.museum_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0.0)
         self.use_measurements_var = tk.BooleanVar(value=False)
-        
-        # Load measurements data first, before creating widgets
+        self.gradient_width_fraction = 0.5
+
         self.measurements_loaded = False
         self.measurements_dict = {}
         measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
@@ -113,503 +115,234 @@ class ImageProcessorApp:
 
         self._setup_icon()
         self._setup_styles()
-        self._create_help_link()  # Add this before other widgets
         self._create_widgets()
-        self.load_config() 
-        self.on_museum_changed(None) 
+        self.load_config()
+        self.on_museum_changed(None)
 
     def _setup_icon(self):
+        """Set up application icon."""
         try:
             if os.path.exists(ICON_FILE_ASSET_PATH):
                 self.root.iconphoto(False, tk.PhotoImage(
                     file=ICON_FILE_ASSET_PATH))
-        except:
+        except Exception:
+
             pass
 
     def _setup_styles(self):
-        style = ttk.Style()
-        style.configure("TLabel", padding=5, font=('Helvetica', 10))
-        style.configure("TButton", padding=5, font=('Helvetica', 10))
-        style.configure("TFrame", padding=10)
-        # Add style for blue hyperlink
-        style.configure("Link.TLabel", foreground="blue", font=('Helvetica', 10, 'underline'))
-
-    def _create_help_link(self):
-        # Create frame for the help link at the top right
-        help_frame = ttk.Frame(self.root)
-        help_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
-        
-        # Create a spacer to push the help link to the right
-        spacer = ttk.Label(help_frame)
-        spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        # Create the help link
-        help_link = ttk.Label(help_frame, text="Help", style="Link.TLabel", cursor="hand2")
-        help_link.pack(side=tk.RIGHT)
-        help_link.bind("<Button-1>", lambda e: webbrowser.open_new(HELP_URL))
+        """Set up ttk styles for the application."""
+        self.style = LayoutManager.setup_styles(self.root)
 
     def _create_widgets(self):
+        """Create all UI widgets."""
+
         mf = ttk.Frame(self.root, padding="10")
         mf.pack(expand=True, fill=tk.BOTH)
-        self._create_folder_selection_ui(mf)
-        self._create_photographer_ui(mf)
-        self._create_ruler_pos_ui(mf)
-        self._create_logo_options_ui(mf)
-        self._create_process_button_ui(mf)
-        self._create_progress_bar_ui(mf)
-        self._create_log_area_ui(mf)
 
-    def _create_folder_selection_ui(self, p):
-        f = ttk.LabelFrame(p, text="Input Folder", padding="10")
-        f.pack(fill=tk.X, pady=5)
-        ttk.Label(f, text="Image Source Folder:").pack(
-            side=tk.LEFT, padx=(0, 5))
-        self.fe = ttk.Entry(f, textvariable=self.input_folder_var, width=50)
-        self.fe.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        ttk.Button(f, text="Browse...",
-                   command=self.browse_folder).pack(side=tk.LEFT)
+        self.header_frame, self.notebook = LayoutManager.create_tabs(mf)
+        self.help_btn = LayoutManager.create_help_link(self.header_frame, self.HELP_URL)
 
-    def _create_photographer_ui(self, p):
-        f = ttk.LabelFrame(p, text="Metadata", padding="10")
-        f.pack(fill=tk.X, pady=5)
-        ttk.Label(f, text="Photographer:").pack(side=tk.LEFT, padx=(0, 5))
-        self.pe = ttk.Entry(f, textvariable=self.photographer_var, width=40)
-        self.pe.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        self.main_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.main_tab, text="Main")
 
-    def _create_ruler_pos_ui(self, p):
-        f = ttk.LabelFrame(p, text="Ruler Options", padding="10")
-        f.pack(fill=tk.X, pady=5)
+        self.folder_frame, self.fe = UIComponents.create_folder_selection_ui(
+            self.main_tab, self.input_folder_var, self.browse_folder)
 
-        # Museum selection row
-        museum_frame = ttk.Frame(f)
-        museum_frame.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(museum_frame, text="Museum:").pack(side=tk.LEFT, padx=(0, 5))
-        self.museum_var = tk.StringVar(value="British Museum")
-        self.museum_combo = ttk.Combobox(
-            museum_frame, textvariable=self.museum_var, width=20,
-            values=["British Museum", "Iraq Museum",
-                    "eBL Ruler (CBS)", "Non-eBL Ruler (VAM)"]
-        )
-        self.museum_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.museum_combo.bind("<<ComboboxSelected>>", self.on_museum_changed)
+        self.metadata_frame, self.pe = UIComponents.create_photographer_ui(
+            self.main_tab, self.photographer_var)
 
-        # Ruler position section
-        ttk.Label(f, text="Click ruler location:").pack(anchor=tk.W)
-        self.rcs, self.rcp, self.rbt = 120, 10, 25
-        self.rc = tk.Canvas(f, width=self.rcs, height=self.rcs,
-                            bg="lightgray", relief=tk.SUNKEN, borderwidth=1)
-        self.rc.pack(pady=5)
-        self.draw_ruler_selector() # Initial draw
-        self.rc.bind("<Button-1>", self.on_ruler_canvas_click)
-    
-    def on_museum_changed(self, event):
-        museum_selection = self.museum_var.get()
-        print(f"Museum selected: {museum_selection}")
-        
-        # Handle ruler position for Iraq Museum
-        if museum_selection == "Iraq Museum":
-            self.ruler_position_var.set("bottom-left-fixed") 
-        else:
-            # If switching away from Iraq Museum and it was on the fixed pos, revert to a default like "top"
-            if self.ruler_position_var.get() == "bottom-left-fixed":
-                self.ruler_position_var.set("top")
-        
-        # Handle measurements database access based on museum selection
-        if museum_selection == "British Museum" and self.measurements_loaded:
-            # Enable measurements checkbox for British Museum if data is loaded
-            self.measurements_checkbox.state(['!disabled'])
-        else:
-            # For other museums, disable and uncheck the measurements checkbox
-            self.use_measurements_var.set(False)
-            self.measurements_checkbox.state(['disabled'])
-        
-        self.draw_ruler_selector()
-        if event:  # Only save config if it's a user interaction, not initial setup
-            self.save_config()
+        self.ruler_frame, self.rc, self.canvas_params, self.museum_combo = UIComponents.create_ruler_pos_ui(
+            self.main_tab, self.museum_var, self.ruler_position_var,
+            self.on_museum_changed, self.on_ruler_canvas_click)
 
-    def _create_logo_options_ui(self, p):
-        f = ttk.LabelFrame(p, text="Options", padding="10")
-        f.pack(fill=tk.X, pady=5)
-        
-        # Add measurements checkbox
-        measurements_frame = ttk.Frame(f)
-        measurements_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        self.measurements_checkbox = ttk.Checkbutton(
-            measurements_frame, 
-            text="Use measurements from database (Sippar Collection)",
-            variable=self.use_measurements_var
-        )
-        self.measurements_checkbox.pack(anchor=tk.W)
-        
-        # Disable checkbox if measurements aren't loaded
-        if not self.measurements_loaded:
-            self.measurements_checkbox.state(['disabled'])
-            hint_label = ttk.Label(
-                measurements_frame, 
-                text="(sippar.json not found in assets folder)",
-                font=('Helvetica', 8, 'italic'),
-                foreground="gray"
-            )
-            hint_label.pack(anchor=tk.W, padx=(20, 0))
+        self.options_frame, self.logo_checkbox, self.logo_path_entry, self.browse_logo_btn, self.measurements_checkbox = UIComponents.create_logo_options_ui(
+            self.main_tab, self.add_logo_var, self.logo_path_var,
+            self.toggle_logo_path_entry, self.browse_logo_file,
+            self.use_measurements_var, self.measurements_loaded,
+            script_directory, self.debug_measurements_loading)
 
-        # Add a small debug button (only visible in development)
-        if os.path.exists(os.path.join(script_directory, "DEBUG")):
-            debug_btn = ttk.Button(
-                measurements_frame, 
-                text="Debug Measurements", 
-                command=self.debug_measurements_loading,
-                style="Small.TButton"
-            )
-            debug_btn.pack(side=tk.RIGHT, padx=(5, 0))
+        self.prb = UIComponents.create_process_button_ui(
+            self.main_tab, self.start_processing_thread)
 
-        # Logo options section
-        self.alc = ttk.Checkbutton(
-            f, text="Add Logo", variable=self.add_logo_var, command=self.toggle_logo_path_entry)
-        self.alc.pack(anchor=tk.W)
-        sf = ttk.Frame(f)
-        sf.pack(fill=tk.X, pady=(0, 5), padx=(20, 0))
-        ttk.Label(sf, text="Logo File:").pack(side=tk.LEFT, padx=(0, 5))
-        self.lpe = ttk.Entry(
-            sf, textvariable=self.logo_path_var, width=40, state=tk.DISABLED)
-        self.lpe.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        self.blb = ttk.Button(sf, text="Browse...",
-                              command=self.browse_logo_file, state=tk.DISABLED)
-        self.blb.pack(side=tk.LEFT)
+        self.progress_frame, self.progress_bar, self.progress_var = UIComponents.create_progress_bar_ui(
+            self.main_tab)
 
-    def _create_process_button_ui(self, p):
-        self.prb = ttk.Button(p, text="Start Processing",
-                              command=self.start_processing_thread)
-        self.prb.pack(pady=(15, 5), ipadx=10, ipady=5)
+        self.log_frame, self.lt = UIComponents.create_log_area_ui(
+            self.main_tab, TextRedirector)
 
-    def _create_progress_bar_ui(self, p):
-        pf = ttk.Frame(p, padding="0 0 0 5")
-        pf.pack(fill=tk.X)
-        self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress_bar = ttk.Progressbar(
-            pf, orient="horizontal", length=100, mode="determinate", variable=self.progress_var)
-        self.progress_bar.pack(fill=tk.X, expand=True)
+        settings = {
+            'gradient_width_fraction': self.gradient_width_fraction,
+            'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+        }
+        self.advanced_tab = AdvancedTab(self.notebook, settings)
 
-    def _create_log_area_ui(self, p):
-        f = ttk.LabelFrame(p, text="Log", padding="10")
-        f.pack(fill=tk.BOTH, expand=True, pady=5)
-        self.lt = tk.Text(f, height=15, wrap=tk.WORD,
-                          relief=tk.SUNKEN, borderwidth=1, state=tk.DISABLED)
-        self.lt.pack(fill=tk.BOTH, expand=True)
-        sys.stdout = TextRedirector(self.lt, "stdout")
-        sys.stderr = TextRedirector(self.lt, "stderr")
-
-    def toggle_logo_path_entry(self): state = tk.NORMAL if self.add_logo_var.get(
-    ) else tk.DISABLED; self.lpe.config(state=state); self.blb.config(state=state)
+    def toggle_logo_path_entry(self):
+        """Toggle logo path entry enabled/disabled state."""
+        EventHandlers.toggle_logo_path_entry(
+            self.add_logo_var, self.logo_path_entry, self.browse_logo_btn)
 
     def browse_logo_file(self):
-        init_dir = os.path.dirname(self.logo_path_var.get(
-        )) if self.logo_path_var.get() else os.path.expanduser("~/Pictures")
-        if not os.path.isdir(init_dir):
-            init_dir = os.path.expanduser("~")
-        fsel = filedialog.askopenfilename(
-            initialdir=init_dir, title="Select Logo", filetypes=(("PNG", "*.png"), ("All", "*.*")))
-        if fsel:
-            self.logo_path_var.set(fsel)
+        """Browse for a logo file."""
+        EventHandlers.browse_logo_file(self.root, self.logo_path_var)
 
     def draw_ruler_selector(self):
-        self.rc.delete("all")
-        s = self.rcs # canvas_size
-        p = self.rcp # padding
-        bt = self.rbt # band_thickness
-        ox1, oy1, ox2, oy2 = p + bt, p + bt, s - p - bt, s - p - bt # Object box corners
-        
-        self.rc.create_rectangle(
-            ox1, oy1, ox2, oy2, outline="gray", fill="whitesmoke", dash=(2, 2))
-        self.rc.create_text(s / 2, s / 2, text="Object",
-                            font=('Helvetica', 9, 'italic'), fill="gray")
-        
-        current_museum = self.museum_var.get()
-        is_iraq_museum = (current_museum == "Iraq Museum")
-
-        sp = self.ruler_position_var.get() # selected_position
-        active_fill_color = "lightblue"
-        selected_fill_color = "blue"
-        disabled_fill_color = "#e0e0e0"
-        iraq_fixed_fill_color = selected_fill_color 
-        text_color = "black"
-        nd = 4 # number of divisions for ticks
-        lh, lv = ox2 - ox1, oy2 - oy1 # object box width and height
-
-        top_fill = disabled_fill_color if is_iraq_museum else (selected_fill_color if sp == "top" else active_fill_color)
-        bottom_fill = disabled_fill_color if is_iraq_museum else (selected_fill_color if sp == "bottom" else active_fill_color)
-        left_fill = disabled_fill_color if is_iraq_museum else (selected_fill_color if sp == "left" else active_fill_color)
-        right_fill = disabled_fill_color if is_iraq_museum else (selected_fill_color if sp == "right" else active_fill_color)
-
-        # Top band
-        self.rc.create_rectangle(ox1, p, ox2, p + bt, fill=top_fill, outline=text_color, tags="top_zone")
-        if not is_iraq_museum:
-            for i in range(nd + 1):
-                x = ox1 + i * (lh / nd)
-                self.rc.create_line(x, p, x, p + bt * .6, fill=text_color)
-        
-        # Bottom band
-        self.rc.create_rectangle(ox1, oy2, ox2, oy2 + bt, fill=bottom_fill, outline=text_color, tags="bottom_zone")
-        if not is_iraq_museum:
-            for i in range(nd + 1):
-                x = ox1 + i * (lh / nd)
-                self.rc.create_line(x, oy2, x, oy2 + bt * .6, fill=text_color)
-
-        # Left band
-        self.rc.create_rectangle(p, oy1, p + bt, oy2, fill=left_fill, outline=text_color, tags="left_zone")
-        if not is_iraq_museum:
-            for i in range(nd + 1):
-                y = oy1 + i * (lv / nd)
-                self.rc.create_line(p, y, p + bt * .6, y, fill=text_color)
-
-        # Right band
-        self.rc.create_rectangle(ox2, oy1, ox2 + bt, oy2, fill=right_fill, outline=text_color, tags="right_zone")
-        if not is_iraq_museum:
-            for i in range(nd + 1):
-                y = oy1 + i * (lv / nd)
-                self.rc.create_line(ox2, y, ox2 + bt * .6, y, fill=text_color)
-
-        if is_iraq_museum:
-            # For Iraq Museum, draw a selected square in the bottom-left corner area
-            # This square should fill the corner from the padding to the object box.
-            cs_x1 = p # Outer padding edge on the left
-            cs_y1 = oy2 # Top edge of the bottom band (aligned with object bottom)
-            cs_x2 = p + bt # Inner edge of the left band (aligned with object left)
-            cs_y2 = oy2 + bt # Bottom edge of the bottom band
-            self.rc.create_rectangle(cs_x1, cs_y1, cs_x2, cs_y2, fill=iraq_fixed_fill_color, outline=text_color, tags="iraq_fixed_pos")
-            # Optional: Add text to indicate it's fixed
-            self.rc.create_text(p + bt/2, oy2 + bt/2, text="IM", font=('Helvetica', 7, 'bold'), fill="white")
+        """Draw the ruler selector canvas."""
+        LayoutManager.draw_ruler_selector(
+            self.rc, self.ruler_position_var.get(),
+            self.museum_var.get(), self.canvas_params)
 
     def on_ruler_canvas_click(self, event):
-        current_museum = self.museum_var.get()
-        if current_museum == "Iraq Museum":
-            # Clicks are disabled for Iraq Museum as position is fixed
-            print("Ruler position is fixed for Iraq Museum.")
-            return 
+        """Handle clicks on the ruler canvas."""
+        EventHandlers.handle_ruler_canvas_click(
+            event, self.canvas_params, self.ruler_position_var,
+            self.museum_var, self.draw_ruler_selector)
 
-        s, p, bt = self.rcs, self.rcp, self.rbt
-        ox1, oy1, ox2, oy2 = p + bt, p + bt, s - p - bt, s - p - bt
-        if ox1 <= event.x <= ox2 and p <= event.y < oy1:
-            self.ruler_position_var.set("top")
-        elif ox1 <= event.x <= ox2 and oy2 < event.y <= oy2 + bt:
-            self.ruler_position_var.set("bottom")
-        elif p <= event.x < ox1 and oy1 <= event.y <= oy2:
-            self.ruler_position_var.set("left")
-        elif ox2 < event.x <= ox2 + bt and oy1 <= event.y <= oy2:
-            self.ruler_position_var.set("right")
-        else:
-            return
-        self.draw_ruler_selector()
-        print(f"Ruler pos: {self.ruler_position_var.get()}")
+    def on_museum_changed(self, event):
+        """Handle museum selection changes."""
+        EventHandlers.handle_museum_change(
+            event, self.museum_var, self.ruler_position_var,
+            self.measurements_checkbox, self.measurements_loaded,
+            self.draw_ruler_selector, self.save_config)
 
     def browse_folder(self):
-        init_dir = self.input_folder_var.get()
-        if not init_dir or not os.path.isdir(init_dir):
-            try:
-                sdir = os.path.dirname(os.path.abspath(sys.argv[0]))
-                init_dir = sdir
-            except:
-                init_dir = os.path.expanduser("~")
-        fsel = filedialog.askdirectory(initialdir=init_dir)
-        if fsel:
-            self.input_folder_var.set(fsel)
+        """Browse for input folder."""
+        EventHandlers.browse_input_folder(self.input_folder_var)
 
     def save_config(self):
-        cfg_data = {
-            "last_folder": self.input_folder_var.get(), 
-            "last_ruler_position": self.ruler_position_var.get(),
-            "last_photographer": self.photographer_var.get(), 
-            "last_add_logo": self.add_logo_var.get(),
-            "last_logo_path": self.logo_path_var.get(), 
-            "last_museum": self.museum_var.get(),
-            "last_use_measurements": self.use_measurements_var.get()
-        }
-        save_app_config(self.config_file_path, cfg_data)
+        """Save application configuration."""
+        ConfigManager.save_config(self, self.config_file_path)
 
     def load_config(self):
-        loaded_cfg = load_app_config(self.config_file_path)
-        defaults = get_default_config_values()
-        
-        self.input_folder_var.set(loaded_cfg.get("last_folder", defaults["last_folder"]))
-        self.ruler_position_var.set(loaded_cfg.get("last_ruler_position", defaults["last_ruler_position"]))
-        self.photographer_var.set(loaded_cfg.get("last_photographer", defaults["last_photographer"]))
-        self.add_logo_var.set(loaded_cfg.get("last_add_logo", defaults["last_add_logo"]))
-        self.logo_path_var.set(loaded_cfg.get("last_logo_path", defaults["last_logo_path"]))
-        self.museum_var.set(loaded_cfg.get("last_museum", defaults["last_museum"]))
-        
-        # Load use measurements setting if available and measurements are loaded
-        if self.measurements_loaded:
-            self.use_measurements_var.set(loaded_cfg.get("last_use_measurements", False))
-    
-        self.toggle_logo_path_entry()
+        """Load application configuration."""
+        ConfigManager.load_config(self, self.config_file_path)
 
-    def update_progress_bar(self, value): self.progress_var.set(
-        value); self.root.update_idletasks()
+    def update_progress_bar(self, value):
+        """Update the progress bar value."""
+        self.progress_var.set(value)
+        self.root.update_idletasks()
 
     def processing_finished_ui_update(self):
+        """Update UI after processing is finished."""
         self.prb.config(state=tk.NORMAL)
         messagebox.showinfo("Processing Complete", "Workflow finished.")
         self.update_progress_bar(0)
 
+    def configure_museum_settings(self, museum_selection):
+        """Configure museum-specific settings."""
+        MuseumOptionsManager.configure_museum_settings(
+            museum_selection, stitch_config,
+            _ORIG_STITCH_CREDIT, _ORIG_STITCH_INSTITUTION)
+
     def start_processing_thread(self):
-        fp = self.input_folder_var.get()
-        rp = self.ruler_position_var.get()
-        ph = self.photographer_var.get()
-        al = self.add_logo_var.get()
-        lp = self.logo_path_var.get()
-        ms = self.museum_var.get()
-        obm = "auto"        # Background mode is set to "auto" by default
-        use_measurements = self.use_measurements_var.get()  # Get the measurements setting
+        """Start the processing thread with current settings."""
 
-        if not fp or not os.path.isdir(fp):
-            messagebox.showerror("Error", "Select valid input folder.")
-            return
-        if al and (not lp or not os.path.isfile(lp)):
-            messagebox.showerror(
-                "Error", "Logo checked, but no valid logo file.")
-            return
-        self.save_config()
-        self.lt.configure(state=tk.NORMAL)
-        self.lt.delete('1.0', tk.END)
-        self.lt.configure(state=tk.DISABLED)
-        
-        print(f"Starting processing with {ms} ruler...")
-        if use_measurements:
-            print(f"Using measurements from database when available.")
-        print("")
-        
-        self.prb.config(state=tk.DISABLED)
-        self.update_progress_bar(0)
+        processing_params = {
+            'input_folder': self.input_folder_var.get(),
+            'ruler_position': self.ruler_position_var.get(),
+            'photographer_name': self.photographer_var.get(),
+            'add_logo': self.add_logo_var.get(),
+            'logo_path': self.logo_path_var.get(),
+            'museum_selection': self.museum_var.get(),
+            'use_measurements': self.use_measurements_var.get(),
+            'gradient_width': self.advanced_tab.gradient_width_fraction.get(),
+            'bg_tolerance': self.advanced_tab.background_color_tolerance.get(),
+        }
 
-        museum = self.museum_var.get()
-
-        # ——— Credit line overrides ———
-        if museum == "Iraq Museum":
-            stitch_config.STITCH_CREDIT_LINE = (
-                "Cuneiform Artefacts of Iraq in Context (CAIC), "
-                "Bayerische Akademie der Wissenschaften"
-            )
-        elif museum == "Non-eBL Ruler (VAM)":
-            stitch_config.STITCH_CREDIT_LINE = ""
-        else:
-            stitch_config.STITCH_CREDIT_LINE = _ORIG_STITCH_CREDIT
-
-        # ——— Institution overrides ———
-        if museum == "Iraq Museum":
-            stitch_config.STITCH_INSTITUTION = "The Iraq Museum – eBL Project"
-        elif museum == "Non-eBL Ruler (VAM)":
-            stitch_config.STITCH_INSTITUTION = (
-                "Staatliche Museen zu Berlin, Vorderasiatisches Museum"
-            )
-        else:
-            stitch_config.STITCH_INSTITUTION = _ORIG_STITCH_INSTITUTION
-
-        threading.Thread(
-            target=run_complete_image_processing_workflow,
-            args=(
-                fp,
-                rp,
-                ph,
-                obm,
-                al,
-                lp,
-                RAW_IMAGE_EXTENSION,
-                VALID_IMAGE_EXTENSIONS,
-                RULER_TEMPLATE_1CM_PATH_ASSET,
-                RULER_TEMPLATE_2CM_PATH_ASSET,
-                RULER_TEMPLATE_5CM_PATH_ASSET,
-                STITCH_VIEW_PATTERNS_WITH_EXT,  # Use this instead of GUI_VIEW_ORIGINAL_SUFFIX_PATTERNS
-                TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
-                OBJECT_ARTIFACT_SUFFIX,
-                self.update_progress_bar,
-                self.processing_finished_ui_update,
-                ms,  # museum_selection
-                self.root,  # app_root_window for dialogs
-                None,  # background_color_tolerance
-                use_measurements,  # use_measurements_from_database
-                self.measurements_dict  # measurements_dict
-            ),
-            daemon=True
-        ).start()
+        EventHandlers.start_processing_workflow(
+            self, run_complete_image_processing_workflow, processing_params)
 
     def debug_measurements_loading(self):
-        """Debug function to test loading the measurements file"""
-        measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
-        
-        print("\n--- DEBUG: Measurements Loading ---")
-        print(f"Assets folder path: {resource_path(ASSETS_SUBFOLDER)}")
-        print(f"Measurements file path: {measurements_file}")
-        print(f"File exists: {os.path.exists(measurements_file)}")
-        
-        if os.path.exists(measurements_file):
-            try:
-                with open(measurements_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                print(f"Successfully loaded JSON data, contains {len(data)} items")
-                
-                # Check for expected format
-                if isinstance(data, list) and len(data) > 0:
-                    sample = data[0]
-                    print(f"Sample item format: {list(sample.keys())}")
-                    has_id = "_id" in sample
-                    has_width = "width" in sample
-                    print(f"Has '_id' field: {has_id}")
-                    print(f"Has 'width' field: {has_width}")
-                    
-                    if has_id and has_width:
-                        print(f"Sample: ID={sample['_id']}, width={sample['width']}")
-                else:
-                    print("Data doesn't appear to be a list or is empty")
-            except Exception as e:
-                print(f"Error testing measurements file: {e}")
-        
-        # Try reloading the measurements dictionary
-        self.measurements_dict = load_measurements_from_json(measurements_file)
-        self.measurements_loaded = len(self.measurements_dict) > 0
-        print(f"Reload result: loaded={self.measurements_loaded}, entries={len(self.measurements_dict)}")
-        
-        # Update UI based on loaded status
-        if self.measurements_loaded and hasattr(self, "measurements_checkbox"):
-            self.measurements_checkbox.state(['!disabled'])
-            # Remove any hint labels about missing file
-            for child in self.measurements_checkbox.master.winfo_children():
-                if isinstance(child, ttk.Label) and "(sippar.json not found" in child.cget("text"):
-                    child.destroy()
-        print("--- End DEBUG ---\n")
+        """Debug function to test loading the measurements file."""
+        EventHandlers.debug_measurements_loading(self, ASSETS_SUBFOLDER)
 
 
 if __name__ == "__main__":
-    modules_to_check = {
-        "resize_ruler_module": resize_ruler,
-        "ruler_detector_module": ruler_detector,
-        "stitch_images.process_tablet_subfolder": process_tablet_subfolder if 'stitch_images' in sys.modules and hasattr(sys.modules['stitch_images'], 'process_tablet_subfolder') else None,
-        "object_extractor.extract_and_save_center_object": extract_and_save_center_object if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_and_save_center_object') else None,
-        "object_extractor.extract_specific_contour_to_image_array": extract_specific_contour_to_image_array if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_specific_contour_to_image_array') else None,
-        # Check original name
-        "remove_background.create_foreground_mask": create_foreground_mask if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'create_foreground_mask_from_background') else None,
-        "remove_background.select_contour_closest_to_image_center": select_contour_closest_to_image_center if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_contour_closest_to_image_center') else None,
-        # Check original name
-        "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour_from_list') else None,
-        "raw_processor.convert_raw_image_to_tiff": convert_raw_image_to_tiff if 'raw_processor' in sys.modules and hasattr(sys.modules['raw_processor'], 'convert_raw_image_to_tiff') else None,
-        "put_images_in_subfolders.organize_files": organize_to_subfolders,  # This is an alias
-        "gui_utils.resource_path": resource_path,  # From gui_utils
-        "gui_utils.get_persistent_config_dir_path": get_persistent_config_dir_path,
-        "gui_utils.TextRedirector_class": TextRedirector,
-        "gui_workflow_runner.run_complete_image_processing_workflow": run_complete_image_processing_workflow if 'gui_workflow_runner' in sys.modules and hasattr(sys.modules['gui_workflow_runner'], 'run_complete_image_processing_workflow') else None
-    }
-    missing = [name for name, mod_or_func in modules_to_check.items()
-               if mod_or_func is None]
-    if missing:
-        msg = "FATAL: Critical components missing:\n" + "\n".join(missing) + \
-              "\nEnsure all .py files are in the same directory/Python path and error-free."
-        try:
-            root_chk = tk.Tk()
-            root_chk.withdraw()
-            messagebox.showerror("Startup Error", msg)
-        except tk.TclError:
-            print(msg)
-        sys.exit(1)
 
-    root = tk.Tk()
-    app = ImageProcessorApp(root)
-    root.mainloop()
+    try:
+
+        modules_to_check = {
+            "resize_ruler_module": resize_ruler,
+            "ruler_detector_module": ruler_detector,
+            "stitch_images.process_tablet_subfolder": process_tablet_subfolder if 'stitch_images' in sys.modules and hasattr(sys.modules['stitch_images'], 'process_tablet_subfolder') else None,
+            "object_extractor.extract_and_save_center_object": extract_and_save_center_object if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_and_save_center_object') else None,
+            "object_extractor.extract_specific_contour_to_image_array": extract_specific_contour_to_image_array if 'object_extractor' in sys.modules and hasattr(sys.modules['object_extractor'], 'extract_specific_contour_to_image_array') else None,
+            "remove_background.create_foreground_mask": create_foreground_mask if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'create_foreground_mask_from_background') else None,
+            "remove_background.select_contour_closest_to_image_center": select_contour_closest_to_image_center if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_contour_closest_to_image_center') else None,
+            "remove_background.select_ruler_like_contour": select_ruler_like_contour if 'remove_background' in sys.modules and hasattr(sys.modules['remove_background'], 'select_ruler_like_contour_from_list') else None,
+            "raw_processor.convert_raw_image_to_tiff": convert_raw_image_to_tiff if 'raw_processor' in sys.modules and hasattr(sys.modules['raw_processor'], 'convert_raw_image_to_tiff') else None,
+            "put_images_in_subfolders.organize_files": organize_to_subfolders,
+            "gui_utils.resource_path": resource_path,
+            "gui_utils.get_persistent_config_dir_path": get_persistent_config_dir_path,
+            "gui_utils.TextRedirector_class": TextRedirector,
+            "gui_workflow_runner.run_complete_image_processing_workflow": run_complete_image_processing_workflow if 'gui_workflow_runner' in sys.modules and hasattr(sys.modules['gui_workflow_runner'], 'run_complete_image_processing_workflow') else None
+        }
+
+        missing = [name for name, mod_or_func in modules_to_check.items()
+                   if mod_or_func is None]
+
+        root = tk.Tk()
+
+        if missing:
+            msg = "ERROR: Critical components missing:\n" + "\n".join(missing) + \
+                "\nEnsure all .py files are in the same directory/Python path and error-free."
+
+            error_frame = ttk.Frame(root, padding=20)
+            error_frame.pack(fill=tk.BOTH, expand=True)
+
+            ttk.Label(error_frame, text="Application Error", font=(
+                "Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+            error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
+            error_text.pack(fill=tk.BOTH, expand=True, pady=5)
+            error_text.insert(tk.END, msg)
+            error_text.config(state=tk.DISABLED)
+
+            scrollbar = ttk.Scrollbar(error_text, command=error_text.yview)
+            error_text.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+            ttk.Button(error_frame, text="Close Application",
+                       command=root.destroy).pack(pady=10)
+
+            print(msg)
+        else:
+
+            app = ImageProcessorApp(root)
+
+        root.mainloop()
+
+    except Exception as e:
+
+        try:
+            import traceback
+            root = tk.Tk()
+            root.title("Unexpected Error")
+
+            error_frame = ttk.Frame(root, padding=20)
+            error_frame.pack(fill=tk.BOTH, expand=True)
+
+            ttk.Label(error_frame, text="Unexpected Error", font=(
+                "Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+            error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
+            error_text.pack(fill=tk.BOTH, expand=True, pady=5)
+
+            error_trace = f"An unexpected error occurred:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+            error_text.insert(tk.END, error_trace)
+            error_text.config(state=tk.DISABLED)
+
+            scrollbar = ttk.Scrollbar(error_text, command=error_text.yview)
+            error_text.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+            ttk.Button(error_frame, text="Close Application",
+                       command=root.destroy).pack(pady=10)
+
+            print(error_trace)
+            root.mainloop()
+        except:
+
+            import traceback
+            print("CRITICAL ERROR: Application failed to start")
+            print(traceback.format_exc())
+            input("Press Enter to close...")
