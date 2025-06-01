@@ -8,8 +8,8 @@ from remove_background import (
     create_foreground_mask_from_background,
     select_contour_closest_to_image_center
 )
-# Add import for rembg-based object extraction
 from object_extractor_rembg import extract_and_save_center_object
+
 
 def detect_1cm_distance_iraq(image_path):
     """
@@ -22,9 +22,10 @@ def detect_1cm_distance_iraq(image_path):
     Returns:
         float: Pixel distance representing 1 cm, or None if not found.
     """
-    debug_filename = os.path.splitext(os.path.basename(image_path))[0] + "_debugging.jpg"
+    debug_filename = os.path.splitext(os.path.basename(image_path))[
+        0] + "_debugging.jpg"
     debug_path = os.path.join(os.path.dirname(image_path), debug_filename)
-            
+
     try:
 
         img = cv2.imread(image_path)
@@ -34,54 +35,51 @@ def detect_1cm_distance_iraq(image_path):
         height, width, _ = img.shape
 
         roi_width = width // 3
-        roi_height = height // 3
+        roi_height = height // 2
         roi_x = 0
         roi_y = height - roi_height
         initial_roi = img[roi_y:height, roi_x:roi_x + roi_width]
 
         roi = initial_roi
 
-        # Save ROI temporarily for rembg processing
         roi_temp_path = os.path.join(os.path.dirname(image_path), "_temp_roi.jpg")
         cv2.imwrite(roi_temp_path, roi)
-        
+
         try:
-            # Use rembg to extract objects and remove background
+
             print("Applying AI-based background removal...")
             bg_removed_path, _ = extract_and_save_center_object(
                 roi_temp_path,
-                output_image_background_color=(255, 255, 255),  # White background for Iraq Museum
+                output_image_background_color=(255, 255, 255),
                 output_filename_suffix="_bg_removed.tif",
                 feather_radius_px=5,
                 min_object_area_as_image_fraction=0.01
             )
-            
-            # Load the background-removed image
+
             bg_removed_img = cv2.imread(bg_removed_path)
             if bg_removed_img is not None:
                 roi = bg_removed_img
                 print("AI background removal applied successfully")
             else:
                 print("Warning: Could not load AI-processed image, using original ROI")
-            
-            # Clean up temporary files
+
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
             if os.path.exists(bg_removed_path):
                 os.remove(bg_removed_path)
-                
+
         except Exception as e:
             print(f"AI background removal failed: {e}, using original ROI")
-            # Clean up temporary file
+
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
 
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         blurred_roi = cv2.GaussianBlur(gray_roi, (3, 3), 0)
-        
-        contrast_factor = 10 
+
+        contrast_factor = 10
         lookup_table = np.array([
-            255 / (1 + math.exp(-contrast_factor * (i - 128) / 255)) 
+            255 / (1 + math.exp(-contrast_factor * (i - 128) / 255))
             for i in np.arange(0, 256)
         ]).astype("uint8")
         linear_contrast_roi = cv2.LUT(blurred_roi, lookup_table)
@@ -90,14 +88,17 @@ def detect_1cm_distance_iraq(image_path):
         right_margin = int(width * 0.90)
         bottom_margin = int(height * 0.50)
         top_margin = int(height * 0.10)
-        
-        trimmed_roi = linear_contrast_roi[top_margin:bottom_margin, left_margin:right_margin]
-        
+
+        trimmed_roi = linear_contrast_roi[top_margin:bottom_margin,
+                                          left_margin:right_margin]
+
         alpha_contrast = 1.0
         beta_brightness = 0
-        contrast_adjusted_roi = cv2.convertScaleAbs(trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
-        
-        cv2.imwrite(os.path.join(os.path.dirname(image_path), "_contrast.jpg"), contrast_adjusted_roi)
+        contrast_adjusted_roi = cv2.convertScaleAbs(
+            trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
+
+        cv2.imwrite(os.path.join(os.path.dirname(image_path),
+                    "_contrast.jpg"), contrast_adjusted_roi)
 
         edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 

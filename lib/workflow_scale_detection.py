@@ -29,10 +29,58 @@ def detect_scale_from_ruler(ruler_for_scale_fp, subfolder_path_item, raw_ext_con
     if museum_selection == "Iraq Museum":
         print(
             f"   Using Iraq Museum specific ruler detector for {os.path.basename(curr_scale_fp)}...")
+
         px_cm_val = ruler_detector_iraq_museum.detect_1cm_distance_iraq(curr_scale_fp)
+
+        if px_cm_val is None or px_cm_val <= 0:
+            print(f"   Ruler detection failed for primary image, trying fallback images...")
+
+            base_name = os.path.splitext(os.path.basename(curr_scale_fp))[0]
+
+            if base_name.endswith('_rawscale'):
+                base_name = base_name[:-9]
+
+            fallback_images = []
+            for suffix in ['_01', '_02']:
+                for ext in ['.jpg', '.jpeg', '.tif', '.tiff', '.png']:
+                    fallback_path = os.path.join(
+                        subfolder_path_item, f"{base_name}{suffix}{ext}")
+                    if os.path.exists(fallback_path):
+                        fallback_images.append(fallback_path)
+                        break
+
+            for fallback_image in fallback_images:
+                print(f"   Trying fallback image: {os.path.basename(fallback_image)}")
+
+                fallback_curr_fp = fallback_image
+                fallback_is_temp = False
+
+                if fallback_curr_fp.lower().endswith(raw_ext_config):
+                    fallback_tmp_fp = os.path.join(
+                        subfolder_path_item,
+                        f"{os.path.splitext(os.path.basename(fallback_curr_fp))[0]}_rawscale.tif"
+                    )
+                    convert_raw_image_to_tiff(fallback_curr_fp, fallback_tmp_fp)
+                    fallback_curr_fp, fallback_is_temp = fallback_tmp_fp, True
+                    cr2_conv_count += 1
+
+                px_cm_val = ruler_detector_iraq_museum.detect_1cm_distance_iraq(
+                    fallback_curr_fp)
+
+                if fallback_is_temp and os.path.exists(fallback_curr_fp):
+                    os.remove(fallback_curr_fp)
+
+                if px_cm_val is not None and px_cm_val > 0:
+                    print(
+                        f"   SUCCESS: Ruler detected in fallback image {os.path.basename(fallback_image)}")
+                    break
+                else:
+                    print(
+                        f"   Ruler detection failed for {os.path.basename(fallback_image)}")
+
         if px_cm_val is None or px_cm_val <= 0:
             raise ValueError(
-                "Iraq Museum ruler detection failed to return a valid pixels/cm value.")
+                "Iraq Museum ruler detection failed for primary image and all fallback images (_01, _02).")
         print(f"     Iraq Museum ruler detector returned px/cm: {px_cm_val}")
     else:
         px_cm_val = ruler_detector.estimate_pixels_per_centimeter_from_ruler(
