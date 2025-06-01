@@ -28,6 +28,7 @@ try:
         get_extended_intermediate_suffixes
     )
     from image_utils import paste_image_onto_canvas
+    from extract_measurements import add_measurement_record
 except ImportError as e:
     print(f"CRITICAL ERROR in stitch_images.py: Could not import local utils: {e}")
     raise
@@ -105,28 +106,16 @@ def _blend_images_vertically(base_image_segment, new_image_segment, overlap_px):
 def process_tablet_subfolder(
     subfolder_path,
     ruler_position,
-    photographer_name,
-
-    output_base_name,
     main_input_folder_path,
+    output_base_name,
     pixels_per_cm,
-    stitched_bg_color,
-    custom_layout=None,
-    background_mode="auto",
+    photographer_name,
+    ruler_image_for_scale_path,
     add_logo=False,
     logo_path=None,
-    extensions=None,
-    ruler_1cm_template_path=None,
-    ruler_2cm_template_path=None,
-    ruler_5cm_template_path=None,
-    view_patterns=None,
-    temp_ruler_filename=None,
-    object_artifact_suffix="_object.tif",
-    progress_callback=None,
-    museum_selection="British Museum",
-
-
-
+    object_extraction_background_mode="auto",
+    stitched_bg_color=(0, 0, 0),
+    custom_layout=None,
     **kwargs
 ):
     """
@@ -154,6 +143,34 @@ def process_tablet_subfolder(
             raise ValueError("No images loaded for stitching, cannot proceed.")
 
     resized_images = resize_tablet_views_for_layout(loaded_images)
+
+    if pixels_per_cm is not None and resized_images.get("obverse") is not None:
+        object_suffix = "_object.tif"
+        obverse_object_pattern = f"{output_base_name}_01{object_suffix}"
+
+        obverse_object_files = [f for f in os.listdir(subfolder_path)
+                                if f.startswith(obverse_object_pattern)]
+
+        if obverse_object_files:
+            obverse_object_path = os.path.join(subfolder_path, obverse_object_files[0])
+
+            gap_pixels = 50
+
+            success = add_measurement_record(
+                object_image_path=obverse_object_path,
+                pixels_per_cm=pixels_per_cm,
+                file_id=output_base_name,
+                gap_pixels=gap_pixels,
+                output_dir=main_input_folder_path
+            )
+
+            if success:
+                print(f"  Measurements calculated and saved for {output_base_name}")
+            else:
+                print(f"  Failed to calculate measurements for {output_base_name}")
+        else:
+            print(
+                f"  Warning: No obverse object file found for measurements ({obverse_object_pattern})")
 
     canvas_w, canvas_h, layout_coords, images_to_paste_dict = calculate_stitching_layout(
         resized_images, current_view_gap, current_ruler_padding, custom_layout=custom_layout

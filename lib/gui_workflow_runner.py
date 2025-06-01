@@ -254,22 +254,5 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
         custom_layout=None
     )
 
-    if px_cm_val is not None and art_fp:
-        object_image_path = art_fp
-        gap_pixels = 50
-
-        success = add_measurement_record(
-            object_image_path=object_image_path,
-            pixels_per_cm=px_cm_val,
-            file_id=subfolder_name_item,
-            gap_pixels=gap_pixels,
-            output_dir=source_folder_path
-        )
-
-        if success:
-            print(f"Measurements calculated and saved for {subfolder_name_item}")
-        else:
-            print(f"Failed to calculate measurements for {subfolder_name_item}")
-
     result['success'] = True
     return result
