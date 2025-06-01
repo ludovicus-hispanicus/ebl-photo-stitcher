@@ -6,55 +6,21 @@ import re
 import traceback
 import time
 
-try:
-    import resize_ruler
-    import ruler_detector
-    from blending_mask_applier import process_intermediate_image_with_mask
-    from stitch_images import process_tablet_subfolder
-    from stitch_config import (
-        MUSEUM_CONFIGS, 
-        MAX_ADDITIONAL_INTERMEDIATES,
-        get_extended_intermediate_suffixes
-    )
-
-    from object_extractor_rembg import extract_and_save_center_object
-
-    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
-    from remove_background import (
-        create_foreground_mask_from_background as create_foreground_mask,
-        select_contour_closest_to_image_center,
-        select_ruler_like_contour_from_list as select_ruler_like_contour,
-        get_museum_background_color,
-        detect_dominant_corner_background_color
-    )
-    from raw_processor import convert_raw_image_to_tiff
-
-    from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_files_func
-    import ruler_detector_iraq_museum
-
-    from workflow_processing_steps import organize_project_subfolders, determine_ruler_image_for_scaling
-    from measurements_utils import load_measurements_from_json, get_tablet_width_from_measurements
-    from workflow_processing_steps import determine_pixels_per_cm_from_measurement
-except ImportError as e:
-    print(f"ERROR in gui_workflow_runner.py: Failed to import a processing module: {e}")
-    def _placeholder_func(*args, **kwargs): 
-        print(f"Error: Missing module for {args[0] if args else 'operation'}")
-    
-    resize_ruler = type('module', (), {'resize_and_save_ruler_template': _placeholder_func})
-    ruler_detector = type('module', (), {'estimate_pixels_per_centimeter_from_ruler': _placeholder_func})
-    process_tablet_subfolder = _placeholder_func
-    extract_and_save_center_object = lambda *a, **kw: (None, None)
-    extract_specific_contour_to_image_array = _placeholder_func
-    create_foreground_mask = _placeholder_func
-    select_contour_closest_to_image_center = _placeholder_func
-    select_ruler_like_contour = _placeholder_func
-    convert_raw_image_to_tiff = _placeholder_func
-    organize_files_func = lambda *a: []
-    organize_project_subfolders = lambda *a, **kw: []
-    determine_ruler_image_for_scaling = lambda *a, **kw: None
-
-    detect_dominant_corner_background_color = lambda *a, **kw: (0, 0, 0)
-
+from workflow_imports import (
+    organize_project_subfolders, determine_ruler_image_for_scaling,
+    process_tablet_subfolder, get_extended_intermediate_suffixes,
+    MUSEUM_CONFIGS, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+    convert_raw_image_to_tiff
+)
+from workflow_scale_detection import determine_pixels_per_cm
+from workflow_object_processing import (
+    extract_object_and_detect_background, extract_ruler_contour,
+    process_other_views, process_intermediate_images
+)
+from workflow_ruler_generation import (
+    select_ruler_template, generate_digital_ruler, prepare_other_views_list
+)
+from workflow_cleanup import cleanup_intermediate_files, cleanup_temp_files
 
 def run_complete_image_processing_workflow(
     source_folder_path,
@@ -80,10 +46,9 @@ def run_complete_image_processing_workflow(
     measurements_dict=None,
     gradient_width_fraction=0.5
 ):
-
+    """Main workflow orchestration function."""
     start_time = time.time()
     total_objects_processed = 0
-
     failed_objects = []
     
     if background_color_tolerance is None:
@@ -100,9 +65,8 @@ def run_complete_image_processing_workflow(
 
     try:
         processed_subfolders = organize_project_subfolders(
-            source_folder_path, image_extensions_tuple, organize_files_func)
+            source_folder_path, image_extensions_tuple, lambda x: [])
     except Exception as e_org:
-
         print(f"   Workflow halted due to error during file organization: {e_org}")
         progress_callback(100)
         finished_callback()
@@ -122,8 +86,6 @@ def run_complete_image_processing_workflow(
     total_ok, total_err, cr2_conv_total = 0, 0, 0
     prog_per_folder = 85.0 / num_folders if num_folders > 0 else 0
 
-    intermediate_suffix_patterns = get_extended_intermediate_suffixes()
-
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
         print(f"Processing Subfolder {i+1}/{num_folders}: {subfolder_name_item}")
@@ -131,419 +93,264 @@ def run_complete_image_processing_workflow(
         current_prog_base = 10 + i * prog_per_folder
         progress_callback(current_prog_base)
 
-        sub_steps_alloc = {"layout_dialog": 0.05, "scale": 0.15, "ruler_art": 0.1, "ruler_part_extract": 0.05,
-                           "digital_ruler_choice": 0.05, "digital_ruler_resize": 0.1, "other_obj": 0.25, "stitch": 0.25}
-        accumulated_sub_progress = 0.0
-
-        all_files_in_subfolder = [f for f in os.listdir(subfolder_path_item) if os.path.isfile(
-            os.path.join(subfolder_path_item, f))]
-
-        image_files_for_layout = []
-        for f_name in all_files_in_subfolder:
-            if f_name.lower().endswith(image_extensions_tuple):
-                image_files_for_layout.append(os.path.join(subfolder_path_item, f_name))
-
-        custom_layout_config = None
-        if len(image_files_for_layout) > 6:
-            print(
-                f"   Subfolder {subfolder_name_item} has {len(image_files_for_layout)} images.")
-            print(
-                f"   Using automatic suffix detection for intermediate images (looking for: {list(intermediate_suffix_patterns.keys())})")
-            print(f"   Images exceeding 6 without suffix patterns will be ignored.")
-
-        accumulated_sub_progress += sub_steps_alloc["layout_dialog"] * prog_per_folder
-        progress_callback(current_prog_base + accumulated_sub_progress)
-        
-        view_original_suffix_patterns_config = view_file_patterns_config if view_file_patterns_config else {}
-    
-        rel_count = 0
-        pr02_reverse, pr03_top, pr04_bottom = None, None, None
-        orig_views_fps = {}
-
-        for fn in all_files_in_subfolder:
-            fn_low = fn.lower()
-            full_fp = os.path.join(subfolder_path_item, fn)
-            if fn_low.endswith(image_extensions_tuple):
-                if object_artifact_suffix_config not in fn and \
-                   "_scaled_ruler." not in fn and \
-                   "temp_isolated_ruler" not in fn and \
-                   not fn_low.endswith("_rawscale.tif"):
-                    rel_count += 1
-
-                if "reverse" in view_original_suffix_patterns_config and view_original_suffix_patterns_config["reverse"] in fn_low:
-                    pr02_reverse = full_fp
-                if "top" in view_original_suffix_patterns_config and view_original_suffix_patterns_config["top"] in fn_low:
-                    pr03_top = full_fp
-                if "bottom" in view_original_suffix_patterns_config and view_original_suffix_patterns_config["bottom"] in fn_low:
-                    pr04_bottom = full_fp
-
-                for vk, sp_pattern_suffix in view_original_suffix_patterns_config.items():
-                    if not sp_pattern_suffix:
-                        continue
-                    core_pattern = os.path.splitext(sp_pattern_suffix)[0]
-                    expected_prefix_in_filename = subfolder_name_item + core_pattern
-
-                    if fn_low.startswith(expected_prefix_in_filename.lower()):
-                        orig_views_fps[vk] = full_fp
-
-        ruler_for_scale_fp = determine_ruler_image_for_scaling(
-            custom_layout_config, orig_views_fps, image_files_for_layout,
-            pr02_reverse, pr03_top, pr04_bottom, rel_count
-        )
-
-        if not ruler_for_scale_fp:
-            print(f"   No ruler image found for {subfolder_name_item}. Skip.")
-            failed_objects.append(subfolder_name_item)
-            total_err += 1
-            print("-" * 40)
-            continue
-
-        px_cm_val = None
-        measurements_used = False
-
-        if use_measurements_from_database and measurements_dict:
-            tablet_width_cm = get_tablet_width_from_measurements(
-                subfolder_path_item, measurements_dict)
-            if tablet_width_cm is not None and tablet_width_cm > 0:
-                try:
-
-                    px_cm_val = determine_pixels_per_cm_from_measurement(
-                        ruler_for_scale_fp,
-                        tablet_width_cm,
-                        should_extract_object=True,
-                        bg_color_tolerance=background_color_tolerance
-                    )
-                    measurements_used = True
-                    print(
-                        f"   Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
-                except Exception as e:
-                    print(f"   Error using measurement from database: {e}")
-                    px_cm_val = None
-
-        if px_cm_val is None:
-            try:
-                curr_scale_fp, is_temp_s_file = ruler_for_scale_fp, False
-                if curr_scale_fp.lower().endswith(raw_ext_config):
-                    tmp_s_fp = os.path.join(
-                        subfolder_path_item, f"{os.path.splitext(os.path.basename(curr_scale_fp))[0]}_rawscale.tif")
-                    convert_raw_image_to_tiff(curr_scale_fp, tmp_s_fp)
-                    curr_scale_fp, is_temp_s_file = tmp_s_fp, True
-                    cr2_conv_total += 1
-
-                if museum_selection == "Iraq Museum":
-                    print(
-                        f"   Using Iraq Museum specific ruler detector for {os.path.basename(curr_scale_fp)}...")
-                    px_cm_val = ruler_detector_iraq_museum.detect_1cm_distance_iraq(
-                        curr_scale_fp)
-                    if px_cm_val is None or px_cm_val <= 0:
-                        raise ValueError(
-                            "Iraq Museum ruler detection failed to return a valid pixels/cm value.")
-                    print(
-                        f"     Iraq Museum ruler detector returned px/cm: {px_cm_val}")
-                else:
-                    px_cm_val = ruler_detector.estimate_pixels_per_centimeter_from_ruler(
-                        curr_scale_fp, ruler_position=ruler_position)
-
-                if is_temp_s_file and os.path.exists(curr_scale_fp):
-                    os.remove(curr_scale_fp)
-            except Exception as e:
-                print(f"   Error during ruler scale detection: {e}")
-
-                if not measurements_used and measurements_dict:
-                    tablet_width_cm = get_tablet_width_from_measurements(
-                        subfolder_path_item, measurements_dict)
-                    if tablet_width_cm is not None and tablet_width_cm > 0:
-                        try:
-
-                            px_cm_val = determine_pixels_per_cm_from_measurement(
-                                ruler_for_scale_fp,
-                                tablet_width_cm,
-                                should_extract_object=True,
-                                bg_color_tolerance=background_color_tolerance
-                            )
-                            print(
-                                f"   FALLBACK: Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
-                        except Exception as e_meas:
-                            print(f"   Error using measurement fallback: {e_meas}")
-                            px_cm_val = None
-                    else:
-                        print(f"   No measurement found in database for this tablet")
-
-                if px_cm_val is None:
-                    print(
-                        f"   ERROR: Could not determine ruler scale for {subfolder_name_item}. Skip.")
-                    failed_objects.append(subfolder_name_item)
-                    total_err += 1
-                    print("-" * 40)
-                    continue
-
         try:
-            accumulated_sub_progress += sub_steps_alloc["scale"] * \
-                prog_per_folder
-            progress_callback(current_prog_base + accumulated_sub_progress)
 
-            path_ruler_extract_img, tmp_ruler_extract_conv_file = ruler_for_scale_fp, None
-            if path_ruler_extract_img.lower().endswith(raw_ext_config):
-                tmp_ruler_extract_conv_file = os.path.join(
-                    subfolder_path_item, f"{os.path.splitext(os.path.basename(path_ruler_extract_img))[0]}.tif")
-                if not os.path.exists(tmp_ruler_extract_conv_file):
-                    convert_raw_image_to_tiff(
-                        path_ruler_extract_img, tmp_ruler_extract_conv_file)
-                path_ruler_extract_img = tmp_ruler_extract_conv_file
-
-            img_for_bg_detection = cv2.imread(path_ruler_extract_img)
-            if img_for_bg_detection is None:
-                raise ValueError(
-                    f"Failed to load image for background detection: {path_ruler_extract_img}")
-
-            detected_bg_color_from_image = detect_dominant_corner_background_color(
-                img_for_bg_detection)
-
-            output_bg_color = get_museum_background_color(
-                museum_selection=museum_selection, detected_bg_color=detected_bg_color_from_image)
-
-            art_fp, art_cont = extract_and_save_center_object(
-                path_ruler_extract_img,
-                source_background_detection_mode=object_extraction_bg_mode,
-                output_image_background_color=output_bg_color,
-                output_filename_suffix=object_artifact_suffix_config,
-                museum_selection=museum_selection
+            result = process_single_subfolder(
+                subfolder_path_item, subfolder_name_item, image_extensions_tuple,
+                view_file_patterns_config, object_artifact_suffix_config,
+                temp_extracted_ruler_filename_config, raw_ext_config,
+                ruler_position, museum_selection, use_measurements_from_database,
+                measurements_dict, background_color_tolerance, object_extraction_bg_mode,
+                ruler_template_1cm_asset_path, ruler_template_2cm_asset_path,
+                ruler_template_5cm_asset_path, gradient_width_fraction,
+                source_folder_path, photographer_name, add_logo, logo_path,
+                current_prog_base, prog_per_folder, progress_callback
             )
-
-            accumulated_sub_progress += sub_steps_alloc["ruler_art"] * \
-                prog_per_folder
-            progress_callback(current_prog_base + accumulated_sub_progress)
-
-            ruler_loaded_arr = cv2.imread(path_ruler_extract_img)
-            if ruler_loaded_arr is None:
-                raise ValueError(f"Fail reload {path_ruler_extract_img}")
-
-            all_m = create_foreground_mask(
-                ruler_loaded_arr, detected_bg_color_from_image, background_color_tolerance)
-            all_c, _ = cv2.findContours(
-                all_m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            ruler_c = select_ruler_like_contour(
-                all_c, ruler_loaded_arr.shape[1], ruler_loaded_arr.shape[0], excluded_obj_contour=art_cont)
-
-            tmp_iso_ruler_fp = None
-            if ruler_c is not None:
-                ext_ruler_arr = extract_specific_contour_to_image_array(
-                    ruler_loaded_arr, ruler_c, detected_bg_color_from_image, 5)
-                tmp_iso_ruler_fp = os.path.join(
-                    subfolder_path_item, temp_extracted_ruler_filename_config)
-                cv2.imwrite(tmp_iso_ruler_fp, ext_ruler_arr)
+            
+            if result['success']:
+                total_ok += 1
+                cr2_conv_total += result['cr2_conversions']
             else:
-                print("     Warning: Could not isolate physical ruler part.")
-            if tmp_ruler_extract_conv_file and os.path.exists(tmp_ruler_extract_conv_file):
-                os.remove(tmp_ruler_extract_conv_file)
-            accumulated_sub_progress += sub_steps_alloc["ruler_part_extract"] * \
-                prog_per_folder
-            progress_callback(current_prog_base + accumulated_sub_progress)
-
-            art_img_chk = cv2.imread(art_fp)
-            chosen_ruler_tpl = ruler_template_5cm_asset_path
-            custom_ruler_size_cm = None
-
-            if museum_selection == "British Museum":
-                if art_img_chk is not None and px_cm_val > 0:
-                    art_w_cm_val = art_img_chk.shape[1] / px_cm_val
-                    if art_w_cm_val > 0:
-                        t1 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM["1cm"]
-                        t2 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM["2cm"]
-                        if art_w_cm_val < t1:
-                            chosen_ruler_tpl = ruler_template_1cm_asset_path
-                        elif art_w_cm_val < t2:
-                            chosen_ruler_tpl = ruler_template_2cm_asset_path
-            elif museum_selection == "Iraq Museum":
-                chosen_ruler_tpl = os.path.join(os.path.dirname(
-                    ruler_template_1cm_asset_path), "IM_photo_ruler.svg")
-                custom_ruler_size_cm = 4.599
-                print(f"Using Iraq Museum ruler: {chosen_ruler_tpl}")
-            elif museum_selection == "eBL Ruler (CBS)":
-                chosen_ruler_tpl = os.path.join(os.path.dirname(
-                    ruler_template_1cm_asset_path), "General_eBL_photo_ruler.svg")
-                custom_ruler_size_cm = 4.317
-                print(f"Using eBL Ruler (CBS): {chosen_ruler_tpl}")
-            elif museum_selection == "Non-eBL Ruler (VAM)":
-                chosen_ruler_tpl = os.path.join(os.path.dirname(
-                    ruler_template_1cm_asset_path), "General_External_photo_ruler.svg")
-                custom_ruler_size_cm = 3.248
-                print(f"Using Non-eBL Ruler (VAM): {chosen_ruler_tpl}")
-
-            accumulated_sub_progress += sub_steps_alloc["digital_ruler_choice"] * \
-                prog_per_folder
-            progress_callback(current_prog_base + accumulated_sub_progress)
-
-            try:
-                resize_ruler.resize_and_save_ruler_template(
-                    px_cm_val,
-                    chosen_ruler_tpl,
-                    subfolder_name_item,
-                    subfolder_path_item,
-                    custom_ruler_size_cm=custom_ruler_size_cm
-                )
-                print(
-                    f"    Successfully generated/resized digital ruler: {chosen_ruler_tpl} for {subfolder_name_item}.")
-            except Exception as e_ruler_gen:
-                print(
-                    f"    ERROR during digital ruler generation/resizing: {e_ruler_gen}")
-
-            if tmp_iso_ruler_fp and os.path.exists(tmp_iso_ruler_fp):
-                os.remove(tmp_iso_ruler_fp)
-            accumulated_sub_progress += sub_steps_alloc["digital_ruler_resize"] * \
-                prog_per_folder
-            progress_callback(current_prog_base + accumulated_sub_progress)
-
-            other_views_to_process_list = []
-            if custom_layout_config:
-                all_custom_assigned_paths = set()
-                for key, value in custom_layout_config.items():
-                    if isinstance(value, str) and value:
-                        all_custom_assigned_paths.add(value)
-                    elif isinstance(value, list):
-                        for item_path in value:
-                            if item_path:
-                                all_custom_assigned_paths.add(item_path)
-
-                other_views_to_process_list = [
-                    p for p in all_custom_assigned_paths if p != ruler_for_scale_fp]
-            else:
-                other_views_to_process_list = [
-                    fp_other for fp_other in orig_views_fps.values() if fp_other != ruler_for_scale_fp]
-
-            num_other_views = len(other_views_to_process_list)
-            prog_per_other_view = (
-                sub_steps_alloc["other_obj"] * prog_per_folder) / num_other_views if num_other_views > 0 else 0
-            current_other_views_prog = 0.0
-
-            for idx_other, o_fp_to_extract in enumerate(other_views_to_process_list):
-                curr_o_path, is_temp_o = o_fp_to_extract, False
-                if o_fp_to_extract.lower().endswith(raw_ext_config):
-                    tmp_o_p = os.path.join(
-                        subfolder_path_item, f"{os.path.splitext(os.path.basename(o_fp_to_extract))[0]}.tif")
-                    convert_raw_image_to_tiff(o_fp_to_extract, tmp_o_p)
-                    curr_o_path, is_temp_o = tmp_o_p, True
-                    cr2_conv_total += 1
-                extract_and_save_center_object(
-                    curr_o_path,
-                    source_background_detection_mode=object_extraction_bg_mode,
-                    output_image_background_color=output_bg_color,
-                    output_filename_suffix=object_artifact_suffix_config,
-                    museum_selection=museum_selection
-                )
-
-                if is_temp_o and os.path.exists(curr_o_path):
-                    os.remove(curr_o_path)
-                current_other_views_prog += prog_per_other_view
-                progress_callback(
-                    current_prog_base + accumulated_sub_progress + current_other_views_prog)
-
-            print(f"   Processing intermediate images for {subfolder_name_item}...")
-
-            intermediate_suffix_patterns = get_extended_intermediate_suffixes()
-
-            for img_file in all_files_in_subfolder:
-                if not img_file.lower().endswith(image_extensions_tuple):
-                    continue
-
-                if object_artifact_suffix_config in img_file:
-                    continue
-
-                file_basename = os.path.basename(img_file)
-                is_intermediate = False
-                matched_suffix = None
-
-                for suffix in intermediate_suffix_patterns.keys():
-                    suffix_pattern = f"_{suffix}."
-                    if suffix_pattern.lower() in file_basename.lower():
-                        is_intermediate = True
-                        matched_suffix = suffix
-                        break
-
-                if is_intermediate:
-                    print(f"   Processing intermediate image: {file_basename} (suffix: {matched_suffix})")
-                    img_path = os.path.join(subfolder_path_item, file_basename)
-
-                    if img_path in other_views_to_process_list or img_path == ruler_for_scale_fp:
-                        print(f"   Skipping {file_basename} as it was already processed as a main view")
-                        continue
-
-                    curr_path, is_temp = img_path, False
-                    if img_path.lower().endswith(raw_ext_config):
-                        tmp_path = os.path.join(
-                            subfolder_path_item, f"{os.path.splitext(os.path.basename(img_path))[0]}.tif")
-                        convert_raw_image_to_tiff(img_path, tmp_path)
-                        curr_path, is_temp = tmp_path, True
-                        cr2_conv_total += 1
-
-                    extract_and_save_center_object(
-                        curr_path,
-                        source_background_detection_mode=object_extraction_bg_mode,
-                        output_image_background_color=output_bg_color,
-                        output_filename_suffix=object_artifact_suffix_config,
-                        museum_selection=museum_selection
-                    )
-
-                    object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
-                    if os.path.exists(object_filepath):
-                        process_intermediate_image_with_mask(
-                            object_filepath,
-                            background_color=output_bg_color,
-                            gradient_width_fraction=gradient_width_fraction
-                        )
-
-                    if is_temp and os.path.exists(curr_path):
-                        os.remove(curr_path)
-
-            accumulated_sub_progress += sub_steps_alloc["other_obj"] * prog_per_folder
-
-            stitched_output_bg_color = MUSEUM_CONFIGS.get(
-                museum_selection, {}).get("background_color", (0, 0, 0))
-            if museum_selection == "British Museum":
-                stitched_output_bg_color = output_bg_color
-
-            process_tablet_subfolder(
-                subfolder_path=subfolder_path_item,
-                ruler_position=ruler_position,
-                main_input_folder_path=source_folder_path,
-                output_base_name=subfolder_name_item,
-                pixels_per_cm=px_cm_val,
-                photographer_name=photographer_name,
-                ruler_image_for_scale_path=ruler_for_scale_fp,
-                add_logo=add_logo,
-                logo_path=logo_path if add_logo else None,
-                object_extraction_background_mode=object_extraction_bg_mode,
-                stitched_bg_color=stitched_output_bg_color,
-                custom_layout=custom_layout_config
-            )
-            total_ok += 1
+                failed_objects.append(subfolder_name_item)
+                total_err += 1
+                
         except Exception as e:
             print(f"   ERROR processing set '{subfolder_name_item}': {e}")
             traceback.print_exc()
             failed_objects.append(subfolder_name_item)
             total_err += 1
 
-    print(
-        f"\n--- Processing Complete ---\nRAW converted: {cr2_conv_total}\nSets OK: {total_ok}\nSets Error: {total_err}\n")
+    print_final_statistics(start_time, total_ok, total_err, cr2_conv_total, failed_objects)
 
-    total_objects_processed = total_ok
+    if total_ok > 0:
+        cleanup_intermediate_files(processed_subfolders, object_artifact_suffix_config)
+
+    progress_callback(100)
+    finished_callback()
+
+def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_extensions_tuple,
+                           view_file_patterns_config, object_artifact_suffix_config,
+                           temp_extracted_ruler_filename_config, raw_ext_config,
+                           ruler_position, museum_selection, use_measurements_from_database,
+                           measurements_dict, background_color_tolerance, object_extraction_bg_mode,
+                           ruler_template_1cm_asset_path, ruler_template_2cm_asset_path,
+                           ruler_template_5cm_asset_path, gradient_width_fraction,
+                           source_folder_path, photographer_name, add_logo, logo_path,
+                           current_prog_base, prog_per_folder, progress_callback):
+    """Process a single subfolder."""
+    
+    result = {'success': False, 'cr2_conversions': 0}
+
+    sub_steps_alloc = {
+        "layout_dialog": 0.05, "scale": 0.15, "ruler_art": 0.1, 
+        "ruler_part_extract": 0.05, "digital_ruler_choice": 0.05, 
+        "digital_ruler_resize": 0.1, "other_obj": 0.25, "stitch": 0.25
+    }
+    accumulated_sub_progress = 0.0
+
+    all_files_in_subfolder = [f for f in os.listdir(subfolder_path_item) 
+                             if os.path.isfile(os.path.join(subfolder_path_item, f))]
+
+    ruler_for_scale_fp, orig_views_fps = find_ruler_and_views(
+        subfolder_path_item, subfolder_name_item, all_files_in_subfolder,
+        image_extensions_tuple, view_file_patterns_config, object_artifact_suffix_config
+    )
+
+    if not ruler_for_scale_fp:
+        print(f"   No ruler image found for {subfolder_name_item}. Skip.")
+        return result
+
+    accumulated_sub_progress += sub_steps_alloc["layout_dialog"] * prog_per_folder
+    progress_callback(current_prog_base + accumulated_sub_progress)
+
+    px_cm_val, measurements_used, cr2_conv_scale = determine_pixels_per_cm(
+        subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
+        raw_ext_config, museum_selection, ruler_position,
+        use_measurements_from_database, measurements_dict, background_color_tolerance
+    )
+    result['cr2_conversions'] += cr2_conv_scale
+
+    if px_cm_val is None:
+        print(f"   ERROR: Could not determine ruler scale for {subfolder_name_item}. Skip.")
+        return result
+
+    accumulated_sub_progress += sub_steps_alloc["scale"] * prog_per_folder
+    progress_callback(current_prog_base + accumulated_sub_progress)
+
+    path_ruler_extract_img, tmp_ruler_extract_conv_file = prepare_ruler_image(
+        ruler_for_scale_fp, subfolder_path_item, raw_ext_config)
+    
+    if tmp_ruler_extract_conv_file:
+        result['cr2_conversions'] += 1
+
+    art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
+        path_ruler_extract_img, object_extraction_bg_mode,
+        object_artifact_suffix_config, museum_selection
+    )
+
+    accumulated_sub_progress += sub_steps_alloc["ruler_art"] * prog_per_folder
+    progress_callback(current_prog_base + accumulated_sub_progress)
+
+    tmp_iso_ruler_fp = extract_ruler_contour(
+        path_ruler_extract_img, detected_bg_color, art_cont,
+        background_color_tolerance, temp_extracted_ruler_filename_config,
+        subfolder_path_item
+    )
+
+    cleanup_temp_files(tmp_ruler_extract_conv_file)
+
+    accumulated_sub_progress += sub_steps_alloc["ruler_part_extract"] * prog_per_folder
+    progress_callback(current_prog_base + accumulated_sub_progress)
+
+    chosen_ruler_tpl, custom_ruler_size_cm = select_ruler_template(
+        museum_selection, art_fp, px_cm_val, ruler_template_1cm_asset_path,
+        ruler_template_2cm_asset_path, ruler_template_5cm_asset_path
+    )
+
+    accumulated_sub_progress += sub_steps_alloc["digital_ruler_choice"] * prog_per_folder
+    progress_callback(current_prog_base + accumulated_sub_progress)
+
+    generate_digital_ruler(px_cm_val, chosen_ruler_tpl, subfolder_name_item,
+                          subfolder_path_item, custom_ruler_size_cm)
+
+    cleanup_temp_files(tmp_iso_ruler_fp)
+
+    accumulated_sub_progress += sub_steps_alloc["digital_ruler_resize"] * prog_per_folder
+    progress_callback(current_prog_base + accumulated_sub_progress)
+
+    other_views_to_process_list = prepare_other_views_list(
+        None, orig_views_fps, ruler_for_scale_fp
+    )
+
+    cr2_conv_other = process_other_views(
+        other_views_to_process_list, subfolder_path_item, raw_ext_config,
+        object_extraction_bg_mode, output_bg_color,
+        object_artifact_suffix_config, museum_selection
+    )
+    result['cr2_conversions'] += cr2_conv_other
+
+    cr2_conv_intermediate = process_intermediate_images(
+        all_files_in_subfolder, subfolder_path_item, subfolder_name_item,
+        image_extensions_tuple, object_artifact_suffix_config,
+        other_views_to_process_list, ruler_for_scale_fp, raw_ext_config,
+        object_extraction_bg_mode, output_bg_color, museum_selection,
+        gradient_width_fraction
+    )
+    result['cr2_conversions'] += cr2_conv_intermediate
+
+    accumulated_sub_progress += sub_steps_alloc["other_obj"] * prog_per_folder
+
+    stitched_output_bg_color = MUSEUM_CONFIGS.get(
+        museum_selection, {}).get("background_color", (0, 0, 0))
+    if museum_selection == "British Museum":
+        stitched_output_bg_color = output_bg_color
+
+    process_tablet_subfolder(
+        subfolder_path=subfolder_path_item,
+        ruler_position=ruler_position,
+        main_input_folder_path=source_folder_path,
+        output_base_name=subfolder_name_item,
+        pixels_per_cm=px_cm_val,
+        photographer_name=photographer_name,
+        ruler_image_for_scale_path=ruler_for_scale_fp,
+        add_logo=add_logo,
+        logo_path=logo_path if add_logo else None,
+        object_extraction_background_mode=object_extraction_bg_mode,
+        stitched_bg_color=stitched_output_bg_color,
+        custom_layout=None
+    )
+
+    result['success'] = True
+    return result
+
+def find_ruler_and_views(subfolder_path_item, subfolder_name_item, all_files_in_subfolder,
+                        image_extensions_tuple, view_file_patterns_config, object_artifact_suffix_config):
+    """Find ruler image and identify other views."""
+    
+    image_files_for_layout = []
+    for f_name in all_files_in_subfolder:
+        if f_name.lower().endswith(image_extensions_tuple):
+            image_files_for_layout.append(os.path.join(subfolder_path_item, f_name))
+
+    intermediate_suffix_patterns = get_extended_intermediate_suffixes()
+    if len(image_files_for_layout) > 6:
+        print(f"   Subfolder {subfolder_name_item} has {len(image_files_for_layout)} images.")
+        print(f"   Using automatic suffix detection for intermediate images (looking for: {list(intermediate_suffix_patterns.keys())})")
+        print(f"   Images exceeding 6 without suffix patterns will be ignored.")
+
+    view_original_suffix_patterns_config = view_file_patterns_config if view_file_patterns_config else {}
+    
+    rel_count = 0
+    pr02_reverse, pr03_top, pr04_bottom = None, None, None
+    orig_views_fps = {}
+
+    for fn in all_files_in_subfolder:
+        fn_low = fn.lower()
+        full_fp = os.path.join(subfolder_path_item, fn)
+        
+        if fn_low.endswith(image_extensions_tuple):
+            if (object_artifact_suffix_config not in fn and 
+                "_scaled_ruler." not in fn and 
+                "temp_isolated_ruler" not in fn and 
+                not fn_low.endswith("_rawscale.tif")):
+                rel_count += 1
+
+            if "reverse" in view_original_suffix_patterns_config and view_original_suffix_patterns_config["reverse"] in fn_low:
+                pr02_reverse = full_fp
+            if "top" in view_original_suffix_patterns_config and view_original_suffix_patterns_config["top"] in fn_low:
+                pr03_top = full_fp
+            if "bottom" in view_original_suffix_patterns_config and view_original_suffix_patterns_config["bottom"] in fn_low:
+                pr04_bottom = full_fp
+
+            for vk, sp_pattern_suffix in view_original_suffix_patterns_config.items():
+                if not sp_pattern_suffix:
+                    continue
+                core_pattern = os.path.splitext(sp_pattern_suffix)[0]
+                expected_prefix_in_filename = subfolder_name_item + core_pattern
+
+                if fn_low.startswith(expected_prefix_in_filename.lower()):
+                    orig_views_fps[vk] = full_fp
+
+    ruler_for_scale_fp = determine_ruler_image_for_scaling(
+        None, orig_views_fps, image_files_for_layout,
+        pr02_reverse, pr03_top, pr04_bottom, rel_count
+    )
+
+    return ruler_for_scale_fp, orig_views_fps
+
+def prepare_ruler_image(ruler_for_scale_fp, subfolder_path_item, raw_ext_config):
+    """Prepare ruler image, converting from RAW if needed."""
+    path_ruler_extract_img, tmp_ruler_extract_conv_file = ruler_for_scale_fp, None
+    
+    if path_ruler_extract_img.lower().endswith(raw_ext_config):
+        tmp_ruler_extract_conv_file = os.path.join(
+            subfolder_path_item, 
+            f"{os.path.splitext(os.path.basename(path_ruler_extract_img))[0]}.tif"
+        )
+        if not os.path.exists(tmp_ruler_extract_conv_file):
+            convert_raw_image_to_tiff(path_ruler_extract_img, tmp_ruler_extract_conv_file)
+        path_ruler_extract_img = tmp_ruler_extract_conv_file
+    
+    return path_ruler_extract_img, tmp_ruler_extract_conv_file
+
+def print_final_statistics(start_time, total_ok, total_err, cr2_conv_total, failed_objects):
+    """Print final processing statistics."""
+    print(f"\n--- Processing Complete ---\nRAW converted: {cr2_conv_total}\nSets OK: {total_ok}\nSets Error: {total_err}\n")
 
     end_time = time.time()
     elapsed_seconds = end_time - start_time
     minutes, seconds = divmod(elapsed_seconds, 60)
 
-    avg_seconds = elapsed_seconds / total_objects_processed if total_objects_processed > 0 else 0
+    avg_seconds = elapsed_seconds / total_ok if total_ok > 0 else 0
     avg_minutes, avg_seconds = divmod(avg_seconds, 60)
 
     print(f"\n--- Processing Statistics ---")
     print(f"Time elapsed: {int(minutes):02d} m {int(seconds):02d} s")
-    print(f"Objects processed: {total_objects_processed}")
+    print(f"Objects processed: {total_ok}")
 
     if total_err > 0:
-
         cleaned_failed_objects = []
         for obj in failed_objects:
-
             base_name = re.sub(r'_\d+$', '', obj)
             if base_name not in cleaned_failed_objects:
                 cleaned_failed_objects.append(base_name)
@@ -553,47 +360,3 @@ def run_complete_image_processing_workflow(
             print(f"  - {obj_name}")
     
     print(f"Average time per object: {int(avg_minutes):02d} m {int(avg_seconds):02d} s")
-
-    if total_ok > 0:
-        cleanup_intermediate_files(processed_subfolders, object_artifact_suffix_config)
-
-    progress_callback(100)
-    finished_callback()
-
-
-
-def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix="_ruler.tif"):
-    """
-    Remove intermediate processing files from each processed subfolder.
-
-    Args:
-        processed_subfolders: List of subfolder paths that were processed
-        object_artifact_suffix: Suffix used for extracted object files (e.g., "_object.tif")
-        ruler_suffix: Suffix used for ruler files (default: "_ruler.tif")
-    """
-    print("\n--- Cleaning up intermediate files ---")
-    total_removed = 0
-
-    for subfolder_path in processed_subfolders:
-        folder_name = os.path.basename(subfolder_path)
-        files_removed = 0
-
-        for filename in os.listdir(subfolder_path):
-            file_path = os.path.join(subfolder_path, filename)
-            if os.path.isfile(file_path) and (
-                filename.endswith(object_artifact_suffix)
-                or filename.endswith(ruler_suffix)
-                or "temp_isolated_ruler" in filename
-                or "_rawscale.tif" in filename
-            ):
-                try:
-                    os.remove(file_path)
-                    files_removed += 1
-                    total_removed += 1
-                except Exception as e:
-                    print(f"  Error removing {filename}: {e}")
-
-        if files_removed > 0:
-            print(f"  Removed {files_removed} intermediate files from {folder_name}")
-
-    print(f"--- Cleanup complete: {total_removed} files removed ---")

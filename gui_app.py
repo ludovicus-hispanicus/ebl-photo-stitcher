@@ -15,17 +15,14 @@ try:
         DEFAULT_PHOTOGRAPHER,
     )
     from gui_workflow_runner import run_complete_image_processing_workflow
-    import resize_ruler
-    import ruler_detector
-    from stitch_images import process_tablet_subfolder
-    from object_extractor_rembg import extract_and_save_center_object
-    from object_extractor import extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE, DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
-    from remove_background import (
-        create_foreground_mask_from_background as create_foreground_mask,
-        select_contour_closest_to_image_center,
-        select_ruler_like_contour_from_list as select_ruler_like_contour
+    from workflow_imports import (
+        resize_ruler, ruler_detector, extract_and_save_center_object,
+        extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+        create_foreground_mask, select_contour_closest_to_image_center,
+        select_ruler_like_contour, convert_raw_image_to_tiff
     )
-    from raw_processor import convert_raw_image_to_tiff
+    from object_extractor import DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
+    from stitch_images import process_tablet_subfolder
     import stitch_config
     from stitch_config import (
         STITCH_VIEW_PATTERNS_BASE,
