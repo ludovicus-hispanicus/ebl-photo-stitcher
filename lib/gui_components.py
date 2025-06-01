@@ -44,7 +44,6 @@ class UIComponents:
         frame = ttk.LabelFrame(parent, text="Ruler Options", padding="10")
         frame.pack(fill=tk.X, pady=5)
 
-        # Museum selection row
         museum_frame = ttk.Frame(frame)
         museum_frame.pack(fill=tk.X, pady=(0, 5))
         
@@ -59,7 +58,6 @@ class UIComponents:
         museum_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         museum_combo.bind("<<ComboboxSelected>>", on_museum_changed)
 
-        # Ruler position section
         ttk.Label(frame, text="Click ruler location:").pack(anchor=tk.W)
         
         canvas_size = 120
@@ -76,8 +74,7 @@ class UIComponents:
         )
         ruler_canvas.pack(pady=5)
         ruler_canvas.bind("<Button-1>", on_ruler_canvas_click)
-        
-        # Save canvas parameters for later use
+
         canvas_params = {
             'size': canvas_size,
             'padding': padding,
@@ -93,8 +90,7 @@ class UIComponents:
         """Create logo options UI component."""
         frame = ttk.LabelFrame(parent, text="Options", padding="10")
         frame.pack(fill=tk.X, pady=5)
-        
-        # Add measurements checkbox
+
         measurements_frame = ttk.Frame(frame)
         measurements_frame.pack(fill=tk.X, pady=(10, 0))
         
@@ -104,8 +100,7 @@ class UIComponents:
             variable=use_measurements_var
         )
         measurements_checkbox.pack(anchor=tk.W)
-        
-        # Disable checkbox if measurements aren't loaded
+
         if not measurements_loaded:
             measurements_checkbox.state(['disabled'])
             hint_label = ttk.Label(
@@ -116,7 +111,6 @@ class UIComponents:
             )
             hint_label.pack(anchor=tk.W, padx=(20, 0))
 
-        # Add a small debug button (only visible in development)
         if debug_callback and os.path.exists(os.path.join(script_directory, "DEBUG")):
             debug_btn = ttk.Button(
                 measurements_frame, 
@@ -126,7 +120,6 @@ class UIComponents:
             )
             debug_btn.pack(side=tk.RIGHT, padx=(5, 0))
 
-        # Logo options section
         logo_checkbox = ttk.Checkbutton(
             frame, text="Add Logo", variable=add_logo_var, command=toggle_logo_callback)
         logo_checkbox.pack(anchor=tk.W)
@@ -191,8 +184,7 @@ class UIComponents:
             state=tk.DISABLED
         )
         log_text.pack(fill=tk.BOTH, expand=True)
-        
-        # Redirect stdout and stderr to the log text widget
+
         sys.stdout = text_redirector_class(log_text, "stdout")
         sys.stderr = text_redirector_class(log_text, "stderr")
         

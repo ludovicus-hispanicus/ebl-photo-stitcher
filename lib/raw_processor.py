@@ -18,22 +18,18 @@ def apply_lens_correction_if_available(raw_image_obj, image_rgb_array):
         return image_rgb_array
     try:
         database = lensfunpy.Database()
-        
-        # Get camera make and model directly from rawpy object attributes
+
         cam_manufacturer = getattr(raw_image_obj, 'camera_manufacturer', getattr(raw_image_obj, 'make', ''))
         cam_model_name = getattr(raw_image_obj, 'camera_model', getattr(raw_image_obj, 'model', ''))
-        
-        # Get lens information
+
         lens_model_name = ''
 
-        # Attempt 1: from specific lens_make and lens_model attributes on raw_image_obj
         _lens_make_attr = getattr(raw_image_obj, 'lens_make', '')
         _lens_model_attr = getattr(raw_image_obj, 'lens_model', '')
         if _lens_make_attr or _lens_model_attr:
             lens_model_name = f"{_lens_make_attr} {_lens_model_attr}".strip()
 
-        # Attempt 2: from raw_image_obj.lens object (if Attempt 1 failed or produced an empty string)
-        # This part of the logic was mostly fine but is now a fallback.
+
         if not lens_model_name and hasattr(raw_image_obj, 'lens') and raw_image_obj.lens:
             lens_obj = raw_image_obj.lens
             if hasattr(lens_obj, 'name') and lens_obj.name:
@@ -75,26 +71,23 @@ def apply_lens_correction_if_available(raw_image_obj, image_rgb_array):
         
         focal_length = raw_image_obj.focal_length if hasattr(raw_image_obj, 'focal_length') and raw_image_obj.focal_length else found_lens_profile.min_focal
         aperture = raw_image_obj.aperture if hasattr(raw_image_obj, 'aperture') and raw_image_obj.aperture else found_lens_profile.min_aperture
-        # Distance is often not in EXIF for general photos, using a large default.
-        # Some cameras might store it, rawpy might expose it via exif_info if parsed.
+
+
         distance = 1000 
 
         modifier = lensfunpy.Modifier(found_lens_profile, crop_factor, width, height)
-        
-        # Corrected initialize parameters
-        # The pixel_format and mode might vary slightly based on lensfunpy version.
-        # Common is FLOAT, and mode can often be inferred or set to ALL.
+
+
+
         modifier.initialize(focal_length, aperture, distance, pixel_format=lensfunpy.PixelFormat.FLOAT, mode=lensfunpy.CorrectionMode.ALL)
 
         image_float32 = image_rgb_array.astype(np.float32) / (2**raw_image_obj.output_bps - 1)
-        
-        # Apply corrections - check your lensfunpy version for exact method names if these fail
-        # Some versions use apply_แก้ไข()
-        # For clarity, applying geometry first, then color.
+
+
+
         corrected_image_float32 = modifier.apply_geometry_distortion(image_float32)
         corrected_image_float32 = modifier.apply_color_modification(corrected_image_float32)
-        
-        # Convert back to original bit depth using a standard type
+
         corrected_rgb_array = (np.clip(corrected_image_float32, 0.0, 1.0) * (2**raw_image_obj.output_bps -1)).astype(np.uint16)
         print("      Lensfun: Corrections applied.")
         return corrected_rgb_array
@@ -107,7 +100,7 @@ def convert_raw_image_to_tiff(raw_image_input_path, tiff_output_path):
     print(f"  Converting RAW: {os.path.basename(raw_image_input_path)} to TIFF: {os.path.basename(tiff_output_path)}")
     try:
         with rawpy.imread(raw_image_input_path) as raw_data:
-            # First try with auto brightness and scaling
+
             try:
                 params = rawpy.Params(
                     demosaic_algorithm=rawpy.DemosaicAlgorithm.AAHD,
@@ -117,8 +110,7 @@ def convert_raw_image_to_tiff(raw_image_input_path, tiff_output_path):
                     output_bps=16,
                     bright=1.0
                 )
-                
-                # Try to set sharpen threshold if available
+
                 if hasattr(params, 'sharpen_threshold'):
                     params.sharpen_threshold = 3000
                 
@@ -126,7 +118,7 @@ def convert_raw_image_to_tiff(raw_image_input_path, tiff_output_path):
                 
             except Exception as proc_error:
                 print(f"    Warning: First processing attempt failed ({proc_error}), trying with no auto scaling")
-                # Fallback to more conservative processing
+
                 params = rawpy.Params(
                     demosaic_algorithm=rawpy.DemosaicAlgorithm.AAHD,
                     use_camera_wb=True,
@@ -136,7 +128,7 @@ def convert_raw_image_to_tiff(raw_image_input_path, tiff_output_path):
                     bright=1.0
                 )
                 rgb_pixels = raw_data.postprocess(params=params)
-                # Manually scale if needed
+
                 rgb_pixels = (rgb_pixels / rgb_pixels.max() * (2**16-1)).astype(np.uint16)
             
             processed_rgb_pixels = apply_lens_correction_if_available(raw_data, rgb_pixels)

@@ -35,8 +35,7 @@ try:
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
     from measurements_utils import load_measurements_from_json
     from gui_advanced import AdvancedTab
-    
-    # Import new modularized components
+
     from gui_components import UIComponents
     from gui_layout import LayoutManager
     from gui_events import EventHandlers
@@ -44,10 +43,10 @@ try:
     from gui_museum_options import MuseumOptionsManager
     
 except ImportError as e:
-    # This error handling for imports from lib is crucial
-    # Determine the expected absolute path to lib for a more informative error message
+
+
     expected_lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
-    # Attempt to show a Tkinter error box, but have a print fallback if Tkinter itself fails.
+
     try:
         root_err_tk = tk.Tk()
         root_err_tk.withdraw()
@@ -79,7 +78,7 @@ _ORIG_STITCH_INSTITUTION = stitch_config.STITCH_INSTITUTION
 
 class ImageProcessorApp:
     def __init__(self, root_window):
-        # Store constants as instance variables for access from methods
+
         self.RAW_IMAGE_EXTENSION = RAW_IMAGE_EXTENSION
         self.VALID_IMAGE_EXTENSIONS = VALID_IMAGE_EXTENSIONS
         self.RULER_TEMPLATE_1CM_PATH_ASSET = RULER_TEMPLATE_1CM_PATH_ASSET
@@ -90,16 +89,13 @@ class ImageProcessorApp:
         self.OBJECT_ARTIFACT_SUFFIX = OBJECT_ARTIFACT_SUFFIX
         self.HELP_URL = HELP_URL
         self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
-        
-        # Setup root window
+
         self.root = root_window
         self.root.title("eBL Photo Stitcher v0.5")
         self.root.geometry("600x900")
-        
-        # Configuration path
+
         self.config_file_path = os.path.join(get_persistent_config_dir_path(), "gui_config.json")
 
-        # Initialize variables
         self.input_folder_var = tk.StringVar()
         self.ruler_position_var = tk.StringVar() 
         self.photographer_var = tk.StringVar() 
@@ -109,8 +105,7 @@ class ImageProcessorApp:
         self.progress_var = tk.DoubleVar(value=0.0)
         self.use_measurements_var = tk.BooleanVar(value=False)
         self.gradient_width_fraction = 0.5
-        
-        # Load measurements data if available
+
         self.measurements_loaded = False
         self.measurements_dict = {}
         measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
@@ -118,7 +113,6 @@ class ImageProcessorApp:
             self.measurements_dict = load_measurements_from_json(measurements_file)
             self.measurements_loaded = len(self.measurements_dict) > 0
 
-        # Setup UI
         self._setup_icon()
         self._setup_styles()
         self._create_widgets()
@@ -132,7 +126,7 @@ class ImageProcessorApp:
                 self.root.iconphoto(False, tk.PhotoImage(
                     file=ICON_FILE_ASSET_PATH))
         except Exception:
-            # Silently fail if icon can't be loaded
+
             pass
 
     def _setup_styles(self):
@@ -141,19 +135,16 @@ class ImageProcessorApp:
 
     def _create_widgets(self):
         """Create all UI widgets."""
-        # Create the main container frame
+
         mf = ttk.Frame(self.root, padding="10")
         mf.pack(expand=True, fill=tk.BOTH)
-        
-        # Create tab container and help link
+
         self.header_frame, self.notebook = LayoutManager.create_tabs(mf)
         self.help_btn = LayoutManager.create_help_link(self.header_frame, self.HELP_URL)
-        
-        # Create main tab
+
         self.main_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.main_tab, text="Main")
-        
-        # Create UI components
+
         self.folder_frame, self.fe = UIComponents.create_folder_selection_ui(
             self.main_tab, self.input_folder_var, self.browse_folder)
             
@@ -178,8 +169,7 @@ class ImageProcessorApp:
             
         self.log_frame, self.lt = UIComponents.create_log_area_ui(
             self.main_tab, TextRedirector)
-        
-        # Create advanced tab
+
         settings = {
             'gradient_width_fraction': self.gradient_width_fraction,
             'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
@@ -245,7 +235,7 @@ class ImageProcessorApp:
 
     def start_processing_thread(self):
         """Start the processing thread with current settings."""
-        # Prepare processing parameters
+
         processing_params = {
             'input_folder': self.input_folder_var.get(),
             'ruler_position': self.ruler_position_var.get(),
@@ -257,8 +247,7 @@ class ImageProcessorApp:
             'gradient_width': self.advanced_tab.gradient_width_fraction.get(),
             'bg_tolerance': self.advanced_tab.background_color_tolerance.get(),
         }
-        
-        # Start processing
+
         EventHandlers.start_processing_workflow(
             self, run_complete_image_processing_workflow, processing_params)
 
@@ -268,9 +257,9 @@ class ImageProcessorApp:
 
 
 if __name__ == "__main__":
-    # Set up error handling to prevent immediate window closing
+
     try:
-        # Check that all required modules are available
+
         modules_to_check = {
             "resize_ruler_module": resize_ruler,
             "ruler_detector_module": ruler_detector,
@@ -290,11 +279,9 @@ if __name__ == "__main__":
         
         missing = [name for name, mod_or_func in modules_to_check.items()
                   if mod_or_func is None]
-        
-        # Create the root window first
+
         root = tk.Tk()
-        
-        # If modules are missing, show error in the window instead of closing
+
         if missing:
             msg = "ERROR: Critical components missing:\n" + "\n".join(missing) + \
                 "\nEnsure all .py files are in the same directory/Python path and error-free."
@@ -303,31 +290,27 @@ if __name__ == "__main__":
             error_frame.pack(fill=tk.BOTH, expand=True)
             
             ttk.Label(error_frame, text="Application Error", font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
-            
-            # Create scrollable text area for error message
+
             error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
             error_text.pack(fill=tk.BOTH, expand=True, pady=5)
             error_text.insert(tk.END, msg)
             error_text.config(state=tk.DISABLED)
-            
-            # Add scrollbar
+
             scrollbar = ttk.Scrollbar(error_text, command=error_text.yview)
             error_text.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            # Add a button to close the application
+
             ttk.Button(error_frame, text="Close Application", command=root.destroy).pack(pady=10)
             
             print(msg)
         else:
-            # If no modules are missing, start the app normally
+
             app = ImageProcessorApp(root)
-        
-        # Start the main loop even if there are errors
+
         root.mainloop()
         
     except Exception as e:
-        # If an unexpected exception occurs, show it in a window
+
         try:
             import traceback
             root = tk.Tk()
@@ -337,27 +320,24 @@ if __name__ == "__main__":
             error_frame.pack(fill=tk.BOTH, expand=True)
             
             ttk.Label(error_frame, text="Unexpected Error", font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
-            
-            # Create scrollable text area for error message
+
             error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
             error_text.pack(fill=tk.BOTH, expand=True, pady=5)
             
             error_trace = f"An unexpected error occurred:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
             error_text.insert(tk.END, error_trace)
             error_text.config(state=tk.DISABLED)
-            
-            # Add scrollbar
+
             scrollbar = ttk.Scrollbar(error_text, command=error_text.yview)
             error_text.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            # Add a button to close the application
+
             ttk.Button(error_frame, text="Close Application", command=root.destroy).pack(pady=10)
             
             print(error_trace)
             root.mainloop()
         except:
-            # Last resort if even the error window fails
+
             import traceback
             print("CRITICAL ERROR: Application failed to start")
             print(traceback.format_exc())

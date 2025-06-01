@@ -4,34 +4,29 @@ import cv2
 import numpy as np
 import re
 
-# Add parent directory to path if needed to import from lib
 script_directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(script_directory)
 if parent_directory not in sys.path:
     sys.path.insert(0, parent_directory)
 
-# Import configuration and use the centralized function
 from lib.stitch_config import get_extended_intermediate_suffixes
 
 def generate_position_patterns():
     """
     Generate regex patterns for intermediate image positions based on configuration.
     """
-    # Get all intermediate codes including numbered variants using centralized function
+
     intermediate_suffixes = get_extended_intermediate_suffixes()
     all_codes = list(intermediate_suffixes.keys())
-    
-    # Create the regex pattern for _XX_ format (where XX is any intermediate code)
-    # Use a capturing group to extract just the position code
+
+
     code_pattern = r'_(' + '|'.join(all_codes) + r')_'
-    
-    # Keep the original pattern for full intermediate names
-    # This pattern now also matches intermediate_obverse_left_2
+
+
     full_name_pattern = r'intermediate_[^_]+_([^_\.]+)(?:_\d+)?'
     
     return [code_pattern, full_name_pattern]
 
-# Generate position patterns once at module load time
 position_patterns = generate_position_patterns()
 
 def apply_blending_mask_to_intermediate(
@@ -58,50 +53,44 @@ def apply_blending_mask_to_intermediate(
     h, w = image_array.shape[:2]
     if h == 0 or w == 0:
         return image_array
-    
-    # Normalize the position name to a standard format
+
     position = _normalize_position_name(intermediate_position)
-    
-    # Create mask for gradient blending
+
     mask = np.ones((h, w), dtype=np.float32)
-    
-    # Calculate the gradient size
+
     gradient_size_px = {
         "left": int(w * gradient_width_fraction),
         "right": int(w * gradient_width_fraction),
         "top": int(h * gradient_width_fraction),
         "bottom": int(h * gradient_width_fraction)
     }
-    
-    # Apply gradient based on position
+
     if "right" in position:
-        # Blend from left side (towards the object's right side)
+
         for x in range(min(gradient_size_px["right"], w)):
             alpha = x / gradient_size_px["right"]
             mask[:, x] = alpha
             
     elif "left" in position:
-        # Blend from right side (towards the object's left side)
+
         for x in range(min(gradient_size_px["left"], w)):
             alpha = x / gradient_size_px["left"]
             mask[:, w-x-1] = alpha
             
     elif "top" in position:
-        # Blend from bottom side (towards the object's top)
+
         for y in range(min(gradient_size_px["top"], h)):
             alpha = y / gradient_size_px["top"]
             mask[h-y-1, :] = alpha
             
     elif "bottom" in position:
-        # Blend from top side (towards the object's bottom)
+
         for y in range(min(gradient_size_px["bottom"], h)):
             alpha = y / gradient_size_px["bottom"]
             mask[y, :] = alpha
-    
-    # Create background canvas
+
     background = np.full_like(image_array, background_color, dtype=np.uint8)
-    
-    # Apply the mask (3-channel)
+
     mask_3ch = np.stack([mask] * 3, axis=2)
     blended = cv2.convertScaleAbs(
         image_array * mask_3ch + background * (1 - mask_3ch)
@@ -112,11 +101,9 @@ def apply_blending_mask_to_intermediate(
 def _normalize_position_name(position):
     """Normalize various position name formats to a standard form"""
     position = position.lower()
-    
-    # Strip any trailing digits (e.g., 'ol2' -> 'ol')
+
     base_position = re.sub(r'\d+$', '', position)
-    
-    # Handle shorthand codes like 'ol', 'or', etc.
+
     if base_position == 'ol' or base_position == 'rl' or base_position == '07':
         return 'left'
     elif base_position == 'or' or base_position == 'rr' or base_position == '08':
@@ -125,8 +112,7 @@ def _normalize_position_name(position):
         return 'top'
     elif base_position == 'ob' or base_position == 'rb':
         return 'bottom'
-    
-    # Handle full names
+
     if 'left' in position:
         return 'left'
     elif 'right' in position:
@@ -135,8 +121,7 @@ def _normalize_position_name(position):
         return 'top'
     elif 'bottom' in position:
         return 'bottom'
-    
-    # Default if we can't determine
+
     return position
 
 def process_intermediate_image_with_mask(
@@ -155,12 +140,11 @@ def process_intermediate_image_with_mask(
     Returns:
         Path to the processed image (same as input path)
     """
-    # Detect the intermediate position from filename
+
     basename = os.path.basename(input_image_path)
-    
-    # Try to detect position from filename using patterns:
-    # 1. _ot_object.tif, _ob_object.tif, _ol2_object.tif etc. (short position codes with optional numbers)
-    # 2. intermediate_obverse_top, intermediate_obverse_left_2, etc. (full position names with optional numbers)
+
+
+
     position = None
     
     for pattern in position_patterns:
@@ -170,7 +154,7 @@ def process_intermediate_image_with_mask(
             break
     
     if not position:
-        # Check if it might be a numbered variant that our patterns missed
+
         for code in get_extended_intermediate_suffixes().keys():
             if f"_{code}_" in basename.lower():
                 position = code
@@ -182,19 +166,16 @@ def process_intermediate_image_with_mask(
         return input_image_path
     
     print(f"  Applying blending mask to intermediate image: {basename} (position: {position})")
-    
-    # Load the image
+
     image = cv2.imread(input_image_path, cv2.IMREAD_UNCHANGED)
     if image is None:
         print(f"  Error: Failed to load intermediate image: {input_image_path}")
         return input_image_path
-    
-    # Apply the blending mask
+
     blended_image = apply_blending_mask_to_intermediate(
         image, position, background_color, gradient_width_fraction
     )
-    
-    # Save the blended image, overwriting the original
+
     if not cv2.imwrite(input_image_path, blended_image):
         print(f"  Error: Failed to save blended intermediate image: {input_image_path}")
     

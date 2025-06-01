@@ -33,25 +33,22 @@ def svg_to_image(svg_file_path):
         raise ValueError(
             "SVG support is not available. Please install cairosvg module.")
     try:
-        # Convert SVG to PNG in memory with 600 DPI for high resolution
+
         png_data = cairosvg.svg2png(url=svg_file_path, dpi=600)
-        
-        # Convert PNG bytes to numpy array
+
         png_bytes = BytesIO(png_data)
-        
-        # Read PNG bytes with OpenCV
+
         nparr = np.frombuffer(png_bytes.getvalue(), np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
-        
-        # If the image has an alpha channel, convert to RGB
+
         if img.shape[2] == 4:
-            # Get alpha channel
+
             alpha = img[:, :, 3]
-            # Create a white background
+
             white_background = np.ones_like(img[:, :, :3], dtype=np.uint8) * 255
-            # Get RGB channels
+
             rgb = img[:, :, :3]
-            # Alpha blend
+
             alpha_factor = alpha[:, :, np.newaxis].astype(np.float32) / 255.0
             blended = (rgb * alpha_factor + white_background * (1 - alpha_factor)).astype(np.uint8)
             return blended
@@ -91,11 +88,10 @@ def resize_and_save_ruler_template(
         raise NotADirectoryError(
             f"Output directory not found or is not a directory: {output_directory_path}")
 
-    # If custom size is provided, use it directly
     if custom_ruler_size_cm is not None:
         target_physical_width_cm = custom_ruler_size_cm
     else:
-        # For TIF files, determine size from filename as before
+
         template_filename_lower = os.path.basename(
             chosen_digital_ruler_template_path).lower()
         target_physical_width_cm = None
@@ -113,7 +109,6 @@ def resize_and_save_ruler_template(
         raise ValueError(
             f"Calculated target pixel width ({target_pixel_width}) for digital ruler is invalid.")
 
-    # Check if the file is SVG or a regular image
     if chosen_digital_ruler_template_path.lower().endswith('.svg'):
         digital_ruler_image_array = svg_to_image(chosen_digital_ruler_template_path)
     else:

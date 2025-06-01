@@ -4,29 +4,25 @@ import shutil
 import sys
 from collections import defaultdict
 
-# Add parent directory to path if needed to import from lib
 script_directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(script_directory)
 if parent_directory not in sys.path:
     sys.path.insert(0, parent_directory)
 
-# Import configuration
 from lib.stitch_config import STITCH_VIEW_PATTERNS_BASE, get_extended_intermediate_suffixes, MAX_ADDITIONAL_INTERMEDIATES
 
 def generate_subfoldering_pattern():
     """
     Generate regex pattern for filename matching based on config.
     """
-    # Generate all intermediate codes, including numbered versions
+
     all_codes = get_extended_intermediate_suffixes()
-    
-    # Combine these into a regex pattern
-    # Format: (.+)_(\d+|intermediateCode)\.(.+)
+
+
     pattern = r"(.+)_(\d+|" + '|'.join(all_codes) + r")\.(.+)"
     
     return re.compile(pattern, re.IGNORECASE)
 
-# Generate pattern once at module load time
 FILENAME_PATTERN_FOR_SUBFOLDERING = generate_subfoldering_pattern()
 
 def group_and_move_files_to_subfolders(
@@ -49,7 +45,7 @@ def group_and_move_files_to_subfolders(
     Returns:
         Dictionary mapping subfolder names to lists of moved files
     """
-    # Use the dynamically generated pattern if none is provided
+
     if filename_pattern is None:
         filename_pattern = FILENAME_PATTERN_FOR_SUBFOLDERING
         

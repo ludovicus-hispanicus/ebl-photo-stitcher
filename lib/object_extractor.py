@@ -13,7 +13,7 @@ try:
     from image_utils import get_mask_bounding_box
 except ImportError:
     print("FATAL ERROR: object_extractor.py could not import from remove_background.py or image_utils.py.")
-    # Define placeholders that match the names of the functions being imported
+
     def create_foreground_mask_from_background(*args): raise ImportError("create_foreground_mask_from_background missing")
     def select_contour_closest_to_image_center(*args): raise ImportError("select_contour_closest_to_image_center missing")
     def detect_dominant_corner_background_color(*args): return (0,0,0)
@@ -83,27 +83,22 @@ def extract_specific_contour_to_image_array(
     Returns:
         Image array with only the extracted contour
     """
-    # Get bounding rectangle for the contour
+
     x, y, w, h = cv2.boundingRect(contour_to_extract)
-    
-    # Add padding
+
     x = max(0, x - padding_px)
     y = max(0, y - padding_px)
     w = min(source_image_array.shape[1] - x, w + 2 * padding_px)
     h = min(source_image_array.shape[0] - y, h + 2 * padding_px)
-    
-    # Create new image with the background color
+
     result = np.full((h, w, 3), background_color, dtype=np.uint8)
-    
-    # Create mask for the contour
+
     mask = np.zeros((source_image_array.shape[0], source_image_array.shape[1]), dtype=np.uint8)
     cv2.drawContours(mask, [contour_to_extract], -1, 255, -1)
-    
-    # Copy the source image to the new image where the mask is 255
+
     for c in range(3):
         result[:, :, c] = background_color[c]
-        
-        # Get ROI from source and copy it
+
         roi_source = source_image_array[y:y+h, x:x+w, c]
         roi_mask = mask[y:y+h, x:x+w]
         result[:, :, c] = np.where(roi_mask > 0, roi_source, result[:, :, c])
@@ -132,8 +127,7 @@ def extract_and_save_center_object(
             original_image_bgr_array, museum_selection=museum_selection)
     elif source_background_detection_mode == "white": 
         actual_source_background_bgr_color = (255,255,255)
-    
-    # Use the correctly imported function name
+
     initial_foreground_mask = create_foreground_mask_from_background(
         original_image_bgr_array, actual_source_background_bgr_color, background_color_tolerance_value
     )

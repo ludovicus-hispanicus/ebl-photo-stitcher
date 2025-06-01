@@ -14,14 +14,13 @@ def detect_1cm_distance_iraq(image_path):
         float: Pixel distance representing 1 cm, or None if not found.
     """
     try:
-        # 1. Load the image
+
         img = cv2.imread(image_path)
         if img is None:
             print(f"Error: Could not load image at {image_path}")
             return None
         height, width, _ = img.shape
 
-        # 2. Define the region of interest (ROI)
         roi_width = width // 3
         roi_height = height // 3
         roi_x = 0
@@ -33,7 +32,6 @@ def detect_1cm_distance_iraq(image_path):
         end_y_roi = 2 * (roi_h // 4)
         roi = initial_roi[start_y_roi:end_y_roi, 0:roi_w]
 
-        # 3. Preprocess the ROI
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         blurred_roi = cv2.GaussianBlur(gray_roi, (3, 3), 0)
         
@@ -43,13 +41,11 @@ def detect_1cm_distance_iraq(image_path):
 
         edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 
-        # 4. Detect lines in the ROI
         lines_roi = cv2.HoughLinesP(edges_roi, 1, np.pi / 180, 60, minLineLength=30, maxLineGap=10)
         if lines_roi is None or len(lines_roi) < 2:
             print("Error: Could not detect enough lines in the ROI.")
             return None
 
-        # 5. Filter and analyze lines to find tick marks
         potential_ticks_props = [] 
         for line in lines_roi:
             x1, y1, x2, y2 = line[0]
@@ -66,7 +62,6 @@ def detect_1cm_distance_iraq(image_path):
 
         potential_ticks_props.sort(key=lambda tick: tick['x'])
 
-        # Merge close-by vertical lines
         merged_tick_x_values = []
         if not potential_ticks_props:
              return None 
@@ -96,7 +91,6 @@ def detect_1cm_distance_iraq(image_path):
         
         tick_x_coords = merged_tick_x_values 
 
-        # 6. Identify 1cm segments
         num_ticks_for_1cm = 11
         candidate_1cm_distances = []
         
@@ -136,13 +130,12 @@ def detect_1cm_distance_iraq(image_path):
             print(f"Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive.")
             return None
 
-        # 7. Optional: Validate using the "1 cm" text location (primarily for logging if needed)
         one_cm_text_info = find_1cm_text_location(roi) 
         if one_cm_text_info is not None:
-            # Text was found, could add logging here if desired in the future
+
             pass
         else:
-            # Text was not found, could add logging here
+
             pass
 
         return one_cm_distance

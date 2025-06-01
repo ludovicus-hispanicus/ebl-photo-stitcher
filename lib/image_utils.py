@@ -78,11 +78,10 @@ def paste_image_onto_canvas(canvas_array, image_to_paste, top_left_x, top_left_y
     if img_cropped.size == 0: return
 
     target_roi = canvas_array[roi_y1_c:roi_y2_c, roi_x1_c:roi_x2_c]
-    
-    # Ensure shapes match for direct assignment or blending
+
     if target_roi.shape[0] != img_cropped.shape[0] or target_roi.shape[1] != img_cropped.shape[1]:
-        # This can happen if the source image is larger than the available space in the clipped ROI
-        # Adjust the cropped source image to fit the target ROI
+
+
         h_target_roi, w_target_roi = target_roi.shape[:2]
         if h_target_roi <= 0 or w_target_roi <=0 : return
         

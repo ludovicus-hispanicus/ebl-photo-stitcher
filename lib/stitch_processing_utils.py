@@ -79,7 +79,7 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
 
     layout_coords = {}
     y_curr = 50
-    # Store bottom y coordinates separately for alignment reference
+
     view_bottom_y_coords = {}
 
     start_x_row1 = (
@@ -90,7 +90,6 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
         layout_coords["left"] = (current_x_offset_for_lor_row, y_curr)
         current_x_offset_for_lor_row += l_w + view_separation_px
 
-    # X where obverse actually starts
     obverse_x_actual_pos = current_x_offset_for_lor_row
     layout_coords["obverse"] = (obverse_x_actual_pos, y_curr)
     current_x_offset_for_lor_row += obv_w
@@ -117,7 +116,6 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
         layout_coords["ruler"] = (ruler_x_pos, y_curr)
         view_bottom_y_coords["ruler"] = y_curr + rul_h
 
-    # Align with bottom of reverse, or current_y if reverse not present
     y_align_for_rotated = view_bottom_y_coords.get("reverse", y_curr)
 
     for side_key, original_coord_key in [("left", "left"), ("right", "right")]:
@@ -127,8 +125,8 @@ def calculate_stitching_canvas_layout(images_dict, view_separation_px, ruler_top
             if isinstance(bgr_img, np.ndarray) and bgr_img.size > 0:
                 rot_img = cv2.rotate(bgr_img, cv2.ROTATE_180)
                 images_dict[side_key+"_rotated"] = rot_img
-                # Use start_x_row1 for left_rotated's x if original 'left' wasn't placed
-                # Use (obverse_x_actual_pos + obv_w) for right_rotated's x if original 'right' wasn't placed
+
+
                 orig_x_val = layout_coords.get(
                     original_coord_key, (start_x_row1 if side_key == "left" else obverse_x_actual_pos + obv_w, 0))[0]
                 layout_coords[side_key+"_rotated"] = (
@@ -141,7 +139,7 @@ def get_layout_bounding_box(images_dict_with_positions, layout_coordinates):
     min_x, min_y = float('inf'), float('inf')
     max_x, max_y = float('-inf'), float('-inf')
     found_any_placed_element = False
-    # Iterate only over items with (x,y) tuples
+
     for key, (x_coord, y_coord) in layout_coordinates.items():
         image_array = images_dict_with_positions.get(key)
         if isinstance(image_array, np.ndarray) and image_array.size > 0:
@@ -155,7 +153,7 @@ def get_layout_bounding_box(images_dict_with_positions, layout_coordinates):
 
 
 def add_logo_to_image_array(content_img_array, logo_image_path, canvas_bg_color, max_width_fraction, padding_above, padding_below):
-    # (Unchanged)
+
     if not logo_image_path or not os.path.exists(logo_image_path):
         return content_img_array
     logo_original = cv2.imread(logo_image_path, cv2.IMREAD_UNCHANGED)
@@ -183,7 +181,7 @@ def add_logo_to_image_array(content_img_array, logo_image_path, canvas_bg_color,
 
 
 def crop_canvas_to_content_with_margin(image_array_to_crop, background_color_bgr_tuple, margin_px_around):
-    # (Unchanged)
+
     if image_array_to_crop is None or image_array_to_crop.size == 0:
         return image_array_to_crop
     grayscale_image = cv2.cvtColor(image_array_to_crop, cv2.COLOR_BGR2GRAY)

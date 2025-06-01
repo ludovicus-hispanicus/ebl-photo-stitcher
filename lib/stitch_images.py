@@ -45,27 +45,20 @@ def _blend_images_horizontally(base_image_segment, new_image_segment, overlap_px
     base_w = base_image_segment.shape[1]
     new_w = new_image_segment.shape[1]
 
-    # Ensure images are at least overlap_px wide for meaningful blend
     if base_w < overlap_px or new_w < overlap_px:
-        # Not enough width to overlap, just concatenate
+
         return np.concatenate((base_image_segment[:, :base_w-overlap_px if base_w > overlap_px else 0], new_image_segment), axis=1)
 
-
-    # Crop to common height
     base_segment_cropped = base_image_segment[:h, :]
     new_segment_cropped = new_image_segment[:h, :]
-    
-    # Define overlapping regions
+
     base_overlap = base_segment_cropped[:, base_w - overlap_px:]
     new_overlap = new_segment_cropped[:, :overlap_px]
 
-    # Create gradient mask
     alpha = np.linspace(0, 1, overlap_px)[np.newaxis, :, np.newaxis]
-    
-    # Blend
+
     blended_overlap = cv2.addWeighted(base_overlap.astype(np.float32), 1 - alpha, new_overlap.astype(np.float32), alpha, 0).astype(np.uint8)
-    
-    # Combine non-overlapping part of base, blended overlap, and non-overlapping part of new
+
     non_overlap_base = base_segment_cropped[:, :base_w - overlap_px]
     non_overlap_new = new_segment_cropped[:, overlap_px:]
     
@@ -106,12 +99,12 @@ def process_tablet_subfolder(
     subfolder_path, 
     ruler_position, 
     photographer_name, 
-    # Add output_base_name and other necessary parameters from the caller
+
     output_base_name,
     main_input_folder_path,
     pixels_per_cm,
-    stitched_bg_color, # Ensure this is used or default to STITCH_BACKGROUND_COLOR
-    custom_layout=None, # Add if it's consistently passed and used
+    stitched_bg_color,
+    custom_layout=None,
     background_mode="auto", 
     add_logo=False, 
     logo_path=None, 
@@ -124,9 +117,9 @@ def process_tablet_subfolder(
     object_artifact_suffix="_object.tif", 
     progress_callback=None,
     museum_selection="British Museum", 
-    # Consider how view_gap_px_override and final_margin are handled,
-    # they are used in the function body but not passed or defined in the original signature.
-    # For example, they could be retrieved from kwargs or set to defaults.
+
+
+
     **kwargs
 ):
     """
@@ -135,14 +128,12 @@ def process_tablet_subfolder(
     Modified to handle multiple intermediate images.
     """
     print(f"  Stitching for tablet: {output_base_name}")
-    
-    # Setup parameters
-    # Ensure view_gap_px_override is defined, e.g., from kwargs or a default
+
+
     view_gap_px_override = kwargs.get('view_gap_px_override', None) 
     current_view_gap = STITCH_VIEW_GAP_PX if view_gap_px_override is None else view_gap_px_override
     current_ruler_padding = STITCH_RULER_PADDING_PX 
 
-    # Step 1: Load all required images, including intermediate images
     loaded_images = load_images_for_stitching_process(
         subfolder_path, 
         output_base_name, 
@@ -155,41 +146,35 @@ def process_tablet_subfolder(
         if not loaded_images: 
              raise ValueError("No images loaded for stitching, cannot proceed.")
 
-    # Step 2: Process images for consistency
     resized_images = resize_tablet_views_for_layout(loaded_images)
-    
-    # Step 3: Calculate layout for placing images
-    # Ensure custom_layout is available if passed
+
+
     canvas_w, canvas_h, layout_coords, images_to_paste_dict = calculate_stitching_layout(
         resized_images, current_view_gap, current_ruler_padding, custom_layout=custom_layout
     )
-    
-    # Step 4: Create initial canvas and place images
-    # Ensure stitched_bg_color is available
+
+
     final_image = create_stitched_canvas(
         canvas_w, canvas_h, 
         images_to_paste_dict, 
         layout_coords, 
-        stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR, # Use a default if None
+        stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR,
         custom_layout=custom_layout
     )
-    
-    # Step 5: Apply enhancements (logo, margins)
+
     if add_logo and logo_path:
         final_image = add_logo_to_image_array(
             final_image, logo_path, stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR,
             STITCH_LOGO_MAX_WIDTH_FRACTION, STITCH_LOGO_PADDING_ABOVE, STITCH_LOGO_PADDING_BELOW
         )
-    
-    # Ensure final_margin is defined, e.g., from kwargs or a default like STITCH_FINAL_MARGIN_PX
+
     final_margin_to_use = kwargs.get('final_margin', STITCH_FINAL_MARGIN_PX)
     final_image = crop_canvas_to_content_with_margin(final_image, stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR, final_margin_to_use)
-    
-    # Step 6: Save output images and apply metadata
-    # Ensure main_input_folder_path and pixels_per_cm (for output_dpi) are available
-    output_dpi = STITCH_OUTPUT_DPI # Assuming pixels_per_cm might be used to calculate this if needed, or it's fixed
-    if pixels_per_cm and pixels_per_cm > 0: # Example: if DPI should be dynamic
-        output_dpi = int(pixels_per_cm * 2.54) # pixels/cm to DPI (pixels/inch)
+
+
+    output_dpi = STITCH_OUTPUT_DPI
+    if pixels_per_cm and pixels_per_cm > 0:
+        output_dpi = int(pixels_per_cm * 2.54)
 
     tiff_path, jpg_path = save_stitched_output(
         final_image, 
@@ -208,12 +193,11 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
     Handles single images and sequences of intermediate images with gradient blending.
     Then crop to content bounds.
     """
-    # Create initial canvas with background color
+
     canvas = np.full((canvas_height, canvas_width, 3), bg_color, dtype=np.uint8)
     
     processed_view_segments = {}
 
-    # Place each image or sequence onto the canvas
     for view_key, coords_tuple in layout_coords.items():
         image_data = images_dict.get(view_key) 
         if image_data is None: 
@@ -245,8 +229,7 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
             img_to_paste = image_data
             paste_image_onto_canvas(canvas, img_to_paste, start_x, start_y)
             processed_view_segments[view_key] = (img_to_paste, start_x, start_y)
-    
-    # Crop canvas to actual content based on the originally calculated layout_coords and image dimensions
+
     min_x_coord, min_y_coord = canvas_width, canvas_height
     max_x_coord, max_y_coord = 0, 0
     
@@ -259,7 +242,6 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
         max_x_coord = max(max_x_coord, seg_x + seg_img.shape[1])
         max_y_coord = max(max_y_coord, seg_y + seg_img.shape[0])
 
-    # Ensure valid bounds
     min_x_coord = max(0, min_x_coord)
     min_y_coord = max(0, min_y_coord)
     max_x_coord = min(canvas_width, max_x_coord)
@@ -276,15 +258,14 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
     """
     Main function to stitch tablet images together.
     """
-    # Process intermediate images
+
     intermediate_positions = [
         "intermediate_obverse_top", "intermediate_obverse_bottom", 
         "intermediate_obverse_left", "intermediate_obverse_right",
         "intermediate_reverse_top", "intermediate_reverse_bottom",
         "intermediate_reverse_left", "intermediate_reverse_right"
     ]
-    
-    # Add handling for intermediate images
+
     def place_intermediate_images(canvas, loaded_images, main_positions, spacing, relationships):
         """
         Place intermediate images between main views with gradient blending
@@ -296,7 +277,7 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
             spacing: Spacing between views
             relationships: Dictionary mapping intermediate positions to related main views
         """
-        # Process each intermediate image
+
         for inter_pos, (main_view, side_view) in relationships.items():
             if inter_pos not in loaded_images or loaded_images[inter_pos] is None:
                 continue
@@ -304,100 +285,82 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
             if main_view not in main_positions or side_view not in main_positions:
                 print(f"      Warning: Cannot place {inter_pos}, missing main views")
                 continue
-            
-            # Get the intermediate image
+
             inter_img = loaded_images[inter_pos]
-            
-            # Get positions of the two views this intermediate connects
+
             main_pos = main_positions[main_view]
             side_pos = main_positions[side_view]
-            
-            # Calculate placement position based on the position of the main views
-            # For top/bottom intermediates
+
+
             if "top" in inter_pos or "bottom" in inter_pos:
-                # Calculate center position between the two views
+
                 mid_x = (main_pos[0] + main_pos[2]//2 + side_pos[0] + side_pos[2]//2) // 2
                 
                 if "top" in inter_pos:
-                    # Place between main view and top
+
                     mid_y = (main_pos[1] + side_pos[1] + side_pos[3]) // 2
                 else:
-                    # Place between main view and bottom
+
                     mid_y = (main_pos[1] + main_pos[3] + side_pos[1]) // 2
-                    
-                # Resize intermediate image to appropriate size
+
                 inter_width = min(main_pos[2], side_pos[2])
                 inter_height = max(spacing, inter_img.shape[0] * inter_width // inter_img.shape[1])
                 resized_inter = cv2.resize(inter_img, (inter_width, inter_height))
-                
-                # Calculate placement coordinates
+
                 place_x = mid_x - inter_width // 2
                 place_y = mid_y - inter_height // 2
-                
-            # For left/right intermediates
+
             else:
-                # Calculate center position between the two views
+
                 mid_y = (main_pos[1] + main_pos[3]//2 + side_pos[1] + side_pos[3]//2) // 2
                 
                 if "left" in inter_pos:
-                    # Place between main view and left
+
                     mid_x = (main_pos[0] + side_pos[0] + side_pos[2]) // 2
                 else:
-                    # Place between main view and right
+
                     mid_x = (main_pos[0] + main_pos[2] + side_pos[0]) // 2
-                
-                # Resize intermediate image to appropriate size
+
                 inter_height = min(main_pos[3], side_pos[3])
                 inter_width = max(spacing, inter_img.shape[1] * inter_height // inter_img.shape[0])
                 resized_inter = cv2.resize(inter_img, (inter_width, inter_height))
-                
-                # Calculate placement coordinates
+
                 place_x = mid_x - inter_width // 2
                 place_y = mid_y - inter_height // 2
-        
-            # Create gradient blend mask for smooth transitions
+
             mask = np.zeros((resized_inter.shape[0], resized_inter.shape[1]), dtype=np.uint8)
-            
-            # Gradient width as 25% of image dimension
+
             gradient_width_x = max(1, resized_inter.shape[1] // 4)
             gradient_width_y = max(1, resized_inter.shape[0] // 4)
-            
-            # Create mask with gradient edges
+
             mask.fill(255)
-            
-            # Apply horizontal gradients (left/right edges)
+
             for x in range(gradient_width_x):
                 opacity = int(255 * x / gradient_width_x)
                 mask[:, x] = opacity
                 mask[:, resized_inter.shape[1]-x-1] = opacity
-                
-            # Apply vertical gradients (top/bottom edges)
+
             for y in range(gradient_width_y):
                 opacity = int(255 * y / gradient_width_y)
                 mask[y, :] = np.minimum(mask[y, :], opacity)
                 mask[resized_inter.shape[0]-y-1, :] = np.minimum(mask[resized_inter.shape[0]-y-1, :], opacity)
-        
-            # Convert mask to 3-channel for alpha blending
+
             mask_3ch = cv2.merge([mask, mask, mask])
-            
-            # Ensure placement coordinates are within canvas bounds
+
             place_x = max(0, min(place_x, canvas.shape[1] - resized_inter.shape[1]))
             place_y = max(0, min(place_y, canvas.shape[0] - resized_inter.shape[0]))
-            
-            # Place intermediate image with gradient mask on canvas
+
             blend_region = canvas[place_y:place_y+resized_inter.shape[0], place_x:place_x+resized_inter.shape[1]]
-            
-            # Check if region sizes match
+
             if blend_region.shape[:2] != resized_inter.shape[:2]:
                 print(f"      Warning: Region size mismatch for {inter_pos}, adjusting...")
-                # Adjust to the smaller of the two sizes
+
                 h = min(blend_region.shape[0], resized_inter.shape[0])
                 w = min(blend_region.shape[1], resized_inter.shape[1])
                 blend_region = canvas[place_y:place_y+h, place_x:place_x+w]
                 resized_inter = resized_inter[:h, :w]
                 mask_3ch = mask_3ch[:h, :w]
-        
-            # Apply the alpha blend
+
             for c in range(3):
                 blend_region[:, :, c] = (resized_inter[:, :, c] * mask_3ch[:, :, c] // 255 + 
                                        blend_region[:, :, c] * (255 - mask_3ch[:, :, c]) // 255)
@@ -406,10 +369,8 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
     
         return canvas
 
-    # Create a dictionary to track all the main image positions
     main_positions = {}
-    
-    # Add positions of main views if they exist
+
     if "obverse" in loaded_image_dict and loaded_image_dict["obverse"] is not None:
         main_positions["obverse"] = (obverse_x, obverse_y, 
                                      loaded_image_dict["obverse"].shape[1],
@@ -439,15 +400,12 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
         main_positions["right"] = (right_x, right_y,
                                   loaded_image_dict["right"].shape[1],
                                   loaded_image_dict["right"].shape[0])
-    
-    # Now call the place_intermediate_images function
+
     print("      Placing intermediate images...")
     main_canvas = place_intermediate_images(main_canvas, loaded_image_dict, main_positions, view_gap_px, intermediate_relationships)
 
-    # Continue with ruler placement and the rest of the stitching process
-    # ... existing code for ruler and logo placement ...
 
-# Then modify the function that arranges the images in the layout
+
 def create_composite_stitched_image(object_images, intermediate_images, ruler_image, logo_image=None):
     """
     Create a stitched composite of all object views including intermediates.
@@ -475,28 +433,23 @@ def calculate_layout_with_intermediates(main_images, intermediates, ruler_img, l
     Returns:
         Dict of image positions and composite canvas dimensions
     """
-    # Extract dimensions of main views
+
     dimensions = {}
     for view, img in main_images.items():
         if img:
             dimensions[view] = (img.width, img.height)
-    
-    # Extract dimensions of all intermediates
+
     for edge, img_list in intermediates.items():
         for i, img in enumerate(img_list):
             if img:
                 dimensions[f"{edge}_{i+1}"] = (img.width, img.height)
-    
-    # Calculate the positioning of all elements
-    # (complex layout algorithm would go here)
-    
-    # The key change is handling variable numbers of intermediate images
-    # between main views, adjusting their positions accordingly
-    
-    # For each edge (e.g., "obverse_right"), we need to:
-    # 1. Count how many intermediate images exist
-    # 2. Evenly space them between the main views
-    # 3. Adjust the overall canvas size to accommodate all images
-    
-    # Return the position map and canvas dimensions
+
+
+
+
+
+
+
+
+
     return positions, canvas_width, canvas_height

@@ -39,7 +39,7 @@ def organize_project_subfolders(source_folder_path: str, image_extensions: tuple
             print("   Images found in root folder. Running file organization...")
         elif not subfolders_with_images:
             print("   No images in root and no subfolders with images found. Running file organization...")
-        # If images_in_root and subfolders_with_images, organization will also run.
+
         
         try:
             organized_paths = organize_files_func(source_folder_path)
@@ -52,7 +52,7 @@ def organize_project_subfolders(source_folder_path: str, image_extensions: tuple
                 print("   No image sets found after attempting organization.")
         except Exception as e:
             print(f"   ERROR during file organization: {e}")
-            # Re-raise or handle as appropriate for the workflow to stop
+
             raise
             
     return processed_subfolders
@@ -144,26 +144,20 @@ def determine_pixels_per_cm_from_measurement(
         create_foreground_mask_from_background,
         select_contour_closest_to_image_center
     )
-    
-    # Load the image
+
     img = cv2.imread(image_path)
     if img is None:
         raise ValueError(f"Failed to load image: {image_path}")
-    
-    # Get image dimensions
+
     img_height, img_width = img.shape[:2]
-    
-    # If we should extract the object first
+
     if should_extract_object:
         print(f"   Extracting object for measurement calculation from {os.path.basename(image_path)}")
-        
-        # Detect background color
+
         bg_color = detect_dominant_corner_background_color(img)
-        
-        # Create foreground mask
+
         fg_mask = create_foreground_mask_from_background(img, bg_color, bg_color_tolerance)
-        
-        # Get main object contour
+
         main_contour = select_contour_closest_to_image_center(
             img, fg_mask, min_contour_area_as_image_fraction=0.001
         )
@@ -172,18 +166,15 @@ def determine_pixels_per_cm_from_measurement(
             print(f"   Warning: Could not detect main object in {os.path.basename(image_path)}")
             print(f"   Using full image width instead: {img_width}px / {tablet_width_cm}cm")
             return img_width / tablet_width_cm
-        
-        # Get bounding rectangle of the object
+
         x, y, w, h = cv2.boundingRect(main_contour)
-        
-        # Use object width rather than full image width
+
         obj_width_px = w
         print(f"   Extracted object width: {obj_width_px}px (full image: {img_width}px)")
-        
-        # Calculate pixels per cm using object width
+
         pixels_per_cm = obj_width_px / tablet_width_cm
     else:
-        # Use full image width (original behavior)
+
         pixels_per_cm = img_width / tablet_width_cm
     
     print(f"   Calculated from measurement: {obj_width_px if should_extract_object else img_width}px / {tablet_width_cm}cm = {pixels_per_cm:.2f} px/cm")

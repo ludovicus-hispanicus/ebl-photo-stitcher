@@ -2,12 +2,7 @@
 import os
 import json
 
-# Moved from gui_app.py
 CONFIG_FILENAME_ONLY = "gui_config.json"
-# get_persistent_config_dir_path will be imported from gui_utils in gui_app.py
-# For now, to make this module self-contained for definition, we might need a placeholder
-# or assume it's passed in, or that this module is only called by gui_app.py which handles the path.
-# Let's assume functions here will receive the full config_file_path.
 
 DEFAULT_PHOTOGRAPHER = "Ivor Kerslake"
 
@@ -33,7 +28,7 @@ def load_config(config_file_path):
             print(f"Config loaded: {config_file_path}")
     except Exception as e:
         print(f"Warn: Could not load config from {config_file_path}: {e}")
-        # Return empty or default if load fails, calling function will handle defaults
+
     return config_data
 
 def get_default_config_values():

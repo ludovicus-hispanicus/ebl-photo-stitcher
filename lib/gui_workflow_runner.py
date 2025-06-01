@@ -16,9 +16,9 @@ try:
         MAX_ADDITIONAL_INTERMEDIATES,
         get_extended_intermediate_suffixes
     )
-    # Import the new rembg-based function
+
     from object_extractor_rembg import extract_and_save_center_object
-    # Keep extract_specific_contour_to_image_array for ruler extraction
+
     from object_extractor import extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
     from remove_background import (
         create_foreground_mask_from_background as create_foreground_mask,
@@ -28,10 +28,10 @@ try:
         detect_dominant_corner_background_color
     )
     from raw_processor import convert_raw_image_to_tiff
-    # Renamed for clarity
+
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_files_func
     import ruler_detector_iraq_museum
-    # Import new helper functions
+
     from workflow_processing_steps import organize_project_subfolders, determine_ruler_image_for_scaling
     from measurements_utils import load_measurements_from_json, get_tablet_width_from_measurements
     from workflow_processing_steps import determine_pixels_per_cm_from_measurement
@@ -52,7 +52,7 @@ except ImportError as e:
     organize_files_func = lambda *a: []
     organize_project_subfolders = lambda *a, **kw: []
     determine_ruler_image_for_scaling = lambda *a, **kw: None
-    # Placeholder for new import
+
     detect_dominant_corner_background_color = lambda *a, **kw: (0, 0, 0)
 
 
@@ -80,11 +80,10 @@ def run_complete_image_processing_workflow(
     measurements_dict=None,
     gradient_width_fraction=0.5
 ):
-    # Start timing
+
     start_time = time.time()
     total_objects_processed = 0
-    
-    # Track objects that failed processing
+
     failed_objects = []
     
     if background_color_tolerance is None:
@@ -95,7 +94,6 @@ def run_complete_image_processing_workflow(
     print(f"Workflow started for folder: {source_folder_path}")
     progress_callback(2)
 
-    # Prepare all image extensions for checking
     image_extensions_tuple = tuple(ext.lower() for ext in image_extensions_config) + \
         ((raw_ext_config.lower(),) if isinstance(raw_ext_config, str)
          else tuple(r_ext.lower() for r_ext in raw_ext_config))
@@ -104,7 +102,7 @@ def run_complete_image_processing_workflow(
         processed_subfolders = organize_project_subfolders(
             source_folder_path, image_extensions_tuple, organize_files_func)
     except Exception as e_org:
-        # If organize_project_subfolders re-raises, it's caught here.
+
         print(f"   Workflow halted due to error during file organization: {e_org}")
         progress_callback(100)
         finished_callback()
@@ -124,10 +122,8 @@ def run_complete_image_processing_workflow(
     total_ok, total_err, cr2_conv_total = 0, 0, 0
     prog_per_folder = 85.0 / num_folders if num_folders > 0 else 0
 
-    # Generate all intermediate codes as a dictionary
     intermediate_suffix_patterns = get_extended_intermediate_suffixes()
-    
-    # Process each subfolder
+
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
         print(f"Processing Subfolder {i+1}/{num_folders}: {subfolder_name_item}")
@@ -147,7 +143,6 @@ def run_complete_image_processing_workflow(
             if f_name.lower().endswith(image_extensions_tuple):
                 image_files_for_layout.append(os.path.join(subfolder_path_item, f_name))
 
-        # No complex layout dialog, use automatic suffix detection instead
         custom_layout_config = None
         if len(image_files_for_layout) > 6:
             print(
@@ -203,7 +198,6 @@ def run_complete_image_processing_workflow(
             print("-" * 40)
             continue
 
-        # Check if we should use measurements first
         px_cm_val = None
         measurements_used = False
 
@@ -212,7 +206,7 @@ def run_complete_image_processing_workflow(
                 subfolder_path_item, measurements_dict)
             if tablet_width_cm is not None and tablet_width_cm > 0:
                 try:
-                    # Use the improved function that extracts the object first
+
                     px_cm_val = determine_pixels_per_cm_from_measurement(
                         ruler_for_scale_fp,
                         tablet_width_cm,
@@ -226,7 +220,6 @@ def run_complete_image_processing_workflow(
                     print(f"   Error using measurement from database: {e}")
                     px_cm_val = None
 
-        # If we're not using measurements or the measurement approach failed, use the existing ruler detection
         if px_cm_val is None:
             try:
                 curr_scale_fp, is_temp_s_file = ruler_for_scale_fp, False
@@ -256,13 +249,12 @@ def run_complete_image_processing_workflow(
             except Exception as e:
                 print(f"   Error during ruler scale detection: {e}")
 
-                # Try to use measurements as fallback if not already attempted
                 if not measurements_used and measurements_dict:
                     tablet_width_cm = get_tablet_width_from_measurements(
                         subfolder_path_item, measurements_dict)
                     if tablet_width_cm is not None and tablet_width_cm > 0:
                         try:
-                            # Use the improved function that extracts the object first
+
                             px_cm_val = determine_pixels_per_cm_from_measurement(
                                 ruler_for_scale_fp,
                                 tablet_width_cm,
@@ -446,20 +438,17 @@ def run_complete_image_processing_workflow(
                 progress_callback(
                     current_prog_base + accumulated_sub_progress + current_other_views_prog)
 
-            # Process intermediate images for this subfolder
             print(f"   Processing intermediate images for {subfolder_name_item}...")
-            # Use the centralized function to get all intermediate suffixes
+
             intermediate_suffix_patterns = get_extended_intermediate_suffixes()
 
             for img_file in all_files_in_subfolder:
                 if not img_file.lower().endswith(image_extensions_tuple):
                     continue
 
-                # Skip files that have already been processed
                 if object_artifact_suffix_config in img_file:
                     continue
 
-                # Check if file has any of the intermediate suffixes
                 file_basename = os.path.basename(img_file)
                 is_intermediate = False
                 matched_suffix = None
@@ -475,12 +464,10 @@ def run_complete_image_processing_workflow(
                     print(f"   Processing intermediate image: {file_basename} (suffix: {matched_suffix})")
                     img_path = os.path.join(subfolder_path_item, file_basename)
 
-                    # Make sure we haven't already processed this intermediate image
                     if img_path in other_views_to_process_list or img_path == ruler_for_scale_fp:
                         print(f"   Skipping {file_basename} as it was already processed as a main view")
                         continue
 
-                    # Process the current image
                     curr_path, is_temp = img_path, False
                     if img_path.lower().endswith(raw_ext_config):
                         tmp_path = os.path.join(
@@ -489,7 +476,6 @@ def run_complete_image_processing_workflow(
                         curr_path, is_temp = tmp_path, True
                         cr2_conv_total += 1
 
-                    # Extract object from intermediate image
                     extract_and_save_center_object(
                         curr_path,
                         source_background_detection_mode=object_extraction_bg_mode,
@@ -540,29 +526,24 @@ def run_complete_image_processing_workflow(
     print(
         f"\n--- Processing Complete ---\nRAW converted: {cr2_conv_total}\nSets OK: {total_ok}\nSets Error: {total_err}\n")
 
-    # Calculate total objects processed (count all successfully processed objects)
     total_objects_processed = total_ok
-    
-    # Calculate time statistics
+
     end_time = time.time()
     elapsed_seconds = end_time - start_time
     minutes, seconds = divmod(elapsed_seconds, 60)
-    
-    # Calculate average time per object
+
     avg_seconds = elapsed_seconds / total_objects_processed if total_objects_processed > 0 else 0
     avg_minutes, avg_seconds = divmod(avg_seconds, 60)
-    
-    # Print the statistics
+
     print(f"\n--- Processing Statistics ---")
     print(f"Time elapsed: {int(minutes):02d} m {int(seconds):02d} s")
     print(f"Objects processed: {total_objects_processed}")
-    
-    # Display failed objects with their names
+
     if total_err > 0:
-        # Extract the base name without numerical suffixes like _01, _02
+
         cleaned_failed_objects = []
         for obj in failed_objects:
-            # Remove suffix patterns like _01, _02, etc.
+
             base_name = re.sub(r'_\d+$', '', obj)
             if base_name not in cleaned_failed_objects:
                 cleaned_failed_objects.append(base_name)
@@ -572,15 +553,13 @@ def run_complete_image_processing_workflow(
             print(f"  - {obj_name}")
     
     print(f"Average time per object: {int(avg_minutes):02d} m {int(avg_seconds):02d} s")
-    
-    # Add the cleanup step here
+
     if total_ok > 0:
         cleanup_intermediate_files(processed_subfolders, object_artifact_suffix_config)
 
     progress_callback(100)
     finished_callback()
 
-# Add this function to gui_workflow_runner.py
 
 
 def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix="_ruler.tif"):

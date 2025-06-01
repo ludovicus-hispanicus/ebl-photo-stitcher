@@ -19,8 +19,7 @@ def load_measurements_from_json(json_path):
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
-        # Create a lookup dictionary mapping _id to measurements
+
         measurements_dict = {}
         for item in data:
             if "_id" in item and "width" in item:
@@ -44,11 +43,10 @@ def extract_tablet_id_from_path(folder_path):
     Returns:
         Extracted tablet ID or None if not found
     """
-    # Extract the last folder name
+
     folder_name = os.path.basename(folder_path)
-    
-    # Look for patterns like "BM_1234" or just "1234"
-    # You may need to adjust this regex based on your actual file naming conventions
+
+
     match = re.search(r'(?:BM[_\s])?(\d+)', folder_name, re.IGNORECASE)
     if match:
         return match.group(1)
@@ -69,8 +67,7 @@ def get_tablet_width_from_measurements(folder_path, measurements_dict):
     tablet_id = extract_tablet_id_from_path(folder_path)
     if not tablet_id:
         return None
-    
-    # Try different ID formats (add more as needed based on your data)
+
     potential_ids = [
         tablet_id,
         f"BM.{tablet_id}",
@@ -107,8 +104,7 @@ def is_valid_measurements_file(file_path):
             
         if not isinstance(data, list) or len(data) == 0:
             return False
-            
-        # Check at least the first item has required fields
+
         return "_id" in data[0] and "width" in data[0]
     except:
         return False

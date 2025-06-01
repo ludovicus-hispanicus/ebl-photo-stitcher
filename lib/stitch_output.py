@@ -25,7 +25,6 @@ def save_stitched_output(
     if not isinstance(final_image, np.ndarray) or final_image.size == 0:
         raise ValueError("Invalid image for saving")
 
-    # Define output paths and directories
     final_tiff_output_dir = os.path.join(main_input_folder_path, FINAL_TIFF_SUBFOLDER_NAME)
     final_jpg_output_dir = os.path.join(main_input_folder_path, FINAL_JPG_SUBFOLDER_NAME)
     os.makedirs(final_tiff_output_dir, exist_ok=True)
@@ -34,27 +33,22 @@ def save_stitched_output(
     tiff_filepath = os.path.join(final_tiff_output_dir, f"{output_base_name}.tif")
     jpg_filepath = os.path.join(final_jpg_output_dir, f"{output_base_name}.jpg")
 
-    # Save TIFF
     print(f"    Attempting to save TIFF to: {tiff_filepath}")
     tiff_save_success = save_tiff_output(final_image, tiff_filepath)
 
-    # Save JPG
     print(f"    Attempting to save JPG to: {jpg_filepath}")
     jpg_save_success = save_jpg_output(final_image, jpg_filepath)
 
-    # ADD A SMALL DELAY before attempting metadata operations
     if tiff_save_success or jpg_save_success:
         print("    Brief pause before metadata application...")
         time.sleep(0.5)
 
-    # Apply metadata to successfully saved files
     saved_files = []
     if tiff_save_success:
         saved_files.append(tiff_filepath)
     if jpg_save_success:
         saved_files.append(jpg_filepath)
-    
-    # Set metadata for all successfully saved files
+
     for file_path in saved_files:
         print(f"    Setting metadata for: {os.path.basename(file_path)}...")
         apply_all_metadata(
@@ -67,8 +61,7 @@ def save_stitched_output(
             usage_terms_text=stitch_config.STITCH_XMP_USAGE_TERMS,
             image_dpi=output_dpi
         )
-    
-    # Print message for skipped files
+
     if not tiff_save_success:
         print(f"    Skipping metadata for TIFF as save failed: {os.path.basename(tiff_filepath)}")
     if not jpg_save_success:
@@ -80,7 +73,7 @@ def save_stitched_output(
 def save_tiff_output(image, output_path):
     """Save image as TIFF format using primary and fallback methods."""
     try:
-        # Convert BGR to RGB for imageio
+
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if image_rgb is None or image_rgb.size == 0:
             raise ValueError("Color conversion failed")
@@ -90,8 +83,7 @@ def save_tiff_output(image, output_path):
         return True
     except Exception as e_imageio: 
         print(f"ERROR saving stitched TIFF with imageio: {e_imageio}")
-        
-        # Fallback to OpenCV
+
         try: 
             print(f"      Attempting fallback cv2.imwrite for TIFF: {output_path}")
             if not cv2.imwrite(output_path, image):

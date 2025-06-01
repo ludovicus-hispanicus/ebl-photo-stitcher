@@ -6,8 +6,7 @@ class MuseumOptionsManager:
     @staticmethod
     def configure_museum_settings(museum_selection, stitch_config, original_credit, original_institution):
         """Configure museum-specific settings for stitching."""
-        
-        # Configure credit line based on museum
+
         if museum_selection == "Iraq Museum":
             stitch_config.STITCH_CREDIT_LINE = (
                 "Cuneiform Artefacts of Iraq in Context (CAIC), "
@@ -18,7 +17,6 @@ class MuseumOptionsManager:
         else:
             stitch_config.STITCH_CREDIT_LINE = original_credit
 
-        # Configure institution based on museum
         if museum_selection == "Iraq Museum":
             stitch_config.STITCH_INSTITUTION = "The Iraq Museum – eBL Project"
         elif museum_selection == "Non-eBL Ruler (VAM)":

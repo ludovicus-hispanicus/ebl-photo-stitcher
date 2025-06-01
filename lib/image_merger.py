@@ -5,8 +5,8 @@ try:
     from image_utils import paste_image_onto_canvas, convert_to_bgr_if_needed
 except ImportError:
     print("ERROR: image_merger.py - Could not import from image_utils.py")
-    # Depending on how this module is used, you might want to sys.exit(1)
-    # For now, allow it to be imported but functions might fail if image_utils is missing.
+
+
     paste_image_onto_canvas = None 
     convert_to_bgr_if_needed = None
 
