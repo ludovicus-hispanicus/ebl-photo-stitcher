@@ -153,8 +153,78 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     if rul_w > 0:
         potential_canvas_widths.append(rul_w)
 
-    canvas_w = max(potential_canvas_widths) if potential_canvas_widths else 800
-    canvas_w += 200
+    central_column_width = max(obv_w, rev_w) if has_obverse and has_reverse else (
+        obv_w if has_obverse else rev_w)
+
+    base_canvas_width = 0
+    if has_left:
+        base_canvas_width += l_w + view_gap_px
+    base_canvas_width += central_column_width
+    if has_right:
+        base_canvas_width += view_gap_px + r_w
+
+    ruler_extra_width = 0
+    if rul_w > 0 and rul_w > central_column_width:
+        ruler_extra_width = rul_w - central_column_width
+
+    base_canvas_w = max(potential_canvas_widths) if potential_canvas_widths else 800
+
+    min_canvas_for_ruler = 0
+    if rul_w > 0:
+        if has_left and has_right:
+
+            min_canvas_for_ruler = l_w + view_gap_px + rul_w + view_gap_px + r_w + 200
+        elif has_left:
+
+            min_canvas_for_ruler = l_w + view_gap_px + rul_w + 200
+        elif has_right:
+
+            min_canvas_for_ruler = 200 + rul_w + view_gap_px + r_w
+        else:
+
+            min_canvas_for_ruler = rul_w + 200
+
+    canvas_w = max(base_canvas_w + 200, min_canvas_for_ruler)
+
+    if has_left:
+        if ruler_extra_width > 0:
+
+            extra_space_each_side = ruler_extra_width // 2
+            central_column_x = l_w + view_gap_px + extra_space_each_side
+
+            ruler_left = central_column_x + (central_column_width - rul_w) // 2
+            ruler_right = ruler_left + rul_w
+
+            if ruler_left < 100:
+                adjustment = 100 - ruler_left
+                central_column_x += adjustment
+                canvas_w = max(canvas_w, ruler_right + adjustment + 100)
+            elif ruler_right > canvas_w - 100:
+                adjustment = ruler_right - (canvas_w - 100)
+                canvas_w += adjustment
+        else:
+            central_column_x = l_w + view_gap_px
+    else:
+        if ruler_extra_width > 0:
+
+            tentative_central_x = (canvas_w - central_column_width) // 2
+            ruler_left = tentative_central_x + (central_column_width - rul_w) // 2
+            ruler_right = ruler_left + rul_w
+
+            if ruler_left < 100:
+                central_column_x = 100 + (rul_w - central_column_width) // 2
+
+                new_ruler_right = central_column_x + (central_column_width + rul_w) // 2
+                canvas_w = max(canvas_w, new_ruler_right + 100)
+            elif ruler_right > canvas_w - 100:
+                needed_width = ruler_right + 100
+                canvas_w = max(canvas_w, needed_width)
+                central_column_x = tentative_central_x
+            else:
+                central_column_x = tentative_central_x
+        else:
+
+            central_column_x = (canvas_w - central_column_width) // 2
 
     coords = {}
     rotation_flags = {}
@@ -382,12 +452,20 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     if images_dict.get("ruler") is not None and rul_h > 0:
         y_curr += ruler_padding_px - view_gap_px
 
-        if rul_w > central_column_width:
+        ruler_x = central_column_x + (central_column_width - rul_w) // 2
 
-            ruler_x = (canvas_w - rul_w) // 2
-        else:
-
+        if ruler_x < 0:
+            adjustment = -ruler_x + 50
+            canvas_w += adjustment
+            central_column_x += adjustment
             ruler_x = central_column_x + (central_column_width - rul_w) // 2
+
+            for key in coords:
+                if coords[key] and len(coords[key]) >= 2:
+                    coords[key] = (coords[key][0] + adjustment, coords[key][1])
+        elif ruler_x + rul_w > canvas_w:
+            adjustment = (ruler_x + rul_w) - canvas_w + 50
+            canvas_w += adjustment
 
         coords["ruler"] = (ruler_x, y_curr)
         y_curr += rul_h
