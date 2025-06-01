@@ -93,7 +93,7 @@ def detect_1cm_distance_iraq(image_path):
         
         trimmed_roi = linear_contrast_roi[top_margin:bottom_margin, left_margin:right_margin]
         
-        alpha_contrast = 2.0
+        alpha_contrast = 1.0
         beta_brightness = 0
         contrast_adjusted_roi = cv2.convertScaleAbs(trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
         
