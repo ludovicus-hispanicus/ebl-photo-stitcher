@@ -1,23 +1,70 @@
 import os
-import shutil
 import re
+import shutil
+import sys
 from collections import defaultdict
 
-FILENAME_PATTERN_FOR_SUBFOLDERING = re.compile(r"(.+)_(\d+|[or][rltb])\.(.+)", re.IGNORECASE)
+# Add parent directory to path if needed to import from lib
+script_directory = os.path.dirname(os.path.abspath(__file__))
+parent_directory = os.path.dirname(script_directory)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
 
-def group_and_move_files_to_subfolders(source_directory_path):
-    if not os.path.isdir(source_directory_path):
-        print(f"Error: Source directory '{source_directory_path}' not found.")
+# Import configuration
+from lib.stitch_config import STITCH_VIEW_PATTERNS_BASE, get_extended_intermediate_suffixes, MAX_ADDITIONAL_INTERMEDIATES
+
+def generate_subfoldering_pattern():
+    """
+    Generate regex pattern for filename matching based on config.
+    """
+    # Generate all intermediate codes, including numbered versions
+    all_codes = get_extended_intermediate_suffixes()
+    
+    # Combine these into a regex pattern
+    # Format: (.+)_(\d+|intermediateCode)\.(.+)
+    pattern = r"(.+)_(\d+|" + '|'.join(all_codes) + r")\.(.+)"
+    
+    return re.compile(pattern, re.IGNORECASE)
+
+# Generate pattern once at module load time
+FILENAME_PATTERN_FOR_SUBFOLDERING = generate_subfoldering_pattern()
+
+def group_and_move_files_to_subfolders(
+    folder_path, 
+    filename_pattern=None,
+    extensions=('.jpg', '.jpeg', '.tif', '.tiff', '.png', '.cr2', '.CR2'),
+    recursive=False,
+    dry_run=False
+):
+    """
+    Group files in a folder based on their common prefix (ID) and move them into subfolders.
+    
+    Args:
+        folder_path: Path to the folder containing files to organize
+        filename_pattern: Optional regex pattern for filename matching (defaults to FILENAME_PATTERN_FOR_SUBFOLDERING)
+        extensions: Tuple of file extensions to include
+        recursive: Whether to process subfolders recursively
+        dry_run: If True, only prints planned actions without moving files
+    
+    Returns:
+        Dictionary mapping subfolder names to lists of moved files
+    """
+    # Use the dynamically generated pattern if none is provided
+    if filename_pattern is None:
+        filename_pattern = FILENAME_PATTERN_FOR_SUBFOLDERING
+        
+    if not os.path.isdir(folder_path):
+        print(f"Error: Source directory '{folder_path}' not found.")
         return []
 
     files_grouped_by_base_name = defaultdict(list)
     matched_files_count = 0
     skipped_files_count = 0
 
-    for item_name in os.listdir(source_directory_path):
-        item_full_path = os.path.join(source_directory_path, item_name)
+    for item_name in os.listdir(folder_path):
+        item_full_path = os.path.join(folder_path, item_name)
         if os.path.isfile(item_full_path):
-            match_result = FILENAME_PATTERN_FOR_SUBFOLDERING.match(item_name)
+            match_result = filename_pattern.match(item_name)
             if match_result:
                 base_name_key = match_result.group(1)
                 files_grouped_by_base_name[base_name_key].append(item_full_path)
@@ -26,12 +73,12 @@ def group_and_move_files_to_subfolders(source_directory_path):
                 skipped_files_count += 1
     
     if not files_grouped_by_base_name:
-        print(f"No files in '{source_directory_path}' matched pattern for subfoldering.")
+        print(f"No files in '{folder_path}' matched pattern for subfoldering.")
         return []
 
     processed_subfolder_paths = []
     for base_name_key, list_of_file_paths in files_grouped_by_base_name.items():
-        target_subfolder_path = os.path.join(source_directory_path, base_name_key)
+        target_subfolder_path = os.path.join(folder_path, base_name_key)
         try:
             os.makedirs(target_subfolder_path, exist_ok=True)
             

@@ -30,7 +30,6 @@ try:
     from stitch_config import (
         STITCH_VIEW_PATTERNS_BASE,
         STITCH_VIEW_PATTERNS_WITH_EXT,
-        INTERMEDIATE_SUFFIX_BASE,
         INTERMEDIATE_SUFFIX_WITH_EXT,
     )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders

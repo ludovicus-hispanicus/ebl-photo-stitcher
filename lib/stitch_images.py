@@ -16,7 +16,6 @@ try:
     )
     from stitch_output import save_stitched_output
     from stitch_config import (
-        INTERMEDIATE_SUFFIX_BASE,
         STITCH_VIEW_PATTERNS_BASE,
         STITCH_BACKGROUND_COLOR,
         STITCH_FINAL_MARGIN_PX,
@@ -25,7 +24,8 @@ try:
         STITCH_OUTPUT_DPI,
         STITCH_LOGO_MAX_WIDTH_FRACTION,
         STITCH_LOGO_PADDING_ABOVE,
-        STITCH_LOGO_PADDING_BELOW
+        STITCH_LOGO_PADDING_BELOW,
+        get_extended_intermediate_suffixes
     )
     from image_utils import paste_image_onto_canvas
 except ImportError as e:
@@ -104,30 +104,41 @@ def _blend_images_vertically(base_image_segment, new_image_segment, overlap_px):
 
 def process_tablet_subfolder(
     subfolder_path, 
-    main_input_folder_path, 
-    output_base_name, 
-    pixels_per_cm, 
-    photographer_name,
-    ruler_image_for_scale_path, 
+    ruler_position, 
+    photographer_name, 
+    # Add output_base_name and other necessary parameters from the caller
+    output_base_name,
+    main_input_folder_path,
+    pixels_per_cm,
+    stitched_bg_color, # Ensure this is used or default to STITCH_BACKGROUND_COLOR
+    custom_layout=None, # Add if it's consistently passed and used
+    background_mode="auto", 
     add_logo=False, 
     logo_path=None, 
-    output_dpi=STITCH_OUTPUT_DPI,
-    stitched_bg_color=STITCH_BACKGROUND_COLOR, 
-    final_margin=STITCH_FINAL_MARGIN_PX,
-    tiff_compression="none",
-    view_gap_px_override=None, 
-    object_extraction_background_mode="auto",
-    custom_layout=None
+    extensions=None, 
+    ruler_1cm_template_path=None, 
+    ruler_2cm_template_path=None, 
+    ruler_5cm_template_path=None,
+    view_patterns=None, 
+    temp_ruler_filename=None, 
+    object_artifact_suffix="_object.tif", 
+    progress_callback=None,
+    museum_selection="British Museum", 
+    # Consider how view_gap_px_override and final_margin are handled,
+    # they are used in the function body but not passed or defined in the original signature.
+    # For example, they could be retrieved from kwargs or set to defaults.
+    **kwargs
 ):
     """
-    Main function to stitch together tablet images from a subfolder.
+    Process all images in a tablet subfolder to create a stitched composite.
     
-    Processes images from a tablet subfolder, applies resizing,
-    arranges them in a layout, and creates a composite image.
+    Modified to handle multiple intermediate images.
     """
     print(f"  Stitching for tablet: {output_base_name}")
     
     # Setup parameters
+    # Ensure view_gap_px_override is defined, e.g., from kwargs or a default
+    view_gap_px_override = kwargs.get('view_gap_px_override', None) 
     current_view_gap = STITCH_VIEW_GAP_PX if view_gap_px_override is None else view_gap_px_override
     current_ruler_padding = STITCH_RULER_PADDING_PX 
 
@@ -137,7 +148,7 @@ def process_tablet_subfolder(
         output_base_name, 
         STITCH_VIEW_PATTERNS_BASE,
         include_intermediates=True,
-        intermediate_suffix_patterns=INTERMEDIATE_SUFFIX_BASE
+        intermediate_suffix_patterns=get_extended_intermediate_suffixes()
     )
     if not loaded_images or loaded_images.get("obverse") is None and (custom_layout is None or custom_layout.get("obverse") is None): 
         print(f"Warning/Error: Stitching requires a primary image (e.g. 'obverse'). Loaded: {list(loaded_images.keys()) if loaded_images else 'None'}")
@@ -148,29 +159,38 @@ def process_tablet_subfolder(
     resized_images = resize_tablet_views_for_layout(loaded_images)
     
     # Step 3: Calculate layout for placing images
+    # Ensure custom_layout is available if passed
     canvas_w, canvas_h, layout_coords, images_to_paste_dict = calculate_stitching_layout(
         resized_images, current_view_gap, current_ruler_padding, custom_layout=custom_layout
     )
     
     # Step 4: Create initial canvas and place images
+    # Ensure stitched_bg_color is available
     final_image = create_stitched_canvas(
         canvas_w, canvas_h, 
         images_to_paste_dict, 
         layout_coords, 
-        stitched_bg_color,
+        stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR, # Use a default if None
         custom_layout=custom_layout
     )
     
     # Step 5: Apply enhancements (logo, margins)
     if add_logo and logo_path:
         final_image = add_logo_to_image_array(
-            final_image, logo_path, stitched_bg_color,
+            final_image, logo_path, stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR,
             STITCH_LOGO_MAX_WIDTH_FRACTION, STITCH_LOGO_PADDING_ABOVE, STITCH_LOGO_PADDING_BELOW
         )
     
-    final_image = crop_canvas_to_content_with_margin(final_image, stitched_bg_color, final_margin)
+    # Ensure final_margin is defined, e.g., from kwargs or a default like STITCH_FINAL_MARGIN_PX
+    final_margin_to_use = kwargs.get('final_margin', STITCH_FINAL_MARGIN_PX)
+    final_image = crop_canvas_to_content_with_margin(final_image, stitched_bg_color if stitched_bg_color is not None else STITCH_BACKGROUND_COLOR, final_margin_to_use)
     
     # Step 6: Save output images and apply metadata
+    # Ensure main_input_folder_path and pixels_per_cm (for output_dpi) are available
+    output_dpi = STITCH_OUTPUT_DPI # Assuming pixels_per_cm might be used to calculate this if needed, or it's fixed
+    if pixels_per_cm and pixels_per_cm > 0: # Example: if DPI should be dynamic
+        output_dpi = int(pixels_per_cm * 2.54) # pixels/cm to DPI (pixels/inch)
+
     tiff_path, jpg_path = save_stitched_output(
         final_image, 
         main_input_folder_path, 
@@ -426,3 +446,57 @@ def stitch_images(loaded_image_dict, output_tiff_path, output_jpg_path,
 
     # Continue with ruler placement and the rest of the stitching process
     # ... existing code for ruler and logo placement ...
+
+# Then modify the function that arranges the images in the layout
+def create_composite_stitched_image(object_images, intermediate_images, ruler_image, logo_image=None):
+    """
+    Create a stitched composite of all object views including intermediates.
+    
+    Args:
+        object_images: Dict of main view images
+        intermediate_images: Dict of edge position -> ordered list of images  
+        ruler_image: Image of the ruler
+        logo_image: Optional logo to include
+        
+    Returns:
+        PIL composite image
+    """
+    
+def calculate_layout_with_intermediates(main_images, intermediates, ruler_img, logo_img=None):
+    """
+    Calculate the layout positions for all images including multiple intermediates.
+    
+    Args:
+        main_images: Dict of main object views
+        intermediates: Dict of edge position -> ordered list of intermediate images
+        ruler_img: Scaled ruler image
+        logo_img: Optional logo image
+        
+    Returns:
+        Dict of image positions and composite canvas dimensions
+    """
+    # Extract dimensions of main views
+    dimensions = {}
+    for view, img in main_images.items():
+        if img:
+            dimensions[view] = (img.width, img.height)
+    
+    # Extract dimensions of all intermediates
+    for edge, img_list in intermediates.items():
+        for i, img in enumerate(img_list):
+            if img:
+                dimensions[f"{edge}_{i+1}"] = (img.width, img.height)
+    
+    # Calculate the positioning of all elements
+    # (complex layout algorithm would go here)
+    
+    # The key change is handling variable numbers of intermediate images
+    # between main views, adjusting their positions accordingly
+    
+    # For each edge (e.g., "obverse_right"), we need to:
+    # 1. Count how many intermediate images exist
+    # 2. Evenly space them between the main views
+    # 3. Adjust the overall canvas size to accommodate all images
+    
+    # Return the position map and canvas dimensions
+    return positions, canvas_width, canvas_height

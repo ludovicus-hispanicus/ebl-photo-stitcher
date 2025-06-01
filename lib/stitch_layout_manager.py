@@ -1,19 +1,21 @@
-# Coordinate layout calculation for tablet image components
 import cv2
 import numpy as np
+import re
 try:
     from image_utils import resize_image_maintain_aspect, convert_to_bgr_if_needed
-except ImportError:
-    print("FATAL ERROR: stitch_layout_manager.py cannot import from image_utils.py")
+    from stitch_config import (
+        STITCH_VIEW_GAP_PX,
+        STITCH_RULER_PADDING_PX,
+        get_extended_intermediate_suffixes  # Add this import
+    )
+    from blending_mask_applier import generate_position_patterns
+except ImportError as e:
+    print(f"FATAL ERROR: stitch_layout_manager.py cannot import: {e}")
     def resize_image_maintain_aspect(*args): raise ImportError("resize_image_maintain_aspect missing")
     def convert_to_bgr_if_needed(img): return img
-    
-from stitch_config import (
-    STITCH_VIEW_GAP_PX,
-    STITCH_RULER_PADDING_PX
-    # Assuming INTERMEDIATE_VIEW_RELATIONSHIPS might be defined here,
-    # but for now, we'll use common key name patterns.
-)
+    # Mock the function we need
+    def get_extended_intermediate_suffixes(): return {}
+    def generate_position_patterns(): return [r'_([a-z]{2}\d*)_', r'intermediate_[^_]+_([^_\.]+)(?:_\d+)?']
 
 def get_image_dimension(image_or_list, axis_index, blend_overlap_px=0):
     """Get height or width dimension of an image or a list of images (calculating post-blend dimension for lists)."""
@@ -150,20 +152,22 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     Returns canvas dimensions, coordinate map, and the input images_dict.
     
     The central column is arranged in this order:
-    - Intermediate Obverse Top (_ot)
+    - Intermediate Obverse Top (_ot, _ot2, _ot3...)
     - Obverse (_01)
-    - Intermediate Obverse Bottom (_ob)
+    - Intermediate Obverse Bottom (_ob, _ob2, _ob3...)
     - Bottom (_04)
-    - Intermediate Reverse Top (_rt)
+    - Intermediate Reverse Top (_rt, _rt2, _rt3...)
     - Reverse (_02)
-    - Intermediate Reverse Bottom (_rb)
+    - Intermediate Reverse Bottom (_rb, _rb2, _rb3...)
     - Top (_03)
     - Ruler
     
+    Horizontal arrangement follows the pattern:
+    ol3 → ol2 → ol → obverse → or → or2 → or3
+    rl3 → rl2 → rl → reverse → rr → rr2 → rr3
+    
     If exactly 4 images are provided without standard naming, they will be interpreted as:
     obverse, reverse, top, and bottom views in order of appearance.
-    
-    The sides (left, right) are aligned horizontally with obverse/reverse.
     """
     # Auto-detect and assign standard views if exactly 4 images are provided
     standard_keys = ["obverse", "reverse", "top", "bottom"]
@@ -241,6 +245,117 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
             if h > 0 and w > 0:
                 intermediate_dims[key] = {"h": h, "w": w, "data": img_data}
 
+    # Get all possible intermediate positions from our centralized function
+    extended_intermediate_positions = get_extended_intermediate_suffixes()
+    
+    # Group intermediates by their base position (ignoring numbers)
+    grouped_intermediates = {
+        "obverse_top": [],    # ot, ot2, ot3...
+        "obverse_bottom": [], # ob, ob2, ob3...
+        "obverse_left": [],   # ol, ol2, ol3...
+        "obverse_right": [],  # or, or2, or3...
+        "reverse_top": [],    # rt, rt2, rt3...
+        "reverse_bottom": [], # rb, rb2, rb3...
+        "reverse_left": [],   # rl, rl2, rl3...
+        "reverse_right": [],  # rr, rr2, rr3...
+    }
+    
+    # Process all intermediates and group them
+    for key in intermediate_dims:
+        position_found = False
+        suffix_number = 1  # Default for unnumbered (base) intermediates
+        
+        # Try to detect position from the key using centralized patterns
+        matched_position = None
+        
+        position_patterns = generate_position_patterns()
+        for pattern in position_patterns:
+            match = re.search(pattern, key.lower())
+            if match:
+                matched_position = match.group(1)
+                
+                # Check if this is a numbered variant
+                if len(matched_position) > 2 and matched_position[-1].isdigit():
+                    # Extract the suffix number from the matched position
+                    suffix_match = re.search(r'([a-z]{2})(\d+)', matched_position)
+                    if suffix_match:
+                        base_code = suffix_match.group(1)  # e.g., "ol"
+                        suffix_number = int(suffix_match.group(2))  # e.g., 2
+                        matched_position = base_code
+                
+                # Map the short code to a position group
+                for position_name in grouped_intermediates.keys():
+                    if position_name.endswith(matched_position.replace("l", "_left").replace("r", "_right").replace("t", "_top").replace("b", "_bottom")):
+                        grouped_intermediates[position_name].append({
+                            "key": key,
+                            "number": suffix_number,
+                            "dims": intermediate_dims[key]
+                        })
+                        position_found = True
+                        break
+                    
+                    # Also try direct full name matching
+                    if position_name == matched_position:
+                        grouped_intermediates[position_name].append({
+                            "key": key,
+                            "number": suffix_number,
+                            "dims": intermediate_dims[key]
+                        })
+                        position_found = True
+                        break
+                
+                if position_found:
+                    break
+        
+        # If still not matched through patterns, try a more direct approach
+        if not position_found:
+            # First try exact position names (for base intermediates without numbers)
+            for position_name in grouped_intermediates.keys():
+                full_position_name = f"intermediate_{position_name}"
+                if key == full_position_name:
+                    # Found a base intermediate (e.g. intermediate_obverse_left)
+                    grouped_intermediates[position_name].append({
+                        "key": key,
+                        "number": suffix_number,
+                        "dims": intermediate_dims[key]
+                    })
+                    position_found = True
+                    break
+            
+            if not position_found:
+                # Then try numbered variants with explicit pattern
+                match = re.match(r'intermediate_([a-z]+_[a-z]+)_(\d+)', key)
+                if match:
+                    position_part = match.group(1)  # e.g. "obverse_left", "reverse_right"
+                    suffix_number = int(match.group(2))  # e.g. 2, 3
+                    
+                    if position_part in grouped_intermediates:
+                        grouped_intermediates[position_part].append({
+                            "key": key,
+                            "number": suffix_number,
+                            "dims": intermediate_dims[key]
+                        })
+                        position_found = True
+                
+        # If still not matched, use a fallback approach
+        if not position_found:
+            print(f"      Layout: Trying fallback detection for: {key}")
+            # Try to extract meaningful position data
+            for position_name in grouped_intermediates.keys():
+                if position_name in key:
+                    print(f"      Layout: Found intermediate with non-standard naming: {key}")
+                    grouped_intermediates[position_name].append({
+                        "key": key,
+                        "number": 99,  # Use high number to place it at outer edge
+                        "dims": intermediate_dims[key]
+                    })
+                    position_found = True
+                    break
+    
+    # Sort each group by number (higher numbers should be farther from the main view)
+    for group_key in grouped_intermediates:
+        grouped_intermediates[group_key].sort(key=lambda x: x["number"])
+    
     # Define keys for intermediates
     int_obv_t_key = "intermediate_obverse_top"
     int_obv_b_key = "intermediate_obverse_bottom"
@@ -289,24 +404,86 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
     if len(rev_row_elements) > 1:
         rev_row_width += view_gap_px * (len(rev_row_elements) - 1)
     
-    # Calculate canvas width
-    potential_canvas_widths = [obv_row_width, rev_row_width]
-    
+    # Calculate canvas width by considering all possible row widths
+    potential_canvas_widths = []
+
+    # Calculate obverse row width with ALL intermediates
+    obv_row_full_width = 0
+    if has_left:
+        obv_row_full_width += l_w + view_gap_px
+
+    # Add ALL intermediate_obverse_left variants (ol, ol2, ol3)
+    for left_int in grouped_intermediates["obverse_left"]:
+        int_w = left_int["dims"]["w"]
+        obv_row_full_width += int_w + view_gap_px
+
+    if has_obverse:
+        obv_row_full_width += obv_w + view_gap_px
+
+    # Add ALL intermediate_obverse_right variants (or, or2, or3)
+    for right_int in grouped_intermediates["obverse_right"]:
+        int_w = right_int["dims"]["w"]
+        obv_row_full_width += int_w + view_gap_px
+
+    if has_right:
+        obv_row_full_width += r_w
+
+    # Subtract extra gap if there are any elements
+    if obv_row_full_width > 0 and (has_left or has_obverse or has_right or grouped_intermediates["obverse_left"] or grouped_intermediates["obverse_right"]):
+        obv_row_full_width -= view_gap_px
+
+    potential_canvas_widths.append(obv_row_full_width)
+
+    # Calculate reverse row width with ALL intermediates
+    rev_row_full_width = 0
+    if has_left:
+        rev_row_full_width += l_w + view_gap_px
+
+    # Add ALL intermediate_reverse_left variants (rl, rl2, rl3)
+    for left_int in grouped_intermediates["reverse_left"]:
+        int_w = left_int["dims"]["w"]
+        rev_row_full_width += int_w + view_gap_px
+
+    if has_reverse:
+        rev_row_full_width += rev_w + view_gap_px
+
+    # Add ALL intermediate_reverse_right variants (rr, rr2, rr3)
+    for right_int in grouped_intermediates["reverse_right"]:
+        int_w = right_int["dims"]["w"]
+        rev_row_full_width += int_w + view_gap_px
+
+    if has_right:
+        rev_row_full_width += r_w
+
+    # Subtract extra gap if there are any elements
+    if rev_row_full_width > 0 and (has_left or has_reverse or has_right or grouped_intermediates["reverse_left"] or grouped_intermediates["reverse_right"]):
+        rev_row_full_width -= view_gap_px
+
+    potential_canvas_widths.append(rev_row_full_width)
+
     # Add widths of other centered elements
-    if has_obverse and int_obv_t_key in intermediate_dims:
-        potential_canvas_widths.append(intermediate_dims[int_obv_t_key]["w"])
-    if has_obverse and int_obv_b_key in intermediate_dims:
-        potential_canvas_widths.append(intermediate_dims[int_obv_b_key]["w"])
-    if has_reverse and int_rev_t_key in intermediate_dims:
-        potential_canvas_widths.append(intermediate_dims[int_rev_t_key]["w"])
-    if has_reverse and int_rev_b_key in intermediate_dims:
-        potential_canvas_widths.append(intermediate_dims[int_rev_b_key]["w"])
+    # Top intermediates (ot, ot2, ot3)
+    for top_int in grouped_intermediates["obverse_top"]:
+        potential_canvas_widths.append(top_int["dims"]["w"])
+
+    # Bottom intermediates (ob, ob2, ob3)  
+    for bottom_int in grouped_intermediates["obverse_bottom"]:
+        potential_canvas_widths.append(bottom_int["dims"]["w"])
+
+    # Reverse top intermediates (rt, rt2, rt3)
+    for top_int in grouped_intermediates["reverse_top"]:
+        potential_canvas_widths.append(top_int["dims"]["w"])
+
+    # Reverse bottom intermediates (rb, rb2, rb3)
+    for bottom_int in grouped_intermediates["reverse_bottom"]:
+        potential_canvas_widths.append(bottom_int["dims"]["w"])
+
     if b_w > 0: potential_canvas_widths.append(b_w)
     if t_w > 0: potential_canvas_widths.append(t_w)
     if rul_w > 0: potential_canvas_widths.append(rul_w)
-    
+
     canvas_w = max(potential_canvas_widths) if potential_canvas_widths else 800
-    canvas_w += 200
+    canvas_w += 200  # Add some padding
     
     # Layout calculation
     coords = {}
@@ -344,38 +521,76 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
         coords[int_obv_t_key] = (int_x, y_curr)
         y_curr += int_data["h"] + view_gap_px
     
-    # --- Step 2: Place Obverse Row (Left, Int_Obv_L, Obverse, Int_Obv_R, Right) ---
+    # --- Step 2: Place Obverse Row with all intermediates in order ---
     obv_row_y = y_curr
+    
+    # Calculate total width of all elements in the obverse row
+    # Including all intermediate_obverse_left_X and intermediate_obverse_right_X variants
+    obv_row_width = 0
+    obv_row_elements = []
+    
+    # Add left side
+    if has_left:
+        obv_row_elements.append({"key": "left", "width": l_w})
+        obv_row_width += l_w + view_gap_px
+    
+    # Add all intermediate_obverse_left variants in reverse order (ol3, ol2, ol)
+    left_intermediates = grouped_intermediates["obverse_left"]
+    left_intermediates.sort(key=lambda x: x["number"], reverse=True)  # Highest number first
+    
+    for left_int in left_intermediates:
+        int_key = left_int["key"]
+        int_w = left_int["dims"]["w"]
+        obv_row_elements.append({"key": int_key, "width": int_w})
+        obv_row_width += int_w + view_gap_px
+    
+    # Add obverse
+    if has_obverse:
+        obv_row_elements.append({"key": "obverse", "width": obv_w})
+        obv_row_width += obv_w + view_gap_px
+    
+    # Add all intermediate_obverse_right variants in order (or, or2, or3)
+    right_intermediates = grouped_intermediates["obverse_right"]
+    right_intermediates.sort(key=lambda x: x["number"])  # Lowest number first
+    
+    for right_int in right_intermediates:
+        int_key = right_int["key"]
+        int_w = right_int["dims"]["w"]
+        obv_row_elements.append({"key": int_key, "width": int_w})
+        obv_row_width += int_w + view_gap_px
+    
+    # Add right side
+    if has_right:
+        obv_row_elements.append({"key": "right", "width": r_w})
+        obv_row_width += r_w
+    
+    # Subtract extra gap
+    if obv_row_width > 0:
+        obv_row_width -= view_gap_px
+    
+    # Calculate starting position for the obverse row
     current_x = (canvas_w - obv_row_width) // 2
     
-    if has_left:
-        coords["left"] = (current_x, obv_row_y)
-        rotation_flags["left"] = False
-        current_x += l_w + view_gap_px
-    
-    if has_int_obv_l:
-        int_data = intermediate_dims[int_obv_l_key]
-        # Vertically center against obverse height
-        int_y = obv_row_y + (obv_h - int_data["h"]) // 2
-        coords[int_obv_l_key] = (current_x, int_y)
-        current_x += int_data["w"] + view_gap_px
-    
-    if has_obverse:
-        coords["obverse"] = (current_x, obv_row_y)
-        central_column_x = current_x
-        central_column_width = obv_w
-        current_x += obv_w + view_gap_px
-    
-    if has_int_obv_r:
-        int_data = intermediate_dims[int_obv_r_key]
-        # Vertically center against obverse height
-        int_y = obv_row_y + (obv_h - int_data["h"]) // 2
-        coords[int_obv_r_key] = (current_x, int_y)
-        current_x += int_data["w"] + view_gap_px
-    
-    if has_right:
-        coords["right"] = (current_x, obv_row_y)
-        rotation_flags["right"] = False
+    # Place all elements in the obverse row
+    for element in obv_row_elements:
+        key = element["key"]
+        width = element["width"]
+        
+        if key == "obverse":
+            coords["obverse"] = (current_x, obv_row_y)
+            central_column_x = current_x  # Save the central column position
+            central_column_width = obv_w
+        elif "intermediate" in key:
+            img_h = intermediate_dims[key]["h"]
+            # Vertically center against obverse height
+            int_y = obv_row_y + (obv_h - img_h) // 2
+            coords[key] = (current_x, int_y)
+        else:
+            # Left or right
+            coords[key] = (current_x, obv_row_y)
+            rotation_flags[key] = False
+        
+        current_x += width + view_gap_px
     
     y_curr += obv_h + view_gap_px
     
@@ -399,49 +614,107 @@ def calculate_stitching_layout(images_dict, view_gap_px=STITCH_VIEW_GAP_PX, rule
         coords[int_rev_t_key] = (int_x, y_curr)
         y_curr += int_data["h"] + view_gap_px
     
-    # --- Step 6: Place Reverse Row (Left, Int_Rev_L, Reverse, Int_Rev_R, Right) ---
+    # --- Step 6: Place Reverse Row with all intermediates in order ---
     rev_row_y = y_curr
     
-    # Adjust reverse x position to align its center with obverse's center
+    # Calculate the alignment offset to center reverse under obverse
     reverse_center_offset = 0
     if has_reverse and has_obverse:
-        # Calculate centers of obverse and reverse
-        obverse_center = central_column_x + obv_w // 2
-        reverse_center = rev_x + rev_w // 2
-        reverse_center_offset = obverse_center - reverse_center
+        obverse_center = central_column_x + central_column_width // 2
+        reverse_center = obverse_center  # We want to align reverse center with obverse center
     
-    current_x = (canvas_w - rev_row_width) // 2 + reverse_center_offset
+    # Calculate total width of all elements in the reverse row
+    rev_row_width = 0
+    rev_row_elements = []
     
+    # Add left side
     if has_left:
-        # Rotated left aligned with reverse row
-        rotated_left_y = rev_row_y + (rev_h - l_h) // 2
-        coords["left_rotated"] = (current_x, rotated_left_y)
-        rotation_flags["left_rotated"] = True
-        current_x += l_w + view_gap_px
+        rev_row_elements.append({"key": "left_rotated", "width": l_w})
+        rev_row_width += l_w + view_gap_px
     
-    if has_int_rev_l:
-        int_data = intermediate_dims[int_rev_l_key]
-        # Vertically center against reverse height
-        int_y = rev_row_y + (rev_h - int_data["h"]) // 2
-        coords[int_rev_l_key] = (current_x, int_y)
-        current_x += int_data["w"] + view_gap_px
+    # Add all intermediate_reverse_left variants in reverse order (rl3, rl2, rl)
+    left_intermediates = grouped_intermediates["reverse_left"]
+    left_intermediates.sort(key=lambda x: x["number"], reverse=True)  # Highest number first
     
+    for left_int in left_intermediates:
+        int_key = left_int["key"]
+        int_w = left_int["dims"]["w"]
+        rev_row_elements.append({"key": int_key, "width": int_w})
+        rev_row_width += int_w + view_gap_px
+    
+    # Add reverse
     if has_reverse:
-        coords["reverse"] = (current_x, rev_row_y)
-        current_x += rev_w + view_gap_px
+        rev_row_elements.append({"key": "reverse", "width": rev_w})
+        rev_row_width += rev_w + view_gap_px
     
-    if has_int_rev_r:
-        int_data = intermediate_dims[int_rev_r_key]
-        # Vertically center against reverse height
-        int_y = rev_row_y + (rev_h - int_data["h"]) // 2
-        coords[int_rev_r_key] = (current_x, int_y)
-        current_x += int_data["w"] + view_gap_px
+    # Add all intermediate_reverse_right variants in order (rr, rr2, rr3)
+    right_intermediates = grouped_intermediates["reverse_right"]
+    right_intermediates.sort(key=lambda x: x["number"])  # Lowest number first
     
+    for right_int in right_intermediates:
+        int_key = right_int["key"]
+        int_w = right_int["dims"]["w"]
+        rev_row_elements.append({"key": int_key, "width": int_w})
+        rev_row_width += int_w + view_gap_px
+    
+    # Add right side
     if has_right:
-        # Rotated right aligned with reverse row
-        rotated_right_y = rev_row_y + (rev_h - r_h) // 2
-        coords["right_rotated"] = (current_x, rotated_right_y)
-        rotation_flags["right_rotated"] = True
+        rev_row_elements.append({"key": "right_rotated", "width": r_w})
+        rev_row_width += r_w
+    
+    # Subtract extra gap
+    if rev_row_width > 0:
+        rev_row_width -= view_gap_px
+        
+    # Calculate offset to center the reverse row under the obverse
+    reverse_row_offset = (canvas_w - rev_row_width) // 2
+    if has_reverse and has_obverse:
+        # Find the position of reverse in the row
+        reverse_pos = 0
+        for idx, elem in enumerate(rev_row_elements):
+            if elem["key"] == "reverse":
+                reverse_pos = idx
+                break
+        
+        # Calculate the x position where reverse would be
+        reverse_x_in_row = reverse_row_offset
+        for i in range(reverse_pos):
+            reverse_x_in_row += rev_row_elements[i]["width"] + view_gap_px
+        
+        # Calculate center of reverse if placed at this position
+        reverse_center = reverse_x_in_row + rev_w // 2
+        
+        # Calculate adjustment to align with obverse center
+        obverse_center = central_column_x + obv_w // 2
+        reverse_center_offset = obverse_center - reverse_center
+        
+        reverse_row_offset += reverse_center_offset
+    
+    # Place all elements in the reverse row
+    current_x = reverse_row_offset
+    for element in rev_row_elements:
+        key = element["key"]
+        width = element["width"]
+        
+        if key == "reverse":
+            coords["reverse"] = (current_x, rev_row_y)
+        elif key == "left_rotated":
+            # Rotated left aligned with reverse row
+            rotated_left_y = rev_row_y + (rev_h - l_h) // 2
+            coords["left_rotated"] = (current_x, rotated_left_y)
+            rotation_flags["left_rotated"] = True
+        elif key == "right_rotated":
+            # Rotated right aligned with reverse row
+            rotated_right_y = rev_row_y + (rev_h - r_h) // 2
+            coords["right_rotated"] = (current_x, rotated_right_y)
+            rotation_flags["right_rotated"] = True
+        else:  # Intermediate images
+            img_h = intermediate_dims[key]["h"]
+            # Vertically center against reverse height
+            int_y = rev_row_y + (rev_h - img_h) // 2
+            coords[key] = (current_x, int_y)
+        
+        current_x += width + view_gap_px
     
     y_curr += rev_h + view_gap_px
     

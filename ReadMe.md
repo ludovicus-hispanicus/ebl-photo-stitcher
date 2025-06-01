@@ -215,7 +215,9 @@ For intermediate views (between the obverse or the reverse and one of the side v
 - `_rt` = intermediate between reverse and top
 - `_rb` = intermediate between reverse and bottom
 
-For example, if your tablet has ID "IM.136546", the obverse image would be named "IM.136546_01.JPG" and an intermediate image between obverse and left would be "IM.136546_ol.JPG".
+Up to 6 intermediate views can be added for each side. Use for them the name `intermediate view siglum` + `2–6`, e.g. `_ot2`, `_ot3`,`_ot4`, `_ot5`, `_ot6`. They are stitched in sequential order.
+
+For example, if your tablet has ID "IM.136546", the obverse image would be named "IM.136546_01.JPG"; an intermediate image between obverse and left would be "IM.136546_ol.JPG", and the second intermediate image would be "IM.136546_ol2.JPG".
 
 2. **Select Image Source Folder:** Browse to the folder containing your sets of images (e.g., `BM.58103_01.cr2`, `BM.58103_02.cr2`, etc.).
  

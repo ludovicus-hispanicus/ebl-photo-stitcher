@@ -11,7 +11,11 @@ try:
     import ruler_detector
     from blending_mask_applier import process_intermediate_image_with_mask
     from stitch_images import process_tablet_subfolder
-    from stitch_config import (INTERMEDIATE_SUFFIX_BASE, MUSEUM_CONFIGS)
+    from stitch_config import (
+        MUSEUM_CONFIGS, 
+        MAX_ADDITIONAL_INTERMEDIATES,
+        get_extended_intermediate_suffixes
+    )
     # Import the new rembg-based function
     from object_extractor_rembg import extract_and_save_center_object
     # Keep extract_specific_contour_to_image_array for ruler extraction
@@ -120,9 +124,9 @@ def run_complete_image_processing_workflow(
     total_ok, total_err, cr2_conv_total = 0, 0, 0
     prog_per_folder = 85.0 / num_folders if num_folders > 0 else 0
 
-    # Define intermediate suffix patterns for automatic detection
-    intermediate_suffix_patterns = INTERMEDIATE_SUFFIX_BASE
-
+    # Generate all intermediate codes as a dictionary
+    intermediate_suffix_patterns = get_extended_intermediate_suffixes()
+    
     # Process each subfolder
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
@@ -444,6 +448,9 @@ def run_complete_image_processing_workflow(
 
             # Process intermediate images for this subfolder
             print(f"   Processing intermediate images for {subfolder_name_item}...")
+            # Use the centralized function to get all intermediate suffixes
+            intermediate_suffix_patterns = get_extended_intermediate_suffixes()
+
             for img_file in all_files_in_subfolder:
                 if not img_file.lower().endswith(image_extensions_tuple):
                     continue
@@ -455,50 +462,52 @@ def run_complete_image_processing_workflow(
                 # Check if file has any of the intermediate suffixes
                 file_basename = os.path.basename(img_file)
                 is_intermediate = False
+                matched_suffix = None
 
                 for suffix in intermediate_suffix_patterns.keys():
                     suffix_pattern = f"_{suffix}."
                     if suffix_pattern.lower() in file_basename.lower():
                         is_intermediate = True
-                        print(f"   Processing intermediate image: {file_basename}")
-                        img_path = os.path.join(subfolder_path_item, file_basename)
+                        matched_suffix = suffix
+                        break
 
-                        # Make sure we haven't already processed this intermediate image
-                        if img_path in other_views_to_process_list or img_path == ruler_for_scale_fp:
-                            print(
-                                f"   Skipping {file_basename} as it was already processed as a main view")
-                            continue
+                if is_intermediate:
+                    print(f"   Processing intermediate image: {file_basename} (suffix: {matched_suffix})")
+                    img_path = os.path.join(subfolder_path_item, file_basename)
 
-                        # Process the current image
-                        curr_path, is_temp = img_path, False
-                        if img_path.lower().endswith(raw_ext_config):
-                            tmp_path = os.path.join(
-                                subfolder_path_item, f"{os.path.splitext(os.path.basename(img_path))[0]}.tif")
-                            convert_raw_image_to_tiff(img_path, tmp_path)
-                            curr_path, is_temp = tmp_path, True
-                            cr2_conv_total += 1
+                    # Make sure we haven't already processed this intermediate image
+                    if img_path in other_views_to_process_list or img_path == ruler_for_scale_fp:
+                        print(f"   Skipping {file_basename} as it was already processed as a main view")
+                        continue
 
-                        # Extract object from intermediate image
-                        extract_and_save_center_object(
-                            curr_path,
-                            source_background_detection_mode=object_extraction_bg_mode,
-                            output_image_background_color=output_bg_color,
-                            output_filename_suffix=object_artifact_suffix_config,
-                            museum_selection=museum_selection
+                    # Process the current image
+                    curr_path, is_temp = img_path, False
+                    if img_path.lower().endswith(raw_ext_config):
+                        tmp_path = os.path.join(
+                            subfolder_path_item, f"{os.path.splitext(os.path.basename(img_path))[0]}.tif")
+                        convert_raw_image_to_tiff(img_path, tmp_path)
+                        curr_path, is_temp = tmp_path, True
+                        cr2_conv_total += 1
+
+                    # Extract object from intermediate image
+                    extract_and_save_center_object(
+                        curr_path,
+                        source_background_detection_mode=object_extraction_bg_mode,
+                        output_image_background_color=output_bg_color,
+                        output_filename_suffix=object_artifact_suffix_config,
+                        museum_selection=museum_selection
+                    )
+
+                    object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
+                    if os.path.exists(object_filepath):
+                        process_intermediate_image_with_mask(
+                            object_filepath,
+                            background_color=output_bg_color,
+                            gradient_width_fraction=gradient_width_fraction
                         )
 
-                        object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
-                        if os.path.exists(object_filepath):
-                            process_intermediate_image_with_mask(
-                                object_filepath,
-                                background_color=output_bg_color,
-                                gradient_width_fraction=gradient_width_fraction
-                            )
-    
-                        if is_temp and os.path.exists(curr_path):
-                            os.remove(curr_path)
-
-                        break
+                    if is_temp and os.path.exists(curr_path):
+                        os.remove(curr_path)
 
             accumulated_sub_progress += sub_steps_alloc["other_obj"] * prog_per_folder
 
@@ -509,6 +518,7 @@ def run_complete_image_processing_workflow(
 
             process_tablet_subfolder(
                 subfolder_path=subfolder_path_item,
+                ruler_position=ruler_position,
                 main_input_folder_path=source_folder_path,
                 output_base_name=subfolder_name_item,
                 pixels_per_cm=px_cm_val,

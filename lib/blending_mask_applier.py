@@ -1,7 +1,38 @@
+import os
+import sys
 import cv2
 import numpy as np
-import os
 import re
+
+# Add parent directory to path if needed to import from lib
+script_directory = os.path.dirname(os.path.abspath(__file__))
+parent_directory = os.path.dirname(script_directory)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
+
+# Import configuration and use the centralized function
+from lib.stitch_config import get_extended_intermediate_suffixes
+
+def generate_position_patterns():
+    """
+    Generate regex patterns for intermediate image positions based on configuration.
+    """
+    # Get all intermediate codes including numbered variants using centralized function
+    intermediate_suffixes = get_extended_intermediate_suffixes()
+    all_codes = list(intermediate_suffixes.keys())
+    
+    # Create the regex pattern for _XX_ format (where XX is any intermediate code)
+    # Use a capturing group to extract just the position code
+    code_pattern = r'_(' + '|'.join(all_codes) + r')_'
+    
+    # Keep the original pattern for full intermediate names
+    # This pattern now also matches intermediate_obverse_left_2
+    full_name_pattern = r'intermediate_[^_]+_([^_\.]+)(?:_\d+)?'
+    
+    return [code_pattern, full_name_pattern]
+
+# Generate position patterns once at module load time
+position_patterns = generate_position_patterns()
 
 def apply_blending_mask_to_intermediate(
     image_array,
@@ -82,14 +113,17 @@ def _normalize_position_name(position):
     """Normalize various position name formats to a standard form"""
     position = position.lower()
     
+    # Strip any trailing digits (e.g., 'ol2' -> 'ol')
+    base_position = re.sub(r'\d+$', '', position)
+    
     # Handle shorthand codes like 'ol', 'or', etc.
-    if position == 'ol' or position == 'rl' or position == '07':
+    if base_position == 'ol' or base_position == 'rl' or base_position == '07':
         return 'left'
-    elif position == 'or' or position == 'rr' or position == '08':
+    elif base_position == 'or' or base_position == 'rr' or base_position == '08':
         return 'right'
-    elif position == 'ot' or position == 'rt':
+    elif base_position == 'ot' or base_position == 'rt':
         return 'top'
-    elif position == 'ob' or position == 'rb':
+    elif base_position == 'ob' or base_position == 'rb':
         return 'bottom'
     
     # Handle full names
@@ -125,19 +159,23 @@ def process_intermediate_image_with_mask(
     basename = os.path.basename(input_image_path)
     
     # Try to detect position from filename using patterns:
-    # 1. _ot_object.tif, _ob_object.tif, etc. (short position codes)
-    # 2. intermediate_obverse_top, etc. (full position names)
+    # 1. _ot_object.tif, _ob_object.tif, _ol2_object.tif etc. (short position codes with optional numbers)
+    # 2. intermediate_obverse_top, intermediate_obverse_left_2, etc. (full position names with optional numbers)
     position = None
-    position_patterns = [
-        r'_([or0][rltb78])_',
-        r'intermediate_[^_]+_([^_\.]+)'
-    ]
     
     for pattern in position_patterns:
         match = re.search(pattern, basename.lower())
         if match:
             position = match.group(1)
             break
+    
+    if not position:
+        # Check if it might be a numbered variant that our patterns missed
+        for code in get_extended_intermediate_suffixes().keys():
+            if f"_{code}_" in basename.lower():
+                position = code
+                print(f"  Detected numbered intermediate position using fallback: {code}")
+                break
     
     if not position:
         print(f"  Warning: Could not detect intermediate position from {basename}")

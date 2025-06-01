@@ -1,5 +1,6 @@
 import os
 import cv2
+import re
 try:
     from image_utils import convert_to_bgr_if_needed
 except ImportError:
@@ -8,8 +9,8 @@ except ImportError:
 from stitch_config import (
     OBJECT_FILE_SUFFIX, 
     SCALED_RULER_FILE_SUFFIX,
-    INTERMEDIATE_SUFFIX_BASE,
-    INTERMEDIATE_SUFFIX_FOR_OBJECTS
+    INTERMEDIATE_SUFFIX_FOR_OBJECTS,
+    get_extended_intermediate_suffixes  # Import the new function
 )
 
 def find_processed_image_file(subfolder_path, base_name, view_specific_part, general_suffix):
@@ -61,8 +62,10 @@ def load_images_for_stitching_process(subfolder_path, image_base_name, view_patt
     
     # Load intermediate images if requested
     if include_intermediates:
-        # Use provided suffix patterns or default to INTERMEDIATE_SUFFIX_BASE
-        suffix_patterns_to_use = intermediate_suffix_patterns or INTERMEDIATE_SUFFIX_BASE
+        # Use provided suffix patterns or get the extended version
+        suffix_patterns_to_use = intermediate_suffix_patterns
+        if not suffix_patterns_to_use:
+            suffix_patterns_to_use = get_extended_intermediate_suffixes()
         
         intermediate_images = detect_intermediate_images(
             subfolder_path,
@@ -91,17 +94,39 @@ def detect_intermediate_images(subfolder_path, base_name, intermediate_suffix_ba
     detected_images = {}
     all_files = os.listdir(subfolder_path)
     
-    # Look for processed object files first
-    for suffix_code, position in intermediate_suffix_base.items():
-        # Look for processed object files (e.g., _ol_object.tif)
-        object_pattern = intermediate_suffix_for_objects[suffix_code]
-        
-        for filename in all_files:
-            if object_pattern.lower() in filename.lower() and filename.startswith(base_name):
-                file_path = os.path.join(subfolder_path, filename)
+    # Get extended suffixes for all intermediates including numbered variants
+    extended_suffixes = get_extended_intermediate_suffixes()
+    
+    # Look for both basic and numbered intermediate files
+    for file_name in all_files:
+        if not file_name.startswith(base_name) or not file_name.endswith(OBJECT_FILE_SUFFIX):
+            continue
+            
+        # Use regex to extract the intermediate code (e.g., 'ol', 'ol2', 'or3')
+        match = re.search(r'_([a-z]{2}\d*)_', file_name.lower())
+        if not match:
+            continue
+            
+        suffix_code = match.group(1)
+        if suffix_code in extended_suffixes:
+            position = extended_suffixes[suffix_code]
+            file_path = os.path.join(subfolder_path, file_name)
+            
+            # Handle multiple intermediate images for the same position
+            # If we already have a position (e.g., intermediate_obverse_left),
+            # create indexed versions (e.g., intermediate_obverse_left_2)
+            if position in detected_images:
+                # Check if this is a numbered variant and extract that number
+                if len(suffix_code) > 2:
+                    variant_num = int(suffix_code[2:])
+                    # Use the number from the suffix as the position index
+                    # This ensures ol2 maps to intermediate_obverse_left_2
+                    indexed_position = f"{position}_{variant_num}"
+                    detected_images[indexed_position] = file_path
+                    print(f"      Detected additional intermediate image: {indexed_position} from {file_name}")
+            else:
                 detected_images[position] = file_path
-                print(f"      Detected processed intermediate image: {position} from {filename}")
-                break
+                print(f"      Detected processed intermediate image: {position} from {file_name}")
     
     # Process the detections to load the actual images
     loaded_intermediates = {}
