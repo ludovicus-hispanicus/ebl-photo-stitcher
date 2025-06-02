@@ -37,18 +37,27 @@ def detect_scale_from_ruler(ruler_for_scale_fp, subfolder_path_item, raw_ext_con
 
             base_name = os.path.splitext(os.path.basename(curr_scale_fp))[0]
 
+            # Remove any existing suffixes to get the true base name
             if base_name.endswith('_rawscale'):
                 base_name = base_name[:-9]
+            if base_name.endswith('_03'):
+                base_name = base_name[:-3]
+
+            print(f"   Looking for fallback images with base name: {base_name}")
 
             fallback_images = []
             for suffix in ['_01', '_02']:
-                for ext in ['.jpg', '.jpeg', '.tif', '.tiff', '.png']:
+                for ext in ['.jpg', '.jpeg', '.tif', '.tiff', '.png', '.JPG', '.JPEG', '.TIF', '.TIFF', '.PNG']:
                     fallback_path = os.path.join(
                         subfolder_path_item, f"{base_name}{suffix}{ext}")
                     if os.path.exists(fallback_path):
                         fallback_images.append(fallback_path)
+                        print(f"   Found fallback image: {os.path.basename(fallback_path)}")
                         break
 
+            if not fallback_images:
+                print(f"   No fallback images found for base name: {base_name}")
+            
             for fallback_image in fallback_images:
                 print(f"   Trying fallback image: {os.path.basename(fallback_image)}")
 
