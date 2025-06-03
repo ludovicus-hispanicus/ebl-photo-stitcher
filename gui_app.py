@@ -41,7 +41,8 @@ try:
 
 except ImportError as e:
 
-    expected_lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
+    expected_lib_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "lib")
 
     try:
         root_err_tk = tk.Tk()
@@ -90,7 +91,7 @@ class ImageProcessorApp:
         self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
         self.root = root_window
-        self.root.title("eBL Photo Stitcher v0.5")
+        self.root.title("eBL Photo Stitcher v0.6")
         self.root.geometry("600x900")
 
         self.config_file_path = os.path.join(
@@ -99,18 +100,19 @@ class ImageProcessorApp:
         self.input_folder_var = tk.StringVar()
         self.ruler_position_var = tk.StringVar()
         self.photographer_var = tk.StringVar()
-        self.add_logo_var = tk.BooleanVar()
-        self.logo_path_var = tk.StringVar()
         self.museum_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0.0)
         self.use_measurements_var = tk.BooleanVar(value=False)
+        self.enable_hdr_processing = tk.BooleanVar(value=False)
         self.gradient_width_fraction = 0.5
 
         self.measurements_loaded = False
         self.measurements_dict = {}
-        measurements_file = resource_path(os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
+        measurements_file = resource_path(
+            os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
         if os.path.exists(measurements_file):
-            self.measurements_dict = load_measurements_from_json(measurements_file)
+            self.measurements_dict = load_measurements_from_json(
+                measurements_file)
             self.measurements_loaded = len(self.measurements_dict) > 0
 
         self._setup_icon()
@@ -140,7 +142,8 @@ class ImageProcessorApp:
         mf.pack(expand=True, fill=tk.BOTH)
 
         self.header_frame, self.notebook = LayoutManager.create_tabs(mf)
-        self.help_btn = LayoutManager.create_help_link(self.header_frame, self.HELP_URL)
+        self.help_btn = LayoutManager.create_help_link(
+            self.header_frame, self.HELP_URL)
 
         self.main_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.main_tab, text="Main")
@@ -155,11 +158,9 @@ class ImageProcessorApp:
             self.main_tab, self.museum_var, self.ruler_position_var,
             self.on_museum_changed, self.on_ruler_canvas_click)
 
-        self.options_frame, self.logo_checkbox, self.logo_path_entry, self.browse_logo_btn, self.measurements_checkbox = UIComponents.create_logo_options_ui(
-            self.main_tab, self.add_logo_var, self.logo_path_var,
-            self.toggle_logo_path_entry, self.browse_logo_file,
-            self.use_measurements_var, self.measurements_loaded,
-            script_directory, self.debug_measurements_loading)
+        self.options_frame, self.measurements_checkbox, self.hdr_checkbox = UIComponents.create_main_options_ui(
+            self.main_tab, self.use_measurements_var, self.measurements_loaded,
+            self.enable_hdr_processing, script_directory, self.debug_measurements_loading)
 
         self.prb = UIComponents.create_process_button_ui(
             self.main_tab, self.start_processing_thread)
@@ -172,18 +173,11 @@ class ImageProcessorApp:
 
         settings = {
             'gradient_width_fraction': self.gradient_width_fraction,
-            'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+            'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+            'add_logo': False,
+            'logo_path': ''
         }
         self.advanced_tab = AdvancedTab(self.notebook, settings)
-
-    def toggle_logo_path_entry(self):
-        """Toggle logo path entry enabled/disabled state."""
-        EventHandlers.toggle_logo_path_entry(
-            self.add_logo_var, self.logo_path_entry, self.browse_logo_btn)
-
-    def browse_logo_file(self):
-        """Browse for a logo file."""
-        EventHandlers.browse_logo_file(self.root, self.logo_path_var)
 
     def draw_ruler_selector(self):
         """Draw the ruler selector canvas."""
@@ -236,16 +230,19 @@ class ImageProcessorApp:
     def start_processing_thread(self):
         """Start the processing thread with current settings."""
 
+        advanced_settings = self.advanced_tab.get_settings()
+
         processing_params = {
             'input_folder': self.input_folder_var.get(),
             'ruler_position': self.ruler_position_var.get(),
             'photographer_name': self.photographer_var.get(),
-            'add_logo': self.add_logo_var.get(),
-            'logo_path': self.logo_path_var.get(),
+            'add_logo': advanced_settings['add_logo'],
+            'logo_path': advanced_settings['logo_path'],
             'museum_selection': self.museum_var.get(),
             'use_measurements': self.use_measurements_var.get(),
-            'gradient_width': self.advanced_tab.gradient_width_fraction.get(),
-            'bg_tolerance': self.advanced_tab.background_color_tolerance.get(),
+            'gradient_width': advanced_settings['gradient_width_fraction'],
+            'bg_tolerance': advanced_settings['background_color_tolerance'],
+            'enable_hdr': self.enable_hdr_processing.get(),
         }
 
         EventHandlers.start_processing_workflow(
@@ -292,7 +289,8 @@ if __name__ == "__main__":
             ttk.Label(error_frame, text="Application Error", font=(
                 "Helvetica", 14, "bold")).pack(pady=(0, 10))
 
-            error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
+            error_text = tk.Text(error_frame, height=15,
+                                 width=60, wrap=tk.WORD)
             error_text.pack(fill=tk.BOTH, expand=True, pady=5)
             error_text.insert(tk.END, msg)
             error_text.config(state=tk.DISABLED)
@@ -324,7 +322,8 @@ if __name__ == "__main__":
             ttk.Label(error_frame, text="Unexpected Error", font=(
                 "Helvetica", 14, "bold")).pack(pady=(0, 10))
 
-            error_text = tk.Text(error_frame, height=15, width=60, wrap=tk.WORD)
+            error_text = tk.Text(error_frame, height=15,
+                                 width=60, wrap=tk.WORD)
             error_text.pack(fill=tk.BOTH, expand=True, pady=5)
 
             error_trace = f"An unexpected error occurred:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"

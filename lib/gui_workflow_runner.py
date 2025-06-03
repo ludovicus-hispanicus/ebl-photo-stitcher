@@ -1,6 +1,7 @@
 import os
 import time
 import traceback
+import glob
 
 from workflow_imports import (
     organize_project_subfolders, process_tablet_subfolder,
@@ -43,7 +44,8 @@ def run_complete_image_processing_workflow(
     background_color_tolerance=None,
     use_measurements_from_database=False,
     measurements_dict=None,
-    gradient_width_fraction=0.5
+    gradient_width_fraction=0.5,
+    enable_hdr_processing=False
 ):
     """Main workflow orchestration function."""
     start_time = time.time()
@@ -63,10 +65,52 @@ def run_complete_image_processing_workflow(
         processed_subfolders = organize_project_subfolders(
             source_folder_path, image_extensions_tuple, organize_files_func)
     except Exception as e_org:
-        print(f"   Workflow halted due to error during file organization: {e_org}")
+        print(
+            f"   Workflow halted due to error during file organization: {e_org}")
         progress_callback(100)
         finished_callback()
         return
+
+    if enable_hdr_processing:
+        print("Step 0.5: HDR Processing...")
+
+        try:
+            from hdr_processor import should_use_hdr_processing, process_hdr_images
+        except ImportError as e:
+            print(f"   Warning: Could not import HDR processor: {e}")
+            print("   Continuing without HDR processing...")
+            enable_hdr_processing = False
+
+        if enable_hdr_processing:
+
+            original_subfolders = processed_subfolders.copy()
+            updated_subfolders = []
+
+            for subfolder_path in original_subfolders:
+                subfolder_name = os.path.basename(subfolder_path)
+
+                if should_use_hdr_processing(source_folder_path, subfolder_name):
+                    print(f"   Applying HDR processing to {subfolder_name}...")
+                    hdr_output_folder = process_hdr_images(
+                        source_folder_path, subfolder_name)
+
+                    if hdr_output_folder:
+
+                        updated_subfolders.append(hdr_output_folder)
+                        print(
+                            f"   HDR processing completed for {subfolder_name} → {os.path.basename(hdr_output_folder)}")
+                    else:
+                        print(
+                            f"   HDR processing failed for {subfolder_name}. Using original images.")
+                        updated_subfolders.append(subfolder_path)
+                else:
+                    print(
+                        f"   HDR processing not applicable for {subfolder_name}")
+                    updated_subfolders.append(subfolder_path)
+
+            processed_subfolders = updated_subfolders
+            print(
+                f"   HDR processing complete. Processing {len(processed_subfolders)} subfolder(s).")
 
     num_folders = len(processed_subfolders)
     print(f"File organization complete. Targeting {num_folders} subfolder(s).")
@@ -84,7 +128,8 @@ def run_complete_image_processing_workflow(
 
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
-        print(f"Processing Subfolder {i+1}/{num_folders}: {subfolder_name_item}")
+        print(
+            f"Processing Subfolder {i+1}/{num_folders}: {subfolder_name_item}")
 
         current_prog_base = 10 + i * prog_per_folder
         progress_callback(current_prog_base)
@@ -119,7 +164,8 @@ def run_complete_image_processing_workflow(
                            cr2_conv_total, failed_objects)
 
     if total_ok > 0:
-        cleanup_intermediate_files(processed_subfolders, object_artifact_suffix_config)
+        cleanup_intermediate_files(
+            processed_subfolders, object_artifact_suffix_config)
 
     progress_callback(100)
     finished_callback()
@@ -213,11 +259,45 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     progress += sub_steps["ruler_resize"] * prog_per_folder
     progress_callback(current_prog_base + progress)
 
-    other_views_list = prepare_other_views_list(
+    print(f"   Finding other views to process for {subfolder_name_item}...")
+
+    all_image_files = []
+    for ext in image_extensions_tuple:
+        pattern = os.path.join(subfolder_path_item, f"*{ext}")
+        all_image_files.extend(glob.glob(pattern))
+
+    other_views_to_process_list = []
+
+    for img_file in all_image_files:
+        filename = os.path.basename(img_file)
+        
+        if img_file == ruler_for_scale_fp:
+            continue
+        
+        if object_artifact_suffix_config in img_file:
+            continue
+        
+        if 'temp_' in filename:
+            continue
+        
+        if '_ruler.' in filename.lower():
+            print(f"     Skipping ruler file: {filename}")
+            continue
+        
+        other_views_to_process_list.append(img_file)
+        print(f"     Added view: {filename}")
+
+    print(f"   Found {len(other_views_to_process_list)} other views to process")
+    print(f"   Other views: {[os.path.basename(f) for f in other_views_to_process_list]}")
+
+    orig_other_views_list = prepare_other_views_list(
         None, orig_views_fps, ruler_for_scale_fp)
 
+    combined_other_views = list(
+        set(orig_other_views_list + other_views_to_process_list))
+
     cr2_conv_other = process_other_views(
-        other_views_list, subfolder_path_item, raw_ext_config,
+        combined_other_views, subfolder_path_item, raw_ext_config,
         object_extraction_bg_mode, output_bg_color,
         object_artifact_suffix_config, museum_selection
     )
@@ -226,7 +306,7 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     cr2_conv_intermediate = process_intermediate_images(
         all_files, subfolder_path_item, subfolder_name_item,
         image_extensions_tuple, object_artifact_suffix_config,
-        other_views_list, ruler_for_scale_fp, raw_ext_config,
+        combined_other_views, ruler_for_scale_fp, raw_ext_config,
         object_extraction_bg_mode, output_bg_color, museum_selection,
         gradient_width_fraction
     )
@@ -255,4 +335,5 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     )
 
     result['success'] = True
+
     return result

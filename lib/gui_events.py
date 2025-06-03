@@ -105,8 +105,8 @@ class EventHandlers:
             input_folder_var.set(folder_selected)
 
     @staticmethod
-    def start_processing_workflow(app_instance, workflow_runner, processing_params):
-        """Start the processing workflow in a separate thread."""
+    def start_processing_workflow(app_instance, workflow_function, processing_params):
+        """Start the processing workflow with given parameters."""
 
         fp = processing_params['input_folder']
         rp = processing_params['ruler_position']
@@ -144,29 +144,41 @@ class EventHandlers:
 
         app_instance.configure_museum_settings(ms)
 
-        thread_args = (
-            fp, rp, ph, obm, al, lp,
-            app_instance.RAW_IMAGE_EXTENSION,
-            app_instance.VALID_IMAGE_EXTENSIONS,
-            app_instance.RULER_TEMPLATE_1CM_PATH_ASSET,
-            app_instance.RULER_TEMPLATE_2CM_PATH_ASSET,
-            app_instance.RULER_TEMPLATE_5CM_PATH_ASSET,
-            app_instance.STITCH_VIEW_PATTERNS_WITH_EXT,
-            app_instance.TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
-            app_instance.OBJECT_ARTIFACT_SUFFIX,
-            app_instance.update_progress_bar,
-            app_instance.processing_finished_ui_update,
-            ms,
-            app_instance.root,
-            bg_tolerance,
-            use_measurements,
-            app_instance.measurements_dict,
-            gradient_width,
-        )
+        def run_workflow():
+            try:
+                workflow_function(
+                    processing_params['input_folder'],
+                    processing_params['ruler_position'],
+                    processing_params['photographer_name'],
+                    "auto",
+                    processing_params['add_logo'],
+                    processing_params['logo_path'],
+                    app_instance.RAW_IMAGE_EXTENSION,
+                    app_instance.VALID_IMAGE_EXTENSIONS,
+                    app_instance.RULER_TEMPLATE_1CM_PATH_ASSET,
+                    app_instance.RULER_TEMPLATE_2CM_PATH_ASSET,
+                    app_instance.RULER_TEMPLATE_5CM_PATH_ASSET,
+                    app_instance.STITCH_VIEW_PATTERNS_WITH_EXT,
+                    app_instance.TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
+                    app_instance.OBJECT_ARTIFACT_SUFFIX,
+                    app_instance.update_progress_bar,
+                    app_instance.processing_finished_ui_update,
+                    processing_params['museum_selection'],
+                    app_instance.root,
+                    processing_params['bg_tolerance'],
+                    processing_params['use_measurements'],
+                    app_instance.measurements_dict if processing_params['use_measurements'] else None,
+                    processing_params['gradient_width'],
+                    processing_params['enable_hdr']
+                )
+            except Exception as e:
+                print(f"Error in workflow: {e}")
+                messagebox.showerror("Processing Error", str(e))
+            finally:
+                app_instance.prb.config(state=tk.NORMAL)
 
         threading.Thread(
-            target=workflow_runner,
-            args=thread_args,
+            target=run_workflow,
             daemon=True
         ).start()
 
