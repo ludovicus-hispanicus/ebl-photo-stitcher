@@ -21,7 +21,8 @@ class UIComponents:
         entry = ttk.Entry(frame, textvariable=input_folder_var, width=50)
         entry.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
 
-        browse_btn = ttk.Button(frame, text="Browse...", command=browse_callback)
+        browse_btn = ttk.Button(frame, text="Browse...",
+                                command=browse_callback)
         browse_btn.pack(side=tk.LEFT)
 
         return frame, entry
@@ -86,60 +87,47 @@ class UIComponents:
         return frame, ruler_canvas, canvas_params, museum_combo
 
     @staticmethod
-    def create_logo_options_ui(parent, add_logo_var, logo_path_var, toggle_logo_callback,
-                               browse_logo_callback, use_measurements_var, measurements_loaded,
-                               script_directory, debug_callback=None):
-        """Create logo options UI component."""
-        frame = ttk.LabelFrame(parent, text="Options", padding="10")
-        frame.pack(fill=tk.X, pady=5)
+    def create_main_options_ui(parent, use_measurements_var, measurements_loaded,
+                               enable_hdr_var, script_directory, debug_callback):
+        """Create main options UI (measurements and HDR)."""
 
-        measurements_frame = ttk.Frame(frame)
-        measurements_frame.pack(fill=tk.X, pady=(10, 0))
+        options_frame = ttk.LabelFrame(parent, text="Options")
+        options_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
 
         measurements_checkbox = ttk.Checkbutton(
-            measurements_frame,
-            text="Use measurements from database (Sippar Collection)",
+            options_frame,
+            text="Use measurements from database",
             variable=use_measurements_var
         )
-        measurements_checkbox.pack(anchor=tk.W)
+        measurements_checkbox.pack(anchor=tk.W, padx=10, pady=5)
 
         if not measurements_loaded:
-            measurements_checkbox.state(['disabled'])
-            hint_label = ttk.Label(
-                measurements_frame,
-                text="(sippar.json not found in assets folder)",
-                font=('Helvetica', 8, 'italic'),
-                foreground="gray"
-            )
-            hint_label.pack(anchor=tk.W, padx=(20, 0))
+            measurements_checkbox.config(state=tk.DISABLED)
 
-        if debug_callback and os.path.exists(os.path.join(script_directory, "DEBUG")):
             debug_btn = ttk.Button(
-                measurements_frame,
-                text="Debug Measurements",
+                options_frame,
+                text="Debug measurements loading",
                 command=debug_callback,
                 style="Small.TButton"
             )
-            debug_btn.pack(side=tk.RIGHT, padx=(5, 0))
+            debug_btn.pack(anchor=tk.W, padx=20, pady=(0, 5))
 
-        logo_checkbox = ttk.Checkbutton(
-            frame, text="Add Logo", variable=add_logo_var, command=toggle_logo_callback)
-        logo_checkbox.pack(anchor=tk.W)
+        hdr_checkbox = ttk.Checkbutton(
+            options_frame,
+            text="Enable HDR Processing",
+            variable=enable_hdr_var
+        )
+        hdr_checkbox.pack(anchor=tk.W, padx=10, pady=5)
 
-        subfr = ttk.Frame(frame)
-        subfr.pack(fill=tk.X, pady=(0, 5), padx=(20, 0))
+        hdr_description = ttk.Label(
+            options_frame,
+            text="HDR processing combines sets of bracketed exposure images into optimized composites",
+            font=("", 8),
+            foreground="gray"
+        )
+        hdr_description.pack(anchor=tk.W, padx=30, pady=(0, 5))
 
-        ttk.Label(subfr, text="Logo File:").pack(side=tk.LEFT, padx=(0, 5))
-
-        logo_path_entry = ttk.Entry(
-            subfr, textvariable=logo_path_var, width=40, state=tk.DISABLED)
-        logo_path_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-
-        browse_logo_btn = ttk.Button(
-            subfr, text="Browse...", command=browse_logo_callback, state=tk.DISABLED)
-        browse_logo_btn.pack(side=tk.LEFT)
-
-        return frame, logo_checkbox, logo_path_entry, browse_logo_btn, measurements_checkbox
+        return options_frame, measurements_checkbox, hdr_checkbox
 
     @staticmethod
     def create_process_button_ui(parent, start_processing_callback):

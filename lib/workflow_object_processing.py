@@ -155,13 +155,11 @@ def process_intermediate_images(all_files_in_subfolder, subfolder_path_item, sub
                 break
 
         if is_intermediate:
-            print(
-                f"   Processing intermediate image: {file_basename} (suffix: {matched_suffix})")
+            print(f"   Processing intermediate image: {file_basename} (suffix: {matched_suffix})")
             img_path = os.path.join(subfolder_path_item, file_basename)
 
             if img_path in other_views_to_process_list or img_path == ruler_for_scale_fp:
-                print(
-                    f"   Skipping {file_basename} as it was already processed as a main view")
+                print(f"   Skipping {file_basename} as it was already processed as a main view")
                 continue
 
             curr_path, is_temp = img_path, False
@@ -174,21 +172,28 @@ def process_intermediate_images(all_files_in_subfolder, subfolder_path_item, sub
                 curr_path, is_temp = tmp_path, True
                 cr2_conv_count += 1
 
-            extract_and_save_center_object(
-                curr_path,
-                source_background_detection_mode=object_extraction_bg_mode,
-                output_image_background_color=output_bg_color,
-                output_filename_suffix=object_artifact_suffix_config,
-                museum_selection=museum_selection
-            )
-
-            object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
-            if os.path.exists(object_filepath):
-                process_intermediate_image_with_mask(
-                    object_filepath,
-                    background_color=output_bg_color,
-                    gradient_width_fraction=gradient_width_fraction
+            try:
+                extract_and_save_center_object(
+                    curr_path,
+                    source_background_detection_mode=object_extraction_bg_mode,
+                    output_image_background_color=output_bg_color,
+                    output_filename_suffix=object_artifact_suffix_config,
+                    museum_selection=museum_selection
                 )
+
+                object_filepath = f"{os.path.splitext(curr_path)[0]}{object_artifact_suffix_config}"
+                if os.path.exists(object_filepath):
+                    process_intermediate_image_with_mask(
+                        object_filepath,
+                        background_color=output_bg_color,
+                        gradient_width_fraction=gradient_width_fraction
+                    )
+                    print(f"   Successfully processed intermediate image: {file_basename}")
+                else:
+                    print(f"   Warning: Object file not created for {file_basename}")
+
+            except Exception as e:
+                print(f"   Error processing {file_basename}: {e}")
 
             if is_temp and os.path.exists(curr_path):
                 os.remove(curr_path)

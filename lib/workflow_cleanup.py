@@ -1,9 +1,11 @@
 import os
+from hdr_processor import HDR_SUFFIX
+import shutil
 
 
 def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix="_ruler.tif"):
     """
-    Remove intermediate processing files from each processed subfolder.
+    Remove intermediate processing files from each processed subfolder and HDR folders from main directory.
 
     Args:
         processed_subfolders: List of subfolder paths that were processed
@@ -30,6 +32,7 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
                         os.remove(file_path)
                         files_removed += 1
                         total_removed += 1
+                        print(f"    Removed file: {filename}")
                     except Exception as e:
                         print(f"  Error removing {filename}: {e}")
 
@@ -40,7 +43,32 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
         except Exception as e:
             print(f"  Error accessing folder {folder_name}: {e}")
 
-    print(f"--- Cleanup complete: {total_removed} files removed ---")
+    if processed_subfolders:
+        main_folder = os.path.dirname(processed_subfolders[0])
+        hdr_folders_removed = 0
+
+        try:
+            print(
+                f"\n  Checking for HDR folders in main directory: {main_folder}")
+            for item_name in os.listdir(main_folder):
+                item_path = os.path.join(main_folder, item_name)
+                if os.path.isdir(item_path) and item_name.endswith(HDR_SUFFIX):
+                    try:
+                        shutil.rmtree(item_path)
+                        hdr_folders_removed += 1
+                        total_removed += 1
+                        print(f"    Removed HDR folder: {item_name}")
+                    except Exception as e:
+                        print(f"  Error removing HDR folder {item_name}: {e}")
+
+            if hdr_folders_removed > 0:
+                print(
+                    f"  Removed {hdr_folders_removed} HDR folders from main directory")
+
+        except Exception as e:
+            print(f"  Error accessing main directory {main_folder}: {e}")
+
+    print(f"--- Cleanup complete: {total_removed} files/folders removed ---")
 
 
 def cleanup_temp_files(*file_paths):
@@ -54,5 +82,7 @@ def cleanup_temp_files(*file_paths):
         if file_path and os.path.exists(file_path):
             try:
                 os.remove(file_path)
+                print(f"    Removed temp file: {os.path.basename(file_path)}")
             except Exception as e:
-                print(f"  Warning: Could not remove temp file {file_path}: {e}")
+                print(
+                    f"  Warning: Could not remove temp file {file_path}: {e}")

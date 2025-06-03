@@ -22,12 +22,13 @@ def detect_1cm_distance_iraq(image_path):
     Returns:
         float: Pixel distance representing 1 cm, or None if not found.
     """
-    debug_filename = os.path.splitext(os.path.basename(image_path))[
-        0] + "_debugging.jpg"
+    base_filename = os.path.splitext(os.path.basename(image_path))[0]
+    debug_filename = f"{base_filename}_debugging.jpg"
     debug_path = os.path.join(os.path.dirname(image_path), debug_filename)
+    
+    print(f"     Processing image: {os.path.basename(image_path)}")
 
     try:
-
         img = cv2.imread(image_path)
         if img is None:
             print(f"Error: Could not load image at {image_path}")
@@ -42,12 +43,12 @@ def detect_1cm_distance_iraq(image_path):
 
         roi = initial_roi
 
-        roi_temp_path = os.path.join(os.path.dirname(image_path), "_temp_roi.jpg")
+        # Use unique temporary file names to avoid conflicts
+        roi_temp_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_temp_roi.jpg")
         cv2.imwrite(roi_temp_path, roi)
 
         try:
-
-            print("Applying AI-based background removal...")
+            print(f"     Applying AI-based background removal...")
             bg_removed_path, _ = extract_and_save_center_object(
                 roi_temp_path,
                 output_image_background_color=(255, 255, 255),
@@ -59,18 +60,19 @@ def detect_1cm_distance_iraq(image_path):
             bg_removed_img = cv2.imread(bg_removed_path)
             if bg_removed_img is not None:
                 roi = bg_removed_img
-                print("AI background removal applied successfully")
+                print(f"     AI background removal applied successfully for {os.path.basename(image_path)}")
             else:
-                print("Warning: Could not load AI-processed image, using original ROI")
+                print(f"     Warning: Could not load AI-processed image, using original ROI")
 
+            # Clean up temporary files
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
             if os.path.exists(bg_removed_path):
                 os.remove(bg_removed_path)
 
         except Exception as e:
-            print(f"AI background removal failed: {e}, using original ROI")
-
+            print(f"     AI background removal failed: {e}, using original ROI")
+            # Clean up temporary file
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
 
@@ -97,8 +99,9 @@ def detect_1cm_distance_iraq(image_path):
         contrast_adjusted_roi = cv2.convertScaleAbs(
             trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
 
-        cv2.imwrite(os.path.join(os.path.dirname(image_path),
-                    "_contrast.jpg"), contrast_adjusted_roi)
+        # Use unique contrast file name
+        contrast_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_contrast.jpg")
+        cv2.imwrite(contrast_path, contrast_adjusted_roi)
 
         edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 
@@ -106,7 +109,7 @@ def detect_1cm_distance_iraq(image_path):
                                     60, minLineLength=30, maxLineGap=10)
 
         if lines_roi is None or len(lines_roi) < 2:
-            print("Error: Could not detect enough lines in the ROI.")
+            print(f"     Error: Could not detect enough lines in the ROI for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
@@ -122,7 +125,7 @@ def detect_1cm_distance_iraq(image_path):
                     y1, y2), 'y2': max(y1, y2), 'h': line_height})
 
         if not potential_ticks_props:
-            print("Error: No potential tick lines found after initial filtering.")
+            print(f"     Error: No potential tick lines found after initial filtering for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
@@ -152,8 +155,7 @@ def detect_1cm_distance_iraq(image_path):
             i = group_scan_idx + 1
 
         if len(merged_tick_x_values) < 11:
-            print(
-                f"Error: Not enough merged tick marks found ({len(merged_tick_x_values)}). Need at least 11.")
+            print(f"     Error: Not enough merged tick marks found ({len(merged_tick_x_values)}) for {os.path.basename(image_path)}. Need at least 11.")
             cv2.imwrite(debug_path, roi)
             return None
 
@@ -189,31 +191,30 @@ def detect_1cm_distance_iraq(image_path):
                     candidate_1cm_distances.append(current_span_distance)
 
         if not candidate_1cm_distances:
-            print("Error: Could not find any suitable 1cm segments after consistency checks.")
+            print(f"     Error: Could not find any suitable 1cm segments after consistency checks for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
         one_cm_distance = np.median(candidate_1cm_distances)
 
         if one_cm_distance <= 0:
-            print(
-                f"Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive.")
+            print(f"     Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
         one_cm_text_info = find_1cm_text_location(roi)
         if one_cm_text_info is not None:
-
             pass
         else:
-
             pass
 
+        print(f"     SUCCESS: Found 1cm distance of {one_cm_distance:.2f}px in {os.path.basename(image_path)}")
         return one_cm_distance
 
     except Exception as e:
-        print(f"An error occurred in detect_1cm_distance_iraq: {e}")
-        cv2.imwrite(debug_path, roi)
+        print(f"     An error occurred in detect_1cm_distance_iraq for {os.path.basename(image_path)}: {e}")
+        if 'roi' in locals():
+            cv2.imwrite(debug_path, roi)
         return None
 
 

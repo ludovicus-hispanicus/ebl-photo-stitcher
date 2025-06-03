@@ -7,6 +7,7 @@ import datetime
 import time
 import stitch_config
 from stitch_config import FINAL_TIFF_SUBFOLDER_NAME, FINAL_JPG_SUBFOLDER_NAME, JPEG_SAVE_QUALITY
+from hdr_processor import HDR_SUFFIX
 
 try:
     from pure_metadata import apply_all_metadata, set_basic_exif_metadata
@@ -25,6 +26,9 @@ def save_stitched_output(
     """Save stitched output in both TIFF and JPG formats with metadata."""
     if not isinstance(final_image, np.ndarray) or final_image.size == 0:
         raise ValueError("Invalid image for saving")
+
+    if HDR_SUFFIX in output_base_name:
+        output_base_name = output_base_name.replace(HDR_SUFFIX, "")
 
     final_tiff_output_dir = os.path.join(
         main_input_folder_path, FINAL_TIFF_SUBFOLDER_NAME)
