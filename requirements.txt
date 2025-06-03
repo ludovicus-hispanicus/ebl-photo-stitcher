@@ -1,7 +1,26 @@
-# Core requirements for eBL Photo Stitcher
+# Computer Vision and Image Processing
 opencv-python>=4.5.0
 numpy>=1.19.0
 imageio>=2.9.0
 rawpy>=0.16.0
 pyexiv2>=2.8.0
 cairosvg>=2.5.2
+
+# Background Removal (rembg functionality)
+rembg>=2.0.0
+torch>=1.9.0
+torchvision>=0.10.0
+
+# Machine Learning Models (for rembg)
+onnxruntime>=1.8.0
+
+# Image Processing Libraries
+Pillow>=8.0.0
+scikit-image>=0.18.0
+
+# Data Processing
+scipy>=1.6.0
+
+# Utilities
+tqdm>=4.60.0
+requests>=2.25.0
