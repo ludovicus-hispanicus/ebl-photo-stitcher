@@ -161,21 +161,23 @@ class UIComponents:
 
     @staticmethod
     def create_log_area_ui(parent, text_redirector_class):
-        """Create log area UI component."""
-        frame = ttk.LabelFrame(parent, text="Log", padding="10")
-        frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        """Create log area UI with scrollbar."""
+        log_frame = ttk.LabelFrame(parent, text="Processing Log", padding="5")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
-        log_text = tk.Text(
-            frame,
-            height=15,
-            wrap=tk.WORD,
-            relief=tk.SUNKEN,
-            borderwidth=1,
-            state=tk.DISABLED
-        )
-        log_text.pack(fill=tk.BOTH, expand=True)
+        text_frame = ttk.Frame(log_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
 
-        sys.stdout = text_redirector_class(log_text, "stdout")
-        sys.stderr = text_redirector_class(log_text, "stderr")
+        log_text = tk.Text(text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
+                          bg="#f0f0f0", font=("Consolas", 9))
 
-        return frame, log_text
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=log_text.yview)
+
+        log_text.configure(yscrollcommand=scrollbar.set)
+
+        log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        sys.stdout = text_redirector_class(log_text)
+
+        return log_frame, log_text

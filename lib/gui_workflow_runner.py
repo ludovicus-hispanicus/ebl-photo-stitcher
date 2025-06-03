@@ -20,7 +20,7 @@ from workflow_cleanup import cleanup_intermediate_files, cleanup_temp_files
 from workflow_file_processing import find_ruler_and_views
 from workflow_statistics import print_final_statistics
 from extract_measurements import add_measurement_record
-
+from remove_background import get_museum_background_color
 
 def run_complete_image_processing_workflow(
     source_folder_path,
@@ -45,16 +45,31 @@ def run_complete_image_processing_workflow(
     use_measurements_from_database=False,
     measurements_dict=None,
     gradient_width_fraction=0.5,
-    enable_hdr_processing=False
+    enable_hdr_processing=False,
+    use_first_photo_measurements=False
 ):
     """Main workflow orchestration function."""
     start_time = time.time()
     failed_objects = []
 
+    print(f"DEBUG: use_first_photo_measurements = {use_first_photo_measurements}")
+
     if background_color_tolerance is None:
         background_color_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
     print(f"Workflow started for folder: {source_folder_path}")
+
+    cached_px_per_cm = None
+    cached_measurements_used = None
+    cached_detected_bg_color = None
+    cached_output_bg_color = None
+    is_first_subfolder = True
+    
+    if use_first_photo_measurements:
+        print("DEBUG: Using first photo measurements mode - ruler detection will only run on first image set")
+    else:
+        print("DEBUG: First photo measurements mode is DISABLED - will run ruler detection on all sets")
+
     progress_callback(2)
 
     image_extensions_tuple = tuple(ext.lower() for ext in image_extensions_config) + \
@@ -112,6 +127,15 @@ def run_complete_image_processing_workflow(
             print(
                 f"   HDR processing complete. Processing {len(processed_subfolders)} subfolder(s).")
 
+    filtered_subfolders = []
+    for subfolder_path in processed_subfolders:
+        subfolder_name = os.path.basename(subfolder_path)
+        if subfolder_name.startswith('_Final_'):
+            print(f"   Skipping output folder: {subfolder_name}")
+            continue
+        filtered_subfolders.append(subfolder_path)
+    
+    processed_subfolders = filtered_subfolders
     num_folders = len(processed_subfolders)
     print(f"File organization complete. Targeting {num_folders} subfolder(s).")
     progress_callback(10)
@@ -126,6 +150,15 @@ def run_complete_image_processing_workflow(
     total_ok, total_err, cr2_conv_total = 0, 0, 0
     prog_per_folder = 85.0 / num_folders if num_folders > 0 else 0
 
+    cached_px_per_cm = None
+    cached_measurements_used = None
+    cached_detected_bg_color = None
+    cached_output_bg_color = None
+    is_first_subfolder = True
+
+    if use_first_photo_measurements:
+        print("Using first photo measurements mode - ruler detection will only run on first image set")
+
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
         print(
@@ -136,6 +169,14 @@ def run_complete_image_processing_workflow(
 
         try:
 
+            use_cached_measurements = use_first_photo_measurements and not is_first_subfolder
+
+            if use_cached_measurements:
+                print(
+                    f"   Using cached measurements from first image set (px/cm: {cached_px_per_cm})")
+                print(
+                    f"   Using cached background colors - detected: {cached_detected_bg_color}, output: {cached_output_bg_color}")
+
             result = process_single_subfolder(
                 subfolder_path_item, subfolder_name_item, image_extensions_tuple,
                 view_file_patterns_config, object_artifact_suffix_config,
@@ -144,15 +185,31 @@ def run_complete_image_processing_workflow(
                 object_extraction_bg_mode, ruler_template_1cm_asset_path,
                 ruler_template_2cm_asset_path, ruler_template_5cm_asset_path,
                 gradient_width_fraction, source_folder_path, photographer_name,
-                add_logo, logo_path, current_prog_base, prog_per_folder, progress_callback
+                add_logo, logo_path, current_prog_base, prog_per_folder, progress_callback,
+                use_cached_measurements, cached_px_per_cm, cached_measurements_used,
+                cached_detected_bg_color, cached_output_bg_color
             )
 
             if result['success']:
                 total_ok += 1
                 cr2_conv_total += result['cr2_conversions']
+
+                if use_first_photo_measurements and is_first_subfolder:
+                    cached_px_per_cm = result.get('px_per_cm')
+                    cached_measurements_used = result.get('measurements_used')
+                    cached_detected_bg_color = result.get('detected_bg_color')
+                    cached_output_bg_color = result.get('output_bg_color')
+                    if cached_px_per_cm:
+                        print(
+                            f"   Cached px/cm ratio from first set: {cached_px_per_cm}")
+                        print(
+                            f"   Cached background colors - detected: {cached_detected_bg_color}, output: {cached_output_bg_color}")
+
             else:
                 failed_objects.append(subfolder_name_item)
                 total_err += 1
+
+            is_first_subfolder = False
 
         except Exception as e:
             print(f"   ERROR processing set '{subfolder_name_item}': {e}")
@@ -179,7 +236,9 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                              ruler_template_1cm_asset_path, ruler_template_2cm_asset_path,
                              ruler_template_5cm_asset_path, gradient_width_fraction,
                              source_folder_path, photographer_name, add_logo, logo_path,
-                             current_prog_base, prog_per_folder, progress_callback):
+                             current_prog_base, prog_per_folder, progress_callback,
+                             use_cached_measurements=False, cached_px_per_cm=None, cached_measurements_used=None,
+                             cached_detected_bg_color=None, cached_output_bg_color=None):
     """Process a single subfolder."""
 
     result = {'success': False, 'cr2_conversions': 0}
@@ -203,12 +262,21 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     progress += sub_steps["layout"] * prog_per_folder
     progress_callback(current_prog_base + progress)
 
-    px_cm_val, measurements_used, cr2_conv_scale = determine_pixels_per_cm(
-        subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
-        raw_ext_config, museum_selection, ruler_position,
-        use_measurements_from_database, measurements_dict, background_color_tolerance
-    )
+    if use_cached_measurements and cached_px_per_cm is not None:
+        print(f"   Using cached scale detection: {cached_px_per_cm} px/cm")
+        px_cm_val = cached_px_per_cm
+        measurements_used = cached_measurements_used
+        cr2_conv_scale = 0
+    else:
+        px_cm_val, measurements_used, cr2_conv_scale = determine_pixels_per_cm(
+            subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
+            raw_ext_config, museum_selection, ruler_position,
+            use_measurements_from_database, measurements_dict, background_color_tolerance
+        )
+
     result['cr2_conversions'] += cr2_conv_scale
+    result['px_per_cm'] = px_cm_val
+    result['measurements_used'] = measurements_used
 
     if px_cm_val is None:
         print(
@@ -218,46 +286,61 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     progress += sub_steps["scale"] * prog_per_folder
     progress_callback(current_prog_base + progress)
 
-    path_ruler_extract_img, tmp_ruler_conv_file = prepare_ruler_image(
-        ruler_for_scale_fp, subfolder_path_item, raw_ext_config)
+    if use_cached_measurements:
+        print(f"   Skipping ruler image processing - using cached measurements")
 
-    if tmp_ruler_conv_file:
-        result['cr2_conversions'] += 1
+        detected_bg_color = cached_detected_bg_color
+        output_bg_color = cached_output_bg_color
+        print(f"   Using cached background colors for {subfolder_name_item}")
 
-    art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
-        path_ruler_extract_img, object_extraction_bg_mode,
-        object_artifact_suffix_config, museum_selection
-    )
+        progress += (sub_steps["ruler_art"] + sub_steps["ruler_extract"]
+                     + sub_steps["ruler_choice"] + sub_steps["ruler_resize"]) * prog_per_folder
+        progress_callback(current_prog_base + progress)
+    else:
 
-    progress += sub_steps["ruler_art"] * prog_per_folder
-    progress_callback(current_prog_base + progress)
+        path_ruler_extract_img, tmp_ruler_conv_file = prepare_ruler_image(
+            ruler_for_scale_fp, subfolder_path_item, raw_ext_config)
 
-    tmp_iso_ruler_fp = extract_ruler_contour(
-        path_ruler_extract_img, detected_bg_color, art_cont,
-        background_color_tolerance, temp_extracted_ruler_filename_config,
-        subfolder_path_item
-    )
+        if tmp_ruler_conv_file:
+            result['cr2_conversions'] += 1
 
-    cleanup_temp_files(tmp_ruler_conv_file)
+        art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
+            path_ruler_extract_img, object_extraction_bg_mode,
+            object_artifact_suffix_config, museum_selection
+        )
 
-    progress += sub_steps["ruler_extract"] * prog_per_folder
-    progress_callback(current_prog_base + progress)
+        progress += sub_steps["ruler_art"] * prog_per_folder
+        progress_callback(current_prog_base + progress)
 
-    chosen_ruler_tpl, custom_ruler_size_cm = select_ruler_template(
-        museum_selection, art_fp, px_cm_val, ruler_template_1cm_asset_path,
-        ruler_template_2cm_asset_path, ruler_template_5cm_asset_path
-    )
+        tmp_iso_ruler_fp = extract_ruler_contour(
+            path_ruler_extract_img, detected_bg_color, art_cont,
+            background_color_tolerance, temp_extracted_ruler_filename_config,
+            subfolder_path_item
+        )
 
-    progress += sub_steps["ruler_choice"] * prog_per_folder
-    progress_callback(current_prog_base + progress)
+        cleanup_temp_files(tmp_ruler_conv_file)
 
-    generate_digital_ruler(px_cm_val, chosen_ruler_tpl, subfolder_name_item,
-                           subfolder_path_item, custom_ruler_size_cm)
+        progress += sub_steps["ruler_extract"] * prog_per_folder
+        progress_callback(current_prog_base + progress)
 
-    cleanup_temp_files(tmp_iso_ruler_fp)
+        chosen_ruler_tpl, custom_ruler_size_cm = select_ruler_template(
+            museum_selection, art_fp, px_cm_val, ruler_template_1cm_asset_path,
+            ruler_template_2cm_asset_path, ruler_template_5cm_asset_path
+        )
 
-    progress += sub_steps["ruler_resize"] * prog_per_folder
-    progress_callback(current_prog_base + progress)
+        progress += sub_steps["ruler_choice"] * prog_per_folder
+        progress_callback(current_prog_base + progress)
+
+        generate_digital_ruler(px_cm_val, chosen_ruler_tpl, subfolder_name_item,
+                               subfolder_path_item, custom_ruler_size_cm)
+
+        cleanup_temp_files(tmp_iso_ruler_fp)
+
+        progress += sub_steps["ruler_resize"] * prog_per_folder
+        progress_callback(current_prog_base + progress)
+
+    result['detected_bg_color'] = detected_bg_color
+    result['output_bg_color'] = output_bg_color
 
     print(f"   Finding other views to process for {subfolder_name_item}...")
 
@@ -270,25 +353,26 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
     for img_file in all_image_files:
         filename = os.path.basename(img_file)
-        
+
         if img_file == ruler_for_scale_fp:
             continue
-        
+
         if object_artifact_suffix_config in img_file:
             continue
-        
+
         if 'temp_' in filename:
             continue
-        
+
         if '_ruler.' in filename.lower():
             print(f"     Skipping ruler file: {filename}")
             continue
-        
+
         other_views_to_process_list.append(img_file)
         print(f"     Added view: {filename}")
 
     print(f"   Found {len(other_views_to_process_list)} other views to process")
-    print(f"   Other views: {[os.path.basename(f) for f in other_views_to_process_list]}")
+    print(
+        f"   Other views: {[os.path.basename(f) for f in other_views_to_process_list]}")
 
     orig_other_views_list = prepare_other_views_list(
         None, orig_views_fps, ruler_for_scale_fp)

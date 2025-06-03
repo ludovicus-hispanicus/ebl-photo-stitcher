@@ -104,6 +104,7 @@ class ImageProcessorApp:
         self.progress_var = tk.DoubleVar(value=0.0)
         self.use_measurements_var = tk.BooleanVar(value=False)
         self.enable_hdr_processing = tk.BooleanVar(value=False)
+        self.use_first_photo_measurements_var = tk.BooleanVar(value=False)
         self.gradient_width_fraction = 0.5
 
         self.measurements_loaded = False
@@ -161,6 +162,21 @@ class ImageProcessorApp:
         self.options_frame, self.measurements_checkbox, self.hdr_checkbox = UIComponents.create_main_options_ui(
             self.main_tab, self.use_measurements_var, self.measurements_loaded,
             self.enable_hdr_processing, script_directory, self.debug_measurements_loading)
+        
+        self.first_photo_measurements_checkbox = ttk.Checkbutton(
+            self.options_frame,
+            text="Take measurements from first photograph only",
+            variable=self.use_first_photo_measurements_var,
+            style="Custom.TCheckbutton"
+        )
+        self.first_photo_measurements_checkbox.pack(anchor="w", pady=(5, 0))
+        
+        ttk.Label(
+            self.options_frame,
+            text="Detect ruler only in first image set, apply px/cm ratio to all others",
+            font=("Helvetica", 8),
+            foreground="gray"
+        ).pack(anchor="w", pady=(0, 5))
 
         self.prb = UIComponents.create_process_button_ui(
             self.main_tab, self.start_processing_thread)
@@ -168,8 +184,23 @@ class ImageProcessorApp:
         self.progress_frame, self.progress_bar, self.progress_var = UIComponents.create_progress_bar_ui(
             self.main_tab)
 
-        self.log_frame, self.lt = UIComponents.create_log_area_ui(
-            self.main_tab, TextRedirector)
+        self.log_frame = ttk.LabelFrame(self.main_tab, text="Processing Log", padding="5")
+        self.log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        text_frame = ttk.Frame(self.log_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.lt = tk.Text(text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
+                         bg="#f0f0f0", font=("Consolas", 9))
+
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.lt.yview)
+
+        self.lt.configure(yscrollcommand=scrollbar.set)
+
+        self.lt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        sys.stdout = TextRedirector(self.lt)
 
         settings = {
             'gradient_width_fraction': self.gradient_width_fraction,
@@ -204,11 +235,42 @@ class ImageProcessorApp:
 
     def save_config(self):
         """Save application configuration."""
-        ConfigManager.save_config(self, self.config_file_path)
+        config_data = {
+            'input_folder': self.input_folder_var.get(),
+            'ruler_position': self.ruler_position_var.get(),
+            'photographer': self.photographer_var.get(),
+            'museum': self.museum_var.get(),
+            'use_measurements': self.use_measurements_var.get(),
+            'enable_hdr_processing': self.enable_hdr_processing.get(),
+        }
+        import json
+        try:
+            with open(self.config_file_path, 'w') as f:
+                json.dump(config_data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save config: {e}")
 
     def load_config(self):
         """Load application configuration."""
-        ConfigManager.load_config(self, self.config_file_path)
+        import json
+        config_data = None
+        try:
+            if os.path.exists(self.config_file_path):
+                with open(self.config_file_path, 'r') as f:
+                    config_data = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load config: {e}")
+            config_data = None
+        
+        if config_data:
+            self.input_folder_var.set(config_data.get('input_folder', ''))
+            self.ruler_position_var.set(config_data.get('ruler_position', 'bottom'))
+            self.photographer_var.set(config_data.get('photographer', DEFAULT_PHOTOGRAPHER))
+            self.museum_var.set(config_data.get('museum', 'BM'))
+            self.use_measurements_var.set(config_data.get('use_measurements', False))
+            self.enable_hdr_processing.set(config_data.get('enable_hdr_processing', False))
+        
+        self.use_first_photo_measurements_var.set(False)
 
     def update_progress_bar(self, value):
         """Update the progress bar value."""
@@ -229,24 +291,49 @@ class ImageProcessorApp:
 
     def start_processing_thread(self):
         """Start the processing thread with current settings."""
-
         advanced_settings = self.advanced_tab.get_settings()
 
-        processing_params = {
-            'input_folder': self.input_folder_var.get(),
-            'ruler_position': self.ruler_position_var.get(),
-            'photographer_name': self.photographer_var.get(),
-            'add_logo': advanced_settings['add_logo'],
-            'logo_path': advanced_settings['logo_path'],
+        workflow_args = [
+            self.input_folder_var.get(),
+            self.ruler_position_var.get(),
+            self.photographer_var.get(),
+            'rembg',
+            advanced_settings['add_logo'],
+            advanced_settings['logo_path'],
+            self.RAW_IMAGE_EXTENSION,
+            self.VALID_IMAGE_EXTENSIONS,
+            self.RULER_TEMPLATE_1CM_PATH_ASSET,
+            self.RULER_TEMPLATE_2CM_PATH_ASSET,
+            self.RULER_TEMPLATE_5CM_PATH_ASSET,
+            self.STITCH_VIEW_PATTERNS_WITH_EXT,
+            self.TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
+            self.OBJECT_ARTIFACT_SUFFIX,
+            self.update_progress_bar,
+            self.processing_finished_ui_update,
+        ]
+
+        workflow_kwargs = {
             'museum_selection': self.museum_var.get(),
-            'use_measurements': self.use_measurements_var.get(),
-            'gradient_width': advanced_settings['gradient_width_fraction'],
-            'bg_tolerance': advanced_settings['background_color_tolerance'],
-            'enable_hdr': self.enable_hdr_processing.get(),
+            'app_root_window': self.root,
+            'background_color_tolerance': advanced_settings['background_color_tolerance'],
+            'use_measurements_from_database': self.use_measurements_var.get(),
+            'measurements_dict': self.measurements_dict,
+            'gradient_width_fraction': advanced_settings['gradient_width_fraction'],
+            'enable_hdr_processing': self.enable_hdr_processing.get(),
+            'use_first_photo_measurements': self.use_first_photo_measurements_var.get()
         }
 
-        EventHandlers.start_processing_workflow(
-            self, run_complete_image_processing_workflow, processing_params)
+        self.configure_museum_settings(self.museum_var.get())
+        self.prb.config(state=tk.DISABLED)
+
+        import threading
+        workflow_thread = threading.Thread(
+            target=run_complete_image_processing_workflow,
+            args=workflow_args,
+            kwargs=workflow_kwargs
+        )
+        workflow_thread.daemon = True
+        workflow_thread.start()
 
     def debug_measurements_loading(self):
         """Debug function to test loading the measurements file."""
