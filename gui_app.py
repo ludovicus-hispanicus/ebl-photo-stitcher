@@ -159,24 +159,10 @@ class ImageProcessorApp:
             self.main_tab, self.museum_var, self.ruler_position_var,
             self.on_museum_changed, self.on_ruler_canvas_click)
 
-        self.options_frame, self.measurements_checkbox, self.hdr_checkbox = UIComponents.create_main_options_ui(
+        self.options_frame, self.measurements_checkbox, self.hdr_checkbox, self.first_photo_measurements_checkbox = UIComponents.create_main_options_ui(
             self.main_tab, self.use_measurements_var, self.measurements_loaded,
-            self.enable_hdr_processing, script_directory, self.debug_measurements_loading)
-        
-        self.first_photo_measurements_checkbox = ttk.Checkbutton(
-            self.options_frame,
-            text="Take measurements from first photograph only",
-            variable=self.use_first_photo_measurements_var,
-            style="Custom.TCheckbutton"
-        )
-        self.first_photo_measurements_checkbox.pack(anchor="w", pady=(5, 0))
-        
-        ttk.Label(
-            self.options_frame,
-            text="Detect ruler only in first image set, apply px/cm ratio to all others",
-            font=("Helvetica", 8),
-            foreground="gray"
-        ).pack(anchor="w", pady=(0, 5))
+            self.enable_hdr_processing, self.use_first_photo_measurements_var,
+            script_directory, self.debug_measurements_loading)
 
         self.prb = UIComponents.create_process_button_ui(
             self.main_tab, self.start_processing_thread)
