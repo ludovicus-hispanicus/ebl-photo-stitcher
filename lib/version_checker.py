@@ -47,7 +47,6 @@ class VersionChecker:
                 self.is_newer_available = True
             else:
                 self.is_newer_available = False
-                print("Application is up to date")
                 
             self.check_completed = True
 

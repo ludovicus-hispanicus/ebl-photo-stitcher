@@ -138,6 +138,9 @@ def run_complete_image_processing_workflow(
         filtered_subfolders.append(subfolder_path)
     
     processed_subfolders = filtered_subfolders
+
+    processed_subfolders.sort(key=lambda path: os.path.basename(path))
+    
     num_folders = len(processed_subfolders)
     print(f"File organization complete. Targeting {num_folders} subfolder(s).")
     progress_callback(10)
@@ -294,11 +297,32 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     progress_callback(current_prog_base + progress)
 
     if use_cached_measurements:
-        print(f"   Skipping ruler image processing - using cached measurements")
+        print(f"   Using cached measurements - still processing ruler image for object extraction")
+
+        path_ruler_extract_img, tmp_ruler_conv_file = prepare_ruler_image(
+            ruler_for_scale_fp, subfolder_path_item, raw_ext_config)
+
+        if tmp_ruler_conv_file:
+            result['cr2_conversions'] += 1
+
+        art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
+            path_ruler_extract_img, object_extraction_bg_mode,
+            object_artifact_suffix_config, museum_selection
+        )
 
         detected_bg_color = cached_detected_bg_color
         output_bg_color = cached_output_bg_color
         print(f"   Using cached background colors for {subfolder_name_item}")
+
+        cleanup_temp_files(tmp_ruler_conv_file)
+
+        chosen_ruler_tpl, custom_ruler_size_cm = select_ruler_template(
+            museum_selection, art_fp, px_cm_val, ruler_template_1cm_asset_path,
+            ruler_template_2cm_asset_path, ruler_template_5cm_asset_path
+        )
+
+        generate_digital_ruler(px_cm_val, chosen_ruler_tpl, subfolder_name_item,
+                               subfolder_path_item, custom_ruler_size_cm)
 
         progress += (sub_steps["ruler_art"] + sub_steps["ruler_extract"]
                      + sub_steps["ruler_choice"] + sub_steps["ruler_resize"]) * prog_per_folder
