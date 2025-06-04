@@ -14,6 +14,7 @@ try:
     from gui_config_manager import (
         DEFAULT_PHOTOGRAPHER,
     )
+    from version_checker import CURRENT_VERSION, VersionChecker, get_current_version
     from gui_workflow_runner import run_complete_image_processing_workflow
     from workflow_imports import (
         resize_ruler, ruler_detector, extract_and_save_center_object,
@@ -35,6 +36,7 @@ try:
 
     from gui_components import UIComponents
     from gui_layout import LayoutManager
+    update_version_button = LayoutManager.update_version_button
     from gui_events import EventHandlers
     from gui_config_handlers import ConfigManager
     from gui_museum_options import MuseumOptionsManager
@@ -91,7 +93,7 @@ class ImageProcessorApp:
         self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
         self.root = root_window
-        self.root.title("eBL Photo Stitcher v0.6")
+        self.root.title(f"eBL Photo Stitcher {CURRENT_VERSION}")
         self.root.geometry("600x900")
 
         self.config_file_path = os.path.join(
@@ -116,11 +118,19 @@ class ImageProcessorApp:
                 measurements_file)
             self.measurements_loaded = len(self.measurements_dict) > 0
 
+        self.version_checker = VersionChecker(callback=self._on_version_check_complete)
+        self.version_button = None
+        self.version_check_timeout_id = None
+
         self._setup_icon()
         self._setup_styles()
         self._create_widgets()
         self.load_config()
         self.on_museum_changed(None)
+
+        self.root.after(1000, self._start_version_check)
+        self.version_check_timeout_id = self.root.after(
+            8000, self._on_version_check_timeout)
 
     def _setup_icon(self):
         """Set up application icon."""
@@ -136,15 +146,28 @@ class ImageProcessorApp:
         """Set up ttk styles for the application."""
         self.style = LayoutManager.setup_styles(self.root)
 
+        self.style.configure("Link.TButton",
+                             foreground="blue",
+                             relief="flat",
+                             borderwidth=0)
+        self.style.map("Link.TButton",
+                       foreground=[('active', 'darkblue')])
+
     def _create_widgets(self):
         """Create all UI widgets."""
-
         mf = ttk.Frame(self.root, padding="10")
         mf.pack(expand=True, fill=tk.BOTH)
 
-        self.header_frame, self.notebook = LayoutManager.create_tabs(mf)
+        # Get the buttons frame from create_tabs
+        self.header_frame, self.notebook, buttons_frame = LayoutManager.create_tabs(mf)
+
+        # Create version button in the buttons frame
+        self.version_button = LayoutManager.create_version_button(
+            buttons_frame, self._on_version_button_click)
+
+        # Create help button in the buttons frame
         self.help_btn = LayoutManager.create_help_link(
-            self.header_frame, self.HELP_URL)
+            buttons_frame, self.HELP_URL)
 
         self.main_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.main_tab, text="Main")
@@ -170,14 +193,15 @@ class ImageProcessorApp:
         self.progress_frame, self.progress_bar, self.progress_var = UIComponents.create_progress_bar_ui(
             self.main_tab)
 
-        self.log_frame = ttk.LabelFrame(self.main_tab, text="Processing Log", padding="5")
+        self.log_frame = ttk.LabelFrame(
+            self.main_tab, text="Processing Log", padding="5")
         self.log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
         text_frame = ttk.Frame(self.log_frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
 
         self.lt = tk.Text(text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
-                         bg="#f0f0f0", font=("Consolas", 9))
+                          bg="#f0f0f0", font=("Consolas", 9))
 
         scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.lt.yview)
 
@@ -247,15 +271,17 @@ class ImageProcessorApp:
         except Exception as e:
             print(f"Warning: Could not load config: {e}")
             config_data = None
-        
+
         if config_data:
             self.input_folder_var.set(config_data.get('input_folder', ''))
             self.ruler_position_var.set(config_data.get('ruler_position', 'bottom'))
-            self.photographer_var.set(config_data.get('photographer', DEFAULT_PHOTOGRAPHER))
+            self.photographer_var.set(config_data.get(
+                'photographer', DEFAULT_PHOTOGRAPHER))
             self.museum_var.set(config_data.get('museum', 'BM'))
             self.use_measurements_var.set(config_data.get('use_measurements', False))
-            self.enable_hdr_processing.set(config_data.get('enable_hdr_processing', False))
-        
+            self.enable_hdr_processing.set(
+                config_data.get('enable_hdr_processing', False))
+
         self.use_first_photo_measurements_var.set(False)
 
     def update_progress_bar(self, value):
@@ -324,6 +350,47 @@ class ImageProcessorApp:
     def debug_measurements_loading(self):
         """Debug function to test loading the measurements file."""
         EventHandlers.debug_measurements_loading(self, ASSETS_SUBFOLDER)
+
+    def _start_version_check(self):
+        """Start the background version check."""
+        print("Checking for updates...")
+        self.version_checker.check_for_updates_async()
+
+    def _on_version_check_timeout(self):
+        """Called if version check takes too long."""
+        if not self.version_checker.check_completed:
+            print("Version check timed out - showing current version")
+            self.root.after(0, self._handle_version_update, None, False)
+
+    def _on_version_check_complete(self, latest_version, is_newer_available):
+        """Called when version check completes."""
+        if self.version_check_timeout_id:
+            self.root.after_cancel(self.version_check_timeout_id)
+
+        self.root.after(0, self._handle_version_update,
+                        latest_version, is_newer_available)
+
+    def _handle_version_update(self, latest_version, is_newer_available):
+        """Handle version update on main thread."""
+
+        update_version_button(
+            self.version_button,
+            latest_version,
+            is_newer_available,
+            get_current_version
+        )
+
+        if latest_version is None:
+            print("Version check failed - showing current version")
+        elif is_newer_available:
+            print(f"Update available: {latest_version}")
+        else:
+            print("Application is up to date")
+
+    def _on_version_button_click(self):
+        """Handle version button click (only works when update is available)."""
+        if self.version_checker.is_newer_available:
+            self.version_checker.open_releases_page()
 
 
 if __name__ == "__main__":
