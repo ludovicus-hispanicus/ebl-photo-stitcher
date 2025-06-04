@@ -41,27 +41,28 @@ class LayoutManager:
         header_frame.pack(fill=tk.X, pady=(0, 5))
 
         header_frame.columnconfigure(0, weight=1)
-        header_frame.columnconfigure(1, weight=0)
+        header_frame.columnconfigure(1, weight=0)  # For the buttons container
 
         notebook = ttk.Notebook(header_frame)
         notebook.grid(row=0, column=0, sticky="w")
 
-        return header_frame, notebook
+        # Create a container frame for the buttons in column 1
+        buttons_frame = ttk.Frame(header_frame)
+        buttons_frame.grid(row=0, column=0, sticky="ne")
+
+        return header_frame, notebook, buttons_frame
 
     @staticmethod
-    def create_help_link(parent_frame, help_url):
-        """Create help link in header."""
-
-        import webbrowser
-
+    def _create_link_button(parent_frame, text, command_callback):
+        """Create a styled link button (shared styling for help and version buttons)."""
         try:
             bg_color = parent_frame.winfo_toplevel().cget('bg')
         except:
             bg_color = 'SystemButtonFace'
 
-        help_btn = tk.Button(
+        button = tk.Button(
             parent_frame,
-            text="Help",
+            text=text,
             fg="blue",
             cursor="hand2",
             font=('Helvetica', 10, 'underline'),
@@ -70,11 +71,74 @@ class LayoutManager:
             highlightthickness=0,
             bg=bg_color,
             activebackground=bg_color,
-            command=lambda: webbrowser.open_new(help_url)
+            command=command_callback
         )
-        help_btn.grid(row=0, column=0, sticky="ne")
+        return button
 
-        return help_btn
+    @staticmethod
+    def create_version_button(buttons_frame, command_callback):
+        """Create version button in header."""
+        version_button = LayoutManager._create_link_button(
+            buttons_frame, "Checking...", command_callback
+        )
+        # Override initial styling for disabled state
+        version_button.config(
+            fg="gray",
+            cursor="arrow",
+            font=('Helvetica', 10)
+        )
+        # Pack with right padding to create space for help button
+        version_button.pack(side=tk.LEFT, padx=(0, 15))
+        return version_button
+
+    @staticmethod
+    def update_version_button(version_button, latest_version, is_newer_available, get_current_version_func):
+        """Update version button based on check results."""
+        if version_button is None:
+            print("Version button not yet created - skipping update")
+            return
+
+        if latest_version is None:
+
+            version_button.config(
+                text=f"Latest Version ({get_current_version_func()})",
+                fg="gray",
+                cursor="arrow",
+                font=('Helvetica', 10),
+                state="disabled"
+            )
+        elif is_newer_available:
+
+            version_button.config(
+                text="Update Available",
+                fg="blue",
+                cursor="hand2",
+                font=('Helvetica', 10, 'underline'),
+                state="normal"
+            )
+        else:
+
+            version_button.config(
+                text=f"Latest Version ({get_current_version_func()})",
+                fg="gray",
+                cursor="arrow",
+                font=('Helvetica', 10),
+                state="disabled"
+            )
+
+    @staticmethod
+    def create_help_link(buttons_frame, help_url):
+        """Create help link in header."""
+        import webbrowser
+        
+        help_button = LayoutManager._create_link_button(
+            buttons_frame,
+            "Help", 
+            lambda: webbrowser.open_new(help_url)
+        )
+        # Pack to the right of version button
+        help_button.pack(side=tk.LEFT)
+        return help_button
 
     @staticmethod
     def draw_ruler_selector(canvas, ruler_position, museum_selection, canvas_params):

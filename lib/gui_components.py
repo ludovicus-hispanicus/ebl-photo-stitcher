@@ -88,18 +88,28 @@ class UIComponents:
 
     @staticmethod
     def create_main_options_ui(parent, use_measurements_var, measurements_loaded,
-                               enable_hdr_var, script_directory, debug_callback):
-        """Create main options UI (measurements and HDR)."""
+                          enable_hdr_var, use_first_photo_measurements_var, 
+                          script_directory, debug_callback):
+        """Create main options UI (measurements, first photo measurements, and HDR)."""
 
         options_frame = ttk.LabelFrame(parent, text="Options")
         options_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
 
+        # Main measurements checkbox
         measurements_checkbox = ttk.Checkbutton(
             options_frame,
             text="Use measurements from database",
             variable=use_measurements_var
         )
-        measurements_checkbox.pack(anchor=tk.W, padx=10, pady=5)
+        measurements_checkbox.pack(anchor=tk.W, padx=10, pady=0)
+        
+        measurements_description = ttk.Label(
+            options_frame,
+            text="Use known tablet dimensions for scale instead of ruler marks",
+            font=("", 8),
+            foreground="gray"
+        )
+        measurements_description.pack(anchor=tk.W, padx=30, pady=(0, 5))
 
         if not measurements_loaded:
             measurements_checkbox.config(state=tk.DISABLED)
@@ -110,24 +120,39 @@ class UIComponents:
                 command=debug_callback,
                 style="Small.TButton"
             )
-            debug_btn.pack(anchor=tk.W, padx=20, pady=(0, 5))
+            debug_btn.pack(anchor=tk.W, padx=20, pady=(0, 0))
+
+        first_photo_measurements_checkbox = ttk.Checkbutton(
+            options_frame,
+            text="Take measurements from first photograph only",
+            variable=use_first_photo_measurements_var
+        )
+        first_photo_measurements_checkbox.pack(anchor=tk.W, padx=10, pady=(0, 0))
+
+        first_photo_description = ttk.Label(
+            options_frame,
+            text="Detect ruler only in first image set, apply px/cm ratio to all others",
+            font=("", 8),
+            foreground="gray"
+        )
+        first_photo_description.pack(anchor=tk.W, padx=50, pady=(0, 0))
 
         hdr_checkbox = ttk.Checkbutton(
             options_frame,
             text="Enable HDR Processing",
             variable=enable_hdr_var
         )
-        hdr_checkbox.pack(anchor=tk.W, padx=10, pady=5)
+        hdr_checkbox.pack(anchor=tk.W, padx=10, pady=0)
 
         hdr_description = ttk.Label(
             options_frame,
-            text="HDR processing combines sets of bracketed exposure images into optimized composites",
+            text="HDR processing combines sets of 3 bracketed exposure images into composites",
             font=("", 8),
             foreground="gray"
         )
-        hdr_description.pack(anchor=tk.W, padx=30, pady=(0, 5))
+        hdr_description.pack(anchor=tk.W, padx=30, pady=(0, 0))
 
-        return options_frame, measurements_checkbox, hdr_checkbox
+        return options_frame, measurements_checkbox, hdr_checkbox, first_photo_measurements_checkbox
 
     @staticmethod
     def create_process_button_ui(parent, start_processing_callback):
