@@ -140,6 +140,14 @@ class AdvancedTab:
         )
         self.browse_logo_btn.pack(side=tk.RIGHT)
 
+        logo_description = ttk.Label(
+            logo_frame,
+            text="Logo will be automatically resized to 1800px width while maintaining aspect ratio",
+            font=("", 8),
+            foreground="gray"
+        )
+        logo_description.pack(anchor=tk.W, padx=30, pady=(0, 5))
+
         self._toggle_logo_path_entry()
 
     def _toggle_logo_path_entry(self):

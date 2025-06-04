@@ -12,7 +12,7 @@ def try_ruler_detection_with_fallback(primary_image_path, subfolder_path_item, r
     Try ruler detection on primary image, with fallback to other images in the same folder.
 
     Returns:
-        tuple: (px_cm_val, cr2_conv_count_used)
+        tuple: (px_cm_val, cr2_conv_count)
     """
 
     if museum_selection == "Iraq Museum":
@@ -211,6 +211,22 @@ def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_
                     subfolder_path_item, measurements_dict, ruler_for_scale_fp, background_color_tolerance)
                 if px_cm_val is not None:
                     print(f"   FALLBACK: Using measurement from database")
+
+                    from extract_measurements import add_measurement_record
+                    from measurements_utils import extract_tablet_id_from_path
+
+                    tablet_id = extract_tablet_id_from_path(subfolder_path_item)
+                    if tablet_id:
+
+                        object_files = [f for f in os.listdir(subfolder_path_item)
+                                        if f.endswith('_object.tif')]
+                        if object_files:
+                            object_path = os.path.join(subfolder_path_item, object_files[0])
+                            add_measurement_record(
+                                object_path, px_cm_val, tablet_id,
+                                gap_pixels=0, output_dir=subfolder_path_item,
+                                was_fallback_measurement=True
+                            )
                 else:
                     print(f"   No measurement found in database for this tablet")
 

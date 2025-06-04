@@ -5,9 +5,33 @@ try:
     from image_utils import paste_image_onto_canvas
 except ImportError:
     print("ERROR: stitch_enhancement_utils.py - Could not import from image_utils.py")
-    def paste_image_onto_canvas(
-        *args): raise ImportError("paste_image_onto_canvas missing")
+    def paste_image_onto_canvas(*args):
+        pass
 
+STANDARD_LOGO_WIDTH_PX = 1800
+
+def resize_logo_to_standard_size(logo_image, target_width=STANDARD_LOGO_WIDTH_PX):
+    """
+    Resize logo to standard width while maintaining aspect ratio.
+    
+    Args:
+        logo_image: cv2 image array
+        target_width: Target width in pixels (default: 1800)
+    
+    Returns:
+        Resized image
+    """
+
+    current_height, current_width = logo_image.shape[:2]
+
+    aspect_ratio = current_height / current_width
+    target_height = int(target_width * aspect_ratio)
+
+    resized_logo = cv2.resize(logo_image, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+    
+    print(f"    Logo resized from {current_width}x{current_height} to {target_width}x{target_height}")
+    
+    return resized_logo
 
 def add_logo_to_image_array(
     content_img_array, logo_image_path, canvas_bg_color,
@@ -20,16 +44,9 @@ def add_logo_to_image_array(
         return content_img_array
 
     content_h, content_w = content_img_array.shape[:2]
-    logo_h_orig, logo_w_orig = logo_original.shape[:2]
-    logo_resized = logo_original
 
-    if logo_w_orig > content_w * max_width_fraction and logo_w_orig > 0 and content_w > 0:
-        target_logo_w = int(content_w * max_width_fraction)
-        scale = target_logo_w / logo_w_orig if logo_w_orig > 0 else 1.0
-        target_logo_h = int(logo_h_orig * scale)
-        if target_logo_w > 0 and target_logo_h > 0:
-            logo_resized = cv2.resize(
-                logo_original, (target_logo_w, target_logo_h), interpolation=cv2.INTER_AREA)
+    print(f"    Applying standard logo sizing (width: {STANDARD_LOGO_WIDTH_PX}px)")
+    logo_resized = resize_logo_to_standard_size(logo_original, STANDARD_LOGO_WIDTH_PX)
 
     final_logo_h, final_logo_w = logo_resized.shape[:2]
     canvas_w_new = max(content_w, final_logo_w)
@@ -42,7 +59,6 @@ def add_logo_to_image_array(
     paste_image_onto_canvas(canvas_with_logo, logo_resized,
                             (canvas_w_new - final_logo_w) // 2, content_h + padding_above)
     return canvas_with_logo
-
 
 def crop_canvas_to_content_with_margin(
     image_array_to_crop, background_color_bgr_tuple, margin_px_around

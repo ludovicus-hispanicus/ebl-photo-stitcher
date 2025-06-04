@@ -19,7 +19,7 @@ from workflow_ruler_generation import (
 from workflow_cleanup import cleanup_intermediate_files, cleanup_temp_files
 from workflow_file_processing import find_ruler_and_views
 from workflow_statistics import print_final_statistics
-from extract_measurements import add_measurement_record
+from extract_measurements import add_measurement_record, finalize_measurements_with_comparison, clear_fallback_comparisons
 from remove_background import get_museum_background_color
 
 def run_complete_image_processing_workflow(
@@ -49,6 +49,7 @@ def run_complete_image_processing_workflow(
     use_first_photo_measurements=False
 ):
     """Main workflow orchestration function."""
+    clear_fallback_comparisons()
     start_time = time.time()
     failed_objects = []
 
@@ -223,6 +224,11 @@ def run_complete_image_processing_workflow(
     if total_ok > 0:
         cleanup_intermediate_files(
             processed_subfolders, object_artifact_suffix_config)
+
+    try:
+        finalize_measurements_with_comparison(source_folder_path)
+    except Exception as e:
+        print(f"Warning: Could not create measurement comparison file: {e}")
 
     progress_callback(100)
     finished_callback()
