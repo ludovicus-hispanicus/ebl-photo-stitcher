@@ -32,13 +32,8 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
                         os.remove(file_path)
                         files_removed += 1
                         total_removed += 1
-                        print(f"    Removed file: {filename}")
                     except Exception as e:
                         print(f"  Error removing {filename}: {e}")
-
-            if files_removed > 0:
-                print(
-                    f"  Removed {files_removed} intermediate files from {folder_name}")
 
         except Exception as e:
             print(f"  Error accessing folder {folder_name}: {e}")

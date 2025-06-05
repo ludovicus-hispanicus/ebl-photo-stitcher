@@ -135,7 +135,6 @@ def apply_all_metadata(
         img = None
         backup_path = None
         try:
-            print(f"      Using {exiv2_module_name} for advanced metadata...")
 
             try:
                 backup_path = image_path + ".backup"

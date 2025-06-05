@@ -131,7 +131,6 @@ def create_comparison_excel(output_dir: str = None, photographer_name: str = Non
 
             # Only process measurements that have reference data
             if object_id not in sippar_data:
-                print(f"Skipping {object_id} - no reference data available")
                 continue
 
             calc_width = measurement.get("width", {}).get("value", 0) if isinstance(
@@ -163,8 +162,7 @@ def create_comparison_excel(output_dir: str = None, photographer_name: str = Non
             comparisons.append(comparison_record)
 
         if not comparisons:
-            print("No measurements with reference data found to export to Excel")
-            return False
+           return False
 
         # Generate filename with photographer name and date
         today = datetime.now().strftime("%Y.%m.%d")
@@ -211,11 +209,6 @@ def finalize_measurements_with_comparison(output_dir: str = None, photographer_n
     try:
         # Create Excel with measurements that have reference data
         excel_created = create_comparison_excel(output_dir, photographer_name)
-
-        if excel_created:
-            print("Measurement comparison workflow completed successfully")
-        else:
-            print("No measurements with reference data found - Excel file not created")
 
         return True
 
