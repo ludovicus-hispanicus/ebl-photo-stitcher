@@ -50,19 +50,12 @@ def run_complete_image_processing_workflow(
     use_first_photo_measurements=False
 ):
     """Main workflow orchestration function."""
-    
-    print("="*50)
-    print(f"DEBUG: Starting workflow for folder: {source_folder_path}")
-    print(f"  Folder exists: {os.path.exists(source_folder_path)}")
-    
+
     if os.path.exists(source_folder_path):
         try:
             all_items = os.listdir(source_folder_path)
-            print(f"  Total items in folder: {len(all_items)}")
-            
-            # Check for subfolders
+
             subfolders = [item for item in all_items if os.path.isdir(os.path.join(source_folder_path, item))]
-            print(f"  Subfolders found: {len(subfolders)}")
             for i, subfolder in enumerate(subfolders[:10]):  # Show first 10
                 subfolder_path = os.path.join(source_folder_path, subfolder)
                 subfolder_files = os.listdir(subfolder_path)
@@ -72,10 +65,8 @@ def run_complete_image_processing_workflow(
             if len(subfolders) > 10:
                 print(f"    ... and {len(subfolders) - 10} more subfolders")
             
-            # Check for root-level images
             root_images = [item for item in all_items if os.path.isfile(os.path.join(source_folder_path, item)) 
                           and any(item.lower().endswith(ext) for ext in image_extensions_config)]
-            print(f"  Root-level images: {len(root_images)}")
             if root_images:
                 for img in root_images[:5]:  # Show first 5
                     print(f"    - {img}")
@@ -86,8 +77,6 @@ def run_complete_image_processing_workflow(
             print(f"  Error reading folder contents: {e}")
     else:
         print(f"  ERROR: Source folder does not exist!")
-        
-    print("="*50)
     
     clear_fallback_comparisons()
     start_time = time.time()
@@ -197,13 +186,26 @@ def run_complete_image_processing_workflow(
         print("Using first photo measurements mode - ruler detection will only run on first image set")
 
     try:
+        # Check if app_root_window exists and has advanced_tab attribute
+        if app_root_window and hasattr(app_root_window, 'advanced_tab'):
+            advanced_settings = app_root_window.advanced_tab.get_settings()
+        else:
+            # Use default settings if advanced_tab is not available
+            advanced_settings = {
+                'gradient_width_fraction': gradient_width_fraction,
+                'background_color_tolerance': DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+                'add_logo': add_logo,
+                'logo_path': logo_path
+            }
+        
+        # Apply ruler detection settings if available
         from ruler_detector import update_ruler_detection_settings
-        advanced_settings = app_root_window.advanced_tab.get_settings() if app_root_window else {}
-        if advanced_settings:
-            update_ruler_detection_settings(advanced_settings)
+        update_ruler_detection_settings(advanced_settings)
+        
     except Exception as e:
         print(f"Warning: Could not apply ruler detection settings: {e}")
-
+        # Continue processing with default settings
+    
     successful_presets = {}
     failed_folders = []
     

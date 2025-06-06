@@ -87,20 +87,26 @@ def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 
 def create_foreground_mask_from_background(
     image_bgr_array, background_bgr_color_tuple, color_similarity_tolerance
 ):
-    low_bound = np.array([max(0, c - color_similarity_tolerance)
-                         for c in background_bgr_color_tuple])
-    high_bound = np.array([min(255, c + color_similarity_tolerance)
-                          for c in background_bgr_color_tuple])
-
-    background_only_mask = cv2.inRange(image_bgr_array, low_bound, high_bound)
-    foreground_objects_mask = cv2.bitwise_not(background_only_mask)
-
-    morphology_kernel = np.ones((3, 3), np.uint8)
-    cleaned_foreground_mask = cv2.morphologyEx(
-        foreground_objects_mask, cv2.MORPH_OPEN, morphology_kernel, iterations=2)
-    cleaned_foreground_mask = cv2.morphologyEx(
-        cleaned_foreground_mask, cv2.MORPH_CLOSE, morphology_kernel, iterations=2)
-    return cleaned_foreground_mask
+    """Create foreground mask by removing background color."""
+    # Ensure background_color and tolerance are proper types
+    if background_bgr_color_tuple is not None:
+        background_bgr_color_tuple = tuple(int(c) for c in background_bgr_color_tuple)
+    else:
+        background_bgr_color_tuple = (0, 0, 0)
+    
+    color_similarity_tolerance = int(color_similarity_tolerance)
+    
+    # Create bounds with consistent uint8 type
+    lower_bound = tuple(max(0, int(c) - color_similarity_tolerance) for c in background_bgr_color_tuple)
+    upper_bound = tuple(min(255, int(c) + color_similarity_tolerance) for c in background_bgr_color_tuple)
+    
+    # Convert to numpy arrays with explicit uint8 dtype
+    lower_bound = np.array(lower_bound, dtype=np.uint8)
+    upper_bound = np.array(upper_bound, dtype=np.uint8)
+    
+    # Apply color range mask with consistent types
+    mask = cv2.inRange(image_bgr_array, lower_bound, upper_bound)
+    return cv2.bitwise_not(mask)  # Invert to get foreground
 
 
 def select_contour_closest_to_image_center(
