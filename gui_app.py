@@ -20,9 +20,10 @@ try:
         resize_ruler, ruler_detector, extract_and_save_center_object,
         extract_specific_contour_to_image_array, DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
         create_foreground_mask, select_contour_closest_to_image_center,
-        select_ruler_like_contour, convert_raw_image_to_tiff
+        select_ruler_like_contour
     )
     from object_extractor import DEFAULT_EXTRACTED_OBJECT_FILENAME_SUFFIX as OBJECT_ARTIFACT_SUFFIX
+    from raw_processor import convert_raw_image_to_tiff
     from stitch_images import process_tablet_subfolder
     import stitch_config
     from stitch_config import (

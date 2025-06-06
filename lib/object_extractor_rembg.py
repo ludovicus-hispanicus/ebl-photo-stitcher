@@ -6,9 +6,7 @@ import shutil
 import time
 from rembg import remove
 from PIL import Image, ImageOps
-
-# Import central configuration instead of scattered imports
-from app_config import AppDefaults
+from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
 
 def _download_with_progress(url, destination):
@@ -95,30 +93,24 @@ def _ensure_local_model():
 def extract_and_save_center_object(
     input_image_filepath,
     source_background_detection_mode="auto",
-    output_image_background_color=None,
-    feather_radius_px=None,
-    output_filename_suffix=None,
-    min_object_area_as_image_fraction=None,
-    object_contour_smoothing_kernel_size=None,
+    output_image_background_color=(0, 0, 0),
+    feather_radius_px=10,
+    output_filename_suffix="_object.tif",
+    min_object_area_as_image_fraction=0.01,
+    object_contour_smoothing_kernel_size=3,
     museum_selection=None
 ):
     """
     Extract the object closest to the center among the two largest objects.
-    Uses central configuration for default values.
+
+    Args:
+        input_image_filepath: Path to the input image
+        output_image_background_color: BGR tuple for background color (OpenCV format)
+        output_filename_suffix: Suffix for the output filename
+
+    Returns:
+        Tuple of (output_filepath, dummy_contour) for compatibility
     """
-
-    # Use central defaults with fallback
-    if output_image_background_color is None:
-        output_image_background_color = AppDefaults.OUTPUT_BACKGROUND_COLOR
-    if feather_radius_px is None:
-        feather_radius_px = AppDefaults.FEATHER_RADIUS_PX
-    if output_filename_suffix is None:
-        output_filename_suffix = AppDefaults.OBJECT_FILE_SUFFIX
-    if min_object_area_as_image_fraction is None:
-        min_object_area_as_image_fraction = AppDefaults.MIN_OBJECT_AREA_FRACTION
-    if object_contour_smoothing_kernel_size is None:
-        object_contour_smoothing_kernel_size = AppDefaults.OBJECT_CONTOUR_SMOOTHING_KERNEL_SIZE
-
     print(
         f"  Extracting center object from: {os.path.basename(input_image_filepath)} using rembg")
     start_time = time.time()
@@ -134,10 +126,9 @@ def extract_and_save_center_object(
             f"Could not load image for object extraction: {input_image_filepath} - {e}")
 
     output_img = remove(input_img)
-    alpha = np.array(output_img.getchannel('A'))
 
-    # Use central default for tolerance calculation
-    custom_alpha_tolerance = AppDefaults.BACKGROUND_DETECTION_COLOR_TOLERANCE * 2
+    alpha = np.array(output_img.getchannel('A'))
+    custom_alpha_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE * 2
 
     binary_mask = (alpha > custom_alpha_tolerance).astype(np.uint8) * 255
 
@@ -231,7 +222,7 @@ def extract_and_save_center_object(
 
         dummy_contour = np.array(
             [[[0, 0]], [[0, 1]], [[1, 1]], [[1, 0]]], dtype=np.int32)
-
+        
         return output_image_filepath, dummy_contour
     except Exception as e:
         raise IOError(

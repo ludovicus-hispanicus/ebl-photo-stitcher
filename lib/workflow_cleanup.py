@@ -1,16 +1,17 @@
 import os
 from hdr_processor import HDR_SUFFIX
+from stitch_config import SCALED_RULER_FILE_SUFFIX
 import shutil
 
 
-def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix="_ruler.tif"):
+def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix=SCALED_RULER_FILE_SUFFIX):
     """
     Remove intermediate processing files from each processed subfolder and HDR folders from main directory.
 
     Args:
         processed_subfolders: List of subfolder paths that were processed
         object_artifact_suffix: Suffix used for extracted object files (e.g., "_object.tif")
-        ruler_suffix: Suffix used for ruler files (default: "_ruler.tif")
+        ruler_suffix: Suffix used for ruler files (default: SCALED_RULER_FILE_SUFFIX)
     """
     print("\n--- Cleaning up intermediate files ---")
     total_removed = 0

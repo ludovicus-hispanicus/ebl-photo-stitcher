@@ -50,11 +50,48 @@ def run_complete_image_processing_workflow(
     use_first_photo_measurements=False
 ):
     """Main workflow orchestration function."""
+    
+    print("="*50)
+    print(f"DEBUG: Starting workflow for folder: {source_folder_path}")
+    print(f"  Folder exists: {os.path.exists(source_folder_path)}")
+    
+    if os.path.exists(source_folder_path):
+        try:
+            all_items = os.listdir(source_folder_path)
+            print(f"  Total items in folder: {len(all_items)}")
+            
+            # Check for subfolders
+            subfolders = [item for item in all_items if os.path.isdir(os.path.join(source_folder_path, item))]
+            print(f"  Subfolders found: {len(subfolders)}")
+            for i, subfolder in enumerate(subfolders[:10]):  # Show first 10
+                subfolder_path = os.path.join(source_folder_path, subfolder)
+                subfolder_files = os.listdir(subfolder_path)
+                image_files = [f for f in subfolder_files if any(f.lower().endswith(ext) for ext in image_extensions_config)]
+                print(f"    {i+1}. '{subfolder}' - {len(subfolder_files)} files, {len(image_files)} images")
+            
+            if len(subfolders) > 10:
+                print(f"    ... and {len(subfolders) - 10} more subfolders")
+            
+            # Check for root-level images
+            root_images = [item for item in all_items if os.path.isfile(os.path.join(source_folder_path, item)) 
+                          and any(item.lower().endswith(ext) for ext in image_extensions_config)]
+            print(f"  Root-level images: {len(root_images)}")
+            if root_images:
+                for img in root_images[:5]:  # Show first 5
+                    print(f"    - {img}")
+                if len(root_images) > 5:
+                    print(f"    ... and {len(root_images) - 5} more images")
+                    
+        except Exception as e:
+            print(f"  Error reading folder contents: {e}")
+    else:
+        print(f"  ERROR: Source folder does not exist!")
+        
+    print("="*50)
+    
     clear_fallback_comparisons()
     start_time = time.time()
     failed_objects = []
-
-    print(f"DEBUG: use_first_photo_measurements = {use_first_photo_measurements}")
 
     if background_color_tolerance is None:
         background_color_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
@@ -66,11 +103,6 @@ def run_complete_image_processing_workflow(
     cached_detected_bg_color = None
     cached_output_bg_color = None
     is_first_subfolder = True
-    
-    if use_first_photo_measurements:
-        print("DEBUG: Using first photo measurements mode - ruler detection will only run on first image set")
-    else:
-        print("DEBUG: First photo measurements mode is DISABLED - will run ruler detection on all sets")
 
     progress_callback(2)
 
@@ -175,8 +207,8 @@ def run_complete_image_processing_workflow(
     successful_presets = {}
     failed_folders = []
     
-    for i, subfolder_name_item in enumerate(processed_subfolders):
-        subfolder_path_item = os.path.join(source_folder_path, subfolder_name_item)
+    for i, subfolder_path_item in enumerate(processed_subfolders):
+        subfolder_name_item = os.path.basename(subfolder_path_item)
         print(
             f"Processing Subfolder {i+1}/{num_folders}: {subfolder_name_item}")
 
@@ -459,7 +491,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
         logo_path=logo_path if add_logo else None,
         object_extraction_background_mode=object_extraction_bg_mode,
         stitched_bg_color=stitched_output_bg_color,
-        custom_layout=None
+        custom_layout=None,
+        view_file_patterns_config=view_file_patterns_config,  
     )
 
     result['success'] = True

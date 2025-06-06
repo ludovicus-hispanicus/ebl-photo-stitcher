@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import os
-
+from stitch_config import SCALED_RULER_FILE_SUFFIX
 try:
     import cairosvg
     from io import BytesIO
@@ -15,8 +15,6 @@ RULER_TARGET_PHYSICAL_WIDTHS_CM = {
     "2cm": 2.802631578947368,
     "5cm": 5.955752212389381
 }
-OUTPUT_RULER_SUFFIX = "_ruler"
-OUTPUT_RULER_FILE_EXTENSION = ".tif"
 IMAGE_RESIZE_INTERPOLATION_METHOD = cv2.INTER_CUBIC
 
 
@@ -143,7 +141,7 @@ def resize_and_save_ruler_template(
         interpolation=IMAGE_RESIZE_INTERPOLATION_METHOD
     )
 
-    output_ruler_filename = f"{output_base_name}{OUTPUT_RULER_SUFFIX}{OUTPUT_RULER_FILE_EXTENSION}"
+    output_ruler_filename = f"{output_base_name}{SCALED_RULER_FILE_SUFFIX}"
     output_ruler_filepath = os.path.join(
         output_directory_path, output_ruler_filename)
 

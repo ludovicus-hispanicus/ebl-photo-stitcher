@@ -1,7 +1,7 @@
 import os
 import cv2
 from workflow_imports import resize_ruler
-
+from resize_ruler import resize_and_save_ruler_template
 
 def select_ruler_template(museum_selection, art_fp, px_cm_val, ruler_template_1cm_asset_path,
                           ruler_template_2cm_asset_path, ruler_template_5cm_asset_path):
@@ -56,7 +56,7 @@ def generate_digital_ruler(px_cm_val, chosen_ruler_tpl, subfolder_name_item,
         bool: True if successful, False otherwise
     """
     try:
-        resize_ruler.resize_and_save_ruler_template(
+        resize_and_save_ruler_template(
             px_cm_val,
             chosen_ruler_tpl,
             subfolder_name_item,

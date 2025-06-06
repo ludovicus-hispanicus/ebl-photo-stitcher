@@ -105,10 +105,11 @@ def _blend_images_vertically(base_image_segment, new_image_segment, overlap_px):
 
 def process_tablet_subfolder(
     subfolder_path,
+    view_file_patterns_config,
+    pixels_per_cm,
     ruler_position,
     main_input_folder_path,
     output_base_name,
-    pixels_per_cm,
     photographer_name,
     ruler_image_for_scale_path,
     add_logo=False,
@@ -173,7 +174,9 @@ def process_tablet_subfolder(
                 f"  Warning: No obverse object file found for measurements ({obverse_object_pattern})")
 
     canvas_w, canvas_h, layout_coords, images_to_paste_dict = calculate_stitching_layout(
-        resized_images, current_view_gap, current_ruler_padding, custom_layout=custom_layout
+        resized_images, ruler_image_for_scale_path, logo_path, pixels_per_cm,
+        view_file_patterns_config, gap_px=current_view_gap, ruler_padding_px=current_ruler_padding, 
+        custom_layout=custom_layout
     )
 
     final_image = create_stitched_canvas(
