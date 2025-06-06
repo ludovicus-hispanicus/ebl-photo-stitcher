@@ -180,16 +180,93 @@ def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_fo
         return None, False
 
 
+def determine_pixels_per_cm_with_fallback(subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
+                                        raw_ext_config, museum_selection, ruler_position,
+                                        use_measurements_from_database, measurements_dict,
+                                        background_color_tolerance=None, app_instance=None):
+    """
+    Determine pixels per cm with automatic fallback to different ruler detection presets.
+    """
+
+    from ruler_presets import (
+        get_default_ruler_settings,
+        get_fine_ruler_preset_settings, 
+        get_wide_coverage_preset_settings
+    )
+    from ruler_detector import update_ruler_detection_settings
+
+    current_settings = None
+    if app_instance and hasattr(app_instance, 'advanced_tab'):
+        current_settings = app_instance.advanced_tab.get_settings()
+
+    fallback_presets = [
+        {
+            'name': 'Current Settings',
+            'settings': current_settings if current_settings else get_default_ruler_settings()
+        },
+        {
+            'name': 'Fine Graduation Ruler',
+            'settings': get_fine_ruler_preset_settings()
+        },
+        {
+            'name': 'Wide Coverage',
+            'settings': get_wide_coverage_preset_settings()
+        },
+        {
+            'name': 'Default Settings',
+            'settings': get_default_ruler_settings()
+        }
+    ]
+
+    seen_settings = set()
+    unique_presets = []
+    for preset in fallback_presets:
+        settings_key = frozenset(preset['settings'].items()) if preset['settings'] else frozenset()
+        if settings_key not in seen_settings:
+            seen_settings.add(settings_key)
+            unique_presets.append(preset)
+    
+    print(f"  Attempting ruler detection with {len(unique_presets)} different presets...")
+
+    for i, preset in enumerate(unique_presets):
+        preset_name = preset['name']
+        preset_settings = preset['settings']
+        
+        print(f"  Attempt {i+1}/{len(unique_presets)}: Trying '{preset_name}' preset")
+
+        if preset_settings:
+            update_ruler_detection_settings(preset_settings)
+
+        try:
+            px_cm_val, measurements_used, cr2_conv_count = determine_pixels_per_cm(
+                subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
+                raw_ext_config, museum_selection, ruler_position,
+                use_measurements_from_database, measurements_dict,
+                background_color_tolerance
+            )
+            
+            if px_cm_val is not None:
+                if i == 0:
+                    print(f"  ✓ Ruler detection successful with {preset_name}")
+                else:
+                    print(f"  ✓ Ruler detection successful with fallback preset: {preset_name}")
+                    print(f"    Consider updating your default settings to '{preset_name}' for better results")
+                
+                return px_cm_val, measurements_used, cr2_conv_count, preset_name
+            else:
+                print(f"  ✗ Ruler detection failed with {preset_name}")
+                
+        except Exception as e:
+            print(f"  ✗ Error with {preset_name}: {e}")
+
+    print(f"  ✗ All ruler detection presets failed for {subfolder_name_item}")
+    return None, False, 0, "All presets failed"
+
 def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
                             raw_ext_config, museum_selection, ruler_position,
                             use_measurements_from_database, measurements_dict,
                             background_color_tolerance=None):
-    """
-    Determine pixels per cm using measurements or ruler detection.
-
-    Returns:
-        tuple: (px_cm_val, measurements_used, cr2_conv_count)
-    """
+    """Original function - now serves as a single-attempt version"""
     px_cm_val = None
     measurements_used = False
     cr2_conv_count = 0

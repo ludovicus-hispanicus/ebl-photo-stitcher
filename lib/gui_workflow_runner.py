@@ -164,8 +164,19 @@ def run_complete_image_processing_workflow(
     if use_first_photo_measurements:
         print("Using first photo measurements mode - ruler detection will only run on first image set")
 
-    for i, subfolder_path_item in enumerate(processed_subfolders):
-        subfolder_name_item = os.path.basename(subfolder_path_item)
+    try:
+        from ruler_detector import update_ruler_detection_settings
+        advanced_settings = app_root_window.advanced_tab.get_settings() if app_root_window else {}
+        if advanced_settings:
+            update_ruler_detection_settings(advanced_settings)
+    except Exception as e:
+        print(f"Warning: Could not apply ruler detection settings: {e}")
+
+    successful_presets = {}
+    failed_folders = []
+    
+    for i, subfolder_name_item in enumerate(processed_subfolders):
+        subfolder_path_item = os.path.join(source_folder_path, subfolder_name_item)
         print(
             f"Processing Subfolder {i+1}/{num_folders}: {subfolder_name_item}")
 
@@ -221,6 +232,8 @@ def run_complete_image_processing_workflow(
             traceback.print_exc()
             failed_objects.append(subfolder_name_item)
             total_err += 1
+
+    print_fallback_summary(successful_presets, failed_folders)
 
     print_final_statistics(start_time, total_ok, total_err,
                            cr2_conv_total, failed_objects)
@@ -452,3 +465,49 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     result['success'] = True
 
     return result
+
+def print_fallback_summary(successful_presets, failed_folders):
+    """Print summary of which ruler detection presets were successful"""
+    
+    print("\n" + "="*60)
+    print("RULER DETECTION PRESET SUMMARY")
+    print("="*60)
+    
+    if successful_presets:
+        for preset_name, folders in successful_presets.items():
+            if preset_name == "Current Settings":
+                print(f"✓ Current Settings worked for {len(folders)} folders")
+            else:
+                print(f"⚠ Fallback '{preset_name}' used for {len(folders)} folders:")
+                for folder in folders[:5]:
+                    print(f"    - {folder}")
+                if len(folders) > 5:
+                    print(f"    ... and {len(folders) - 5} more")
+
+        fallback_count = sum(len(folders) for preset, folders in successful_presets.items() 
+                           if preset != "Current Settings")
+        
+        if fallback_count > 0:
+
+            best_fallback = max(
+                [(preset, folders) for preset, folders in successful_presets.items() 
+                 if preset != "Current Settings"],
+                key=lambda x: len(x[1]),
+                default=(None, [])
+            )
+            
+            if best_fallback[0]:
+                print(f"\n💡 RECOMMENDATION:")
+                print(f"   Consider changing your default settings to '{best_fallback[0]}'")
+                print(f"   This preset worked for {len(best_fallback[1])} folders where current settings failed.")
+                print(f"   You can apply this preset in Advanced tab > Quick Presets")
+    
+    if failed_folders:
+        print(f"\n✗ Complete failure for {len(failed_folders)} folders:")
+        for folder in failed_folders[:10]:
+            print(f"    - {folder}")
+        if len(failed_folders) > 10:
+            print(f"    ... and {len(failed_folders) - 10} more")
+        print(f"   These folders may need manual ruler positioning or measurements from database.")
+    
+    print("="*60)

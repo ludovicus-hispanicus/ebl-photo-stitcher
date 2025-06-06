@@ -41,12 +41,11 @@ class LayoutManager:
         header_frame.pack(fill=tk.X, pady=(0, 5))
 
         header_frame.columnconfigure(0, weight=1)
-        header_frame.columnconfigure(1, weight=0)  # For the buttons container
+        header_frame.columnconfigure(1, weight=0)
 
         notebook = ttk.Notebook(header_frame)
         notebook.grid(row=0, column=0, sticky="w")
 
-        # Create a container frame for the buttons in column 1
         buttons_frame = ttk.Frame(header_frame)
         buttons_frame.grid(row=0, column=0, sticky="ne")
 
@@ -81,13 +80,13 @@ class LayoutManager:
         version_button = LayoutManager._create_link_button(
             buttons_frame, "Checking...", command_callback
         )
-        # Override initial styling for disabled state
+
         version_button.config(
             fg="gray",
             cursor="arrow",
             font=('Helvetica', 10)
         )
-        # Pack with right padding to create space for help button
+
         version_button.pack(side=tk.LEFT, padx=(0, 15))
         return version_button
 
@@ -136,7 +135,7 @@ class LayoutManager:
             "Help", 
             lambda: webbrowser.open_new(help_url)
         )
-        # Pack to the right of version button
+
         help_button.pack(side=tk.LEFT)
         return help_button
 

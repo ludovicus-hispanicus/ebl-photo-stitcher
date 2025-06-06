@@ -1,18 +1,44 @@
 import cv2
 import numpy as np
 import os
+from ruler_presets import get_default_ruler_settings
 
-ROI_VERTICAL_START_FRACTION = 0.0
-ROI_VERTICAL_END_FRACTION = 0.35
-ROI_HORIZONTAL_START_FRACTION = 0.02
-ROI_HORIZONTAL_END_FRACTION = 0.40
+_default_settings = get_default_ruler_settings()
 
-ANALYSIS_SCANLINE_COUNT = 7
-MARK_BINARIZATION_THRESHOLD = 150
-MIN_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION = 0.04
-MAX_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION = 0.40
-MARK_WIDTH_SIMILARITY_TOLERANCE_FRACTION = 0.40
-MIN_ALTERNATING_MARKS_FOR_SCALE_ESTIMATION = 2
+ROI_VERTICAL_START_FRACTION = _default_settings['roi_vertical_start']
+ROI_VERTICAL_END_FRACTION = _default_settings['roi_vertical_end']
+ROI_HORIZONTAL_START_FRACTION = _default_settings['roi_horizontal_start']
+ROI_HORIZONTAL_END_FRACTION = _default_settings['roi_horizontal_end']
+ANALYSIS_SCANLINE_COUNT = _default_settings['analysis_scanline_count']
+MARK_BINARIZATION_THRESHOLD = _default_settings['mark_binarization_threshold']
+MIN_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION = _default_settings['min_mark_width_fraction']
+MAX_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION = _default_settings['max_mark_width_fraction']
+MARK_WIDTH_SIMILARITY_TOLERANCE_FRACTION = _default_settings['mark_width_tolerance']
+MIN_ALTERNATING_MARKS_FOR_SCALE_ESTIMATION = _default_settings['min_alternating_marks']
+
+
+def update_ruler_detection_settings(settings_dict):
+    """Update global ruler detection settings from settings dictionary"""
+    global ROI_VERTICAL_START_FRACTION, ROI_VERTICAL_END_FRACTION
+    global ROI_HORIZONTAL_START_FRACTION, ROI_HORIZONTAL_END_FRACTION
+    global ANALYSIS_SCANLINE_COUNT, MARK_BINARIZATION_THRESHOLD
+    global MIN_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION, MAX_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION
+    global MARK_WIDTH_SIMILARITY_TOLERANCE_FRACTION, MIN_ALTERNATING_MARKS_FOR_SCALE_ESTIMATION
+
+    ROI_VERTICAL_START_FRACTION = settings_dict.get('roi_vertical_start', ROI_VERTICAL_START_FRACTION)
+    ROI_VERTICAL_END_FRACTION = settings_dict.get('roi_vertical_end', ROI_VERTICAL_END_FRACTION)
+    ROI_HORIZONTAL_START_FRACTION = settings_dict.get('roi_horizontal_start', ROI_HORIZONTAL_START_FRACTION)
+    ROI_HORIZONTAL_END_FRACTION = settings_dict.get('roi_horizontal_end', ROI_HORIZONTAL_END_FRACTION)
+    ANALYSIS_SCANLINE_COUNT = settings_dict.get('analysis_scanline_count', ANALYSIS_SCANLINE_COUNT)
+    MARK_BINARIZATION_THRESHOLD = settings_dict.get('mark_binarization_threshold', MARK_BINARIZATION_THRESHOLD)
+    MIN_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION = settings_dict.get('min_mark_width_fraction', MIN_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION)
+    MAX_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION = settings_dict.get('max_mark_width_fraction', MAX_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION)
+    MARK_WIDTH_SIMILARITY_TOLERANCE_FRACTION = settings_dict.get('mark_width_tolerance', MARK_WIDTH_SIMILARITY_TOLERANCE_FRACTION)
+    MIN_ALTERNATING_MARKS_FOR_SCALE_ESTIMATION = settings_dict.get('min_alternating_marks', MIN_ALTERNATING_MARKS_FOR_SCALE_ESTIMATION)
+
+    print(f"Updated ruler detection settings:")
+    print(f"  ROI: V({ROI_VERTICAL_START_FRACTION:.2f}-{ROI_VERTICAL_END_FRACTION:.2f}) H({ROI_HORIZONTAL_START_FRACTION:.2f}-{ROI_HORIZONTAL_END_FRACTION:.2f})")
+    print(f"  Threshold: {MARK_BINARIZATION_THRESHOLD}, Mark width: {MIN_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION:.3f}-{MAX_EXPECTED_MARK_WIDTH_AS_ROI_FRACTION:.2f}")
 
 
 def extract_pixel_runs_from_scanline_data(scanline_data_array, binarization_cutoff_value):

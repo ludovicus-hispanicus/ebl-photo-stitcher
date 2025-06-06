@@ -94,7 +94,7 @@ class ImageProcessorApp:
 
         self.root = root_window
         self.root.title(f"eBL Photo Stitcher {CURRENT_VERSION}")
-        self.root.geometry("600x900")
+        self.root.geometry("600x950")
 
         self.config_file_path = os.path.join(
             get_persistent_config_dir_path(), "gui_config.json")
@@ -158,14 +158,11 @@ class ImageProcessorApp:
         mf = ttk.Frame(self.root, padding="10")
         mf.pack(expand=True, fill=tk.BOTH)
 
-        # Get the buttons frame from create_tabs
         self.header_frame, self.notebook, buttons_frame = LayoutManager.create_tabs(mf)
 
-        # Create version button in the buttons frame
         self.version_button = LayoutManager.create_version_button(
             buttons_frame, self._on_version_button_click)
 
-        # Create help button in the buttons frame
         self.help_btn = LayoutManager.create_help_link(
             buttons_frame, self.HELP_URL)
 
@@ -212,13 +209,15 @@ class ImageProcessorApp:
 
         sys.stdout = TextRedirector(self.lt)
 
+        self.advanced_tab = AdvancedTab(self.notebook)
+
         settings = {
             'gradient_width_fraction': self.gradient_width_fraction,
             'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
             'add_logo': False,
             'logo_path': ''
         }
-        self.advanced_tab = AdvancedTab(self.notebook, settings)
+        self.advanced_tab.apply_settings(settings)
 
     def draw_ruler_selector(self):
         """Draw the ruler selector canvas."""

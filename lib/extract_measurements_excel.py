@@ -112,14 +112,12 @@ def create_comparison_excel(output_dir: str = None, photographer_name: str = Non
         if output_dir is None:
             output_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # Load all calculated measurements from JSON
         calculated_measurements = load_existing_measurements(output_dir)
 
         if not calculated_measurements:
             print("No measurements found in calculated_measurements.json")
             return False
 
-        # Load reference data
         sippar_data = load_sippar_reference_data()
 
         comparisons = []
@@ -129,7 +127,6 @@ def create_comparison_excel(output_dir: str = None, photographer_name: str = Non
             if not object_id:
                 continue
 
-            # Only process measurements that have reference data
             if object_id not in sippar_data:
                 continue
 
@@ -164,11 +161,10 @@ def create_comparison_excel(output_dir: str = None, photographer_name: str = Non
         if not comparisons:
            return False
 
-        # Generate filename with photographer name and date
         today = datetime.now().strftime("%Y.%m.%d")
 
         if photographer_name:
-            # Get last element (word) of photographer name
+
             photographer_parts = photographer_name.strip().split()
             last_name = photographer_parts[-1] if photographer_parts else "Unknown"
         else:
@@ -207,7 +203,7 @@ def finalize_measurements_with_comparison(output_dir: str = None, photographer_n
         True if successful, False otherwise
     """
     try:
-        # Create Excel with measurements that have reference data
+
         excel_created = create_comparison_excel(output_dir, photographer_name)
 
         return True

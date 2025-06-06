@@ -43,7 +43,6 @@ def detect_1cm_distance_iraq(image_path):
 
         roi = initial_roi
 
-        # Use unique temporary file names to avoid conflicts
         roi_temp_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_temp_roi.jpg")
         cv2.imwrite(roi_temp_path, roi)
 
@@ -64,7 +63,6 @@ def detect_1cm_distance_iraq(image_path):
             else:
                 print(f"     Warning: Could not load AI-processed image, using original ROI")
 
-            # Clean up temporary files
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
             if os.path.exists(bg_removed_path):
@@ -72,7 +70,7 @@ def detect_1cm_distance_iraq(image_path):
 
         except Exception as e:
             print(f"     AI background removal failed: {e}, using original ROI")
-            # Clean up temporary file
+
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
 
@@ -99,7 +97,6 @@ def detect_1cm_distance_iraq(image_path):
         contrast_adjusted_roi = cv2.convertScaleAbs(
             trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
 
-        # Use unique contrast file name
         contrast_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_contrast.jpg")
         cv2.imwrite(contrast_path, contrast_adjusted_roi)
 

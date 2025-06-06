@@ -1,4 +1,4 @@
-# Main stitching module - coordinates the tablet image stitching process
+
 import cv2
 import numpy as np
 import os

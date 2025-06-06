@@ -95,7 +95,6 @@ class UIComponents:
         options_frame = ttk.LabelFrame(parent, text="Options")
         options_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
 
-        # Main measurements checkbox
         measurements_checkbox = ttk.Checkbutton(
             options_frame,
             text="Use measurements from database",
