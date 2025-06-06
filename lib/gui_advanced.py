@@ -4,43 +4,36 @@ from ruler_presets import get_preset_by_name, apply_settings_to_vars
 
 
 class AdvancedTab:
-    def __init__(self, parent_notebook):
-        # Create the tab frame
-        self.tab_frame = ttk.Frame(parent_notebook)
-        parent_notebook.add(self.tab_frame, text="Advanced")
+    def __init__(self, notebook):
+        self.notebook = notebook
+        self.main_frame = ttk.Frame(notebook)
+        notebook.add(self.main_frame, text="Advanced")
         
-        # Create main frame (no scrolling as requested)
-        self.frame = ttk.Frame(self.tab_frame, padding="10")
-        self.frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Initialize variables
-        self.bg_tolerance_var = tk.DoubleVar(value=40.0)
-        self.gradient_var = tk.DoubleVar(value=0.5)
+        # Initialize all variables
+        self.gradient_width_var = tk.DoubleVar(value=0.5)
+        self.bg_tolerance_var = tk.IntVar(value=40)
         self.add_logo_var = tk.BooleanVar(value=False)
-        self.logo_path_var = tk.StringVar(value='')  # Fix: change value('') to value=''
+        self.logo_path_var = tk.StringVar(value="")
+        self.rotation_var = tk.StringVar(value="0")
         
         # Initialize ruler detection variables
-        self._init_ruler_detection_vars()
-        
-        # Create widgets
-        self._create_widgets()
-        
-    def _init_ruler_detection_vars(self):
-        """Initialize ruler detection variables"""
         self.roi_vertical_start_var = tk.DoubleVar(value=0.02)
         self.roi_vertical_end_var = tk.DoubleVar(value=0.30)
         self.roi_horizontal_start_var = tk.DoubleVar(value=0.02)
         self.roi_horizontal_end_var = tk.DoubleVar(value=0.30)
-        self.analysis_scanline_count_var = tk.IntVar(value=7)
+        self.analysis_scanline_count_var = tk.IntVar(value=50)
         self.mark_binarization_threshold_var = tk.IntVar(value=150)
-        self.min_mark_width_fraction_var = tk.DoubleVar(value=0.04)
+        self.min_mark_width_fraction_var = tk.DoubleVar(value=0.040)
         self.max_mark_width_fraction_var = tk.DoubleVar(value=0.40)
-        self.mark_width_tolerance_var = tk.DoubleVar(value=0.40)
-        self.min_alternating_marks_var = tk.IntVar(value=2)
+        self.mark_width_tolerance_var = tk.DoubleVar(value=0.5)
+        self.min_alternating_marks_var = tk.IntVar(value=8)
         
-    def _create_widgets(self):
+        self.create_widgets()
+    
+    def create_widgets(self):
+        """Create all advanced settings widgets."""
         # Background Color Tolerance as slider (as requested)
-        bg_tolerance_frame = ttk.LabelFrame(self.frame, text="Background Color Tolerance", padding="5")
+        bg_tolerance_frame = ttk.LabelFrame(self.main_frame, text="Background Color Tolerance", padding="5")
         bg_tolerance_frame.pack(fill=tk.X, pady=5)
         
         self.bg_tolerance_scale = ttk.Scale(
@@ -57,14 +50,14 @@ class AdvancedTab:
         self.bg_tolerance_label.pack()
         
         # Gradient Width Fraction as slider (as requested)
-        gradient_frame = ttk.LabelFrame(self.frame, text="Gradient Width Fraction", padding="5")
+        gradient_frame = ttk.LabelFrame(self.main_frame, text="Gradient Width Fraction", padding="5")
         gradient_frame.pack(fill=tk.X, pady=5)
         
         self.gradient_scale = ttk.Scale(
             gradient_frame,
             from_=0.1,
             to=1.0,
-            variable=self.gradient_var,
+            variable=self.gradient_width_var,
             orient=tk.HORIZONTAL,
             command=self._update_gradient_label
         )
@@ -74,7 +67,7 @@ class AdvancedTab:
         self.gradient_label.pack()
         
         # Ruler Detection Presets
-        presets_frame = ttk.LabelFrame(self.frame, text="Ruler Detection Presets", padding="5")
+        presets_frame = ttk.LabelFrame(self.main_frame, text="Ruler Detection Presets", padding="5")
         presets_frame.pack(fill=tk.X, pady=5)
         
         preset_buttons_frame = ttk.Frame(presets_frame)
@@ -100,7 +93,7 @@ class AdvancedTab:
         ).pack(side=tk.LEFT, padx=5)
         
         # Ruler Detection Settings (detailed controls)
-        ruler_frame = ttk.LabelFrame(self.frame, text="Ruler Detection Settings", padding="5")
+        ruler_frame = ttk.LabelFrame(self.main_frame, text="Ruler Detection Settings", padding="5")
         ruler_frame.pack(fill=tk.X, pady=5)
         
         # ROI settings
@@ -135,7 +128,7 @@ class AdvancedTab:
                  orient=tk.HORIZONTAL).pack(fill=tk.X, padx=5, pady=2)
         
         # Logo settings
-        logo_frame = ttk.LabelFrame(self.frame, text="Logo Settings", padding="5")
+        logo_frame = ttk.LabelFrame(self.main_frame, text="Logo Settings", padding="5")
         logo_frame.pack(fill=tk.X, pady=5)
         
         self.add_logo_checkbox = ttk.Checkbutton(
@@ -165,6 +158,34 @@ class AdvancedTab:
         )
         self.browse_logo_btn.pack(side=tk.RIGHT)
         
+        # Rotation controls
+        self.create_rotation_section()
+        
+    def create_rotation_section(self):
+        """Create rotation controls section."""
+        rotation_frame = ttk.LabelFrame(self.main_frame, text="Image Rotation", padding="10")
+        rotation_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(rotation_frame, text="Rotate all images before processing:").pack(
+            anchor=tk.W, pady=(0, 5))
+        
+        # Rotation options frame
+        rotation_options_frame = ttk.Frame(rotation_frame)
+        rotation_options_frame.pack(fill=tk.X, pady=2)
+        
+        # Radio buttons for rotation angles
+        ttk.Radiobutton(rotation_options_frame, text="No rotation (0°)", 
+                       variable=self.rotation_var, value="0").pack(side=tk.LEFT, padx=5)
+        
+        ttk.Radiobutton(rotation_options_frame, text="90° clockwise", 
+                       variable=self.rotation_var, value="90").pack(side=tk.LEFT, padx=5)
+        
+        ttk.Radiobutton(rotation_options_frame, text="180°", 
+                       variable=self.rotation_var, value="180").pack(side=tk.LEFT, padx=5)
+        
+        ttk.Radiobutton(rotation_options_frame, text="270° clockwise", 
+                       variable=self.rotation_var, value="270").pack(side=tk.LEFT, padx=5)
+
     def _apply_preset(self, preset_name):
         """Apply a ruler detection preset"""
         preset_settings = get_preset_by_name(preset_name)
@@ -224,7 +245,7 @@ class AdvancedTab:
         """Get current settings from the advanced tab."""
         return {
             'background_color_tolerance': self.bg_tolerance_var.get(),
-            'gradient_width_fraction': self.gradient_var.get(),
+            'gradient_width_fraction': self.gradient_width_var.get(),
             'add_logo': self.add_logo_var.get(),
             'logo_path': self.logo_path_var.get(),
             'roi_vertical_start': self.roi_vertical_start_var.get(),
@@ -236,13 +257,14 @@ class AdvancedTab:
             'min_mark_width_fraction': self.min_mark_width_fraction_var.get(),
             'max_mark_width_fraction': self.max_mark_width_fraction_var.get(),
             'mark_width_tolerance': self.mark_width_tolerance_var.get(),
-            'min_alternating_marks': self.min_alternating_marks_var.get()
+            'min_alternating_marks': self.min_alternating_marks_var.get(),
+            'rotation_angle': int(self.rotation_var.get())  # Add rotation setting
         }
         
     def apply_settings(self, settings):
         """Apply settings to the advanced tab widgets."""
         self.bg_tolerance_var.set(settings.get('background_color_tolerance', 40.0))
-        self.gradient_var.set(settings.get('gradient_width_fraction', 0.5))
+        self.gradient_width_var.set(settings.get('gradient_width_fraction', 0.5))
         self.add_logo_var.set(settings.get('add_logo', False))
         self.logo_path_var.set(settings.get('logo_path', ''))
         
@@ -256,11 +278,51 @@ class AdvancedTab:
         
         # Update labels
         self._update_bg_tolerance_label(str(self.bg_tolerance_var.get()))
-        self._update_gradient_label(str(self.gradient_var.get()))
+        self._update_gradient_label(str(self.gradient_width_var.get()))
         if hasattr(self, 'ruler_sensitivity_label'):
             self._update_ruler_sensitivity_label(str(self.ruler_sensitivity_var.get()))
         if hasattr(self, 'ruler_min_area_label'):
             self._update_ruler_min_area_label(str(self.ruler_min_area_var.get()))
         
         # Update toggle state
+        self._toggle_logo_path_entry()
+        
+    def set_settings(self, settings_dict):
+        """Set advanced settings from a dictionary."""
+        if 'gradient_width_fraction' in settings_dict:
+            self.gradient_width_var.set(settings_dict['gradient_width_fraction'])
+        if 'background_color_tolerance' in settings_dict:
+            self.bg_tolerance_var.set(settings_dict['background_color_tolerance'])
+        if 'add_logo' in settings_dict:
+            self.add_logo_var.set(settings_dict['add_logo'])
+        if 'logo_path' in settings_dict:
+            self.logo_path_var.set(settings_dict['logo_path'])
+        if 'rotation_angle' in settings_dict:
+            self.rotation_var.set(str(settings_dict['rotation_angle']))
+        
+        # Set ruler detection settings
+        if 'roi_vertical_start' in settings_dict:
+            self.roi_vertical_start_var.set(settings_dict['roi_vertical_start'])
+        if 'roi_vertical_end' in settings_dict:
+            self.roi_vertical_end_var.set(settings_dict['roi_vertical_end'])
+        if 'roi_horizontal_start' in settings_dict:
+            self.roi_horizontal_start_var.set(settings_dict['roi_horizontal_start'])
+        if 'roi_horizontal_end' in settings_dict:
+            self.roi_horizontal_end_var.set(settings_dict['roi_horizontal_end'])
+        if 'analysis_scanline_count' in settings_dict:
+            self.analysis_scanline_count_var.set(settings_dict['analysis_scanline_count'])
+        if 'mark_binarization_threshold' in settings_dict:
+            self.mark_binarization_threshold_var.set(settings_dict['mark_binarization_threshold'])
+        if 'min_mark_width_fraction' in settings_dict:
+            self.min_mark_width_fraction_var.set(settings_dict['min_mark_width_fraction'])
+        if 'max_mark_width_fraction' in settings_dict:
+            self.max_mark_width_fraction_var.set(settings_dict['max_mark_width_fraction'])
+        if 'mark_width_tolerance' in settings_dict:
+            self.mark_width_tolerance_var.set(settings_dict['mark_width_tolerance'])
+        if 'min_alternating_marks' in settings_dict:
+            self.min_alternating_marks_var.set(settings_dict['min_alternating_marks'])
+        
+        # Update display labels
+        self._update_bg_tolerance_label(str(self.bg_tolerance_var.get()))
+        self._update_gradient_label(str(self.gradient_width_var.get()))
         self._toggle_logo_path_entry()

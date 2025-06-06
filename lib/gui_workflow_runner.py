@@ -50,33 +50,8 @@ def run_complete_image_processing_workflow(
     use_first_photo_measurements=False
 ):
     """Main workflow orchestration function."""
-
-    if os.path.exists(source_folder_path):
-        try:
-            all_items = os.listdir(source_folder_path)
-
-            subfolders = [item for item in all_items if os.path.isdir(os.path.join(source_folder_path, item))]
-            for i, subfolder in enumerate(subfolders[:10]):  # Show first 10
-                subfolder_path = os.path.join(source_folder_path, subfolder)
-                subfolder_files = os.listdir(subfolder_path)
-                image_files = [f for f in subfolder_files if any(f.lower().endswith(ext) for ext in image_extensions_config)]
-                print(f"    {i+1}. '{subfolder}' - {len(subfolder_files)} files, {len(image_files)} images")
-            
-            if len(subfolders) > 10:
-                print(f"    ... and {len(subfolders) - 10} more subfolders")
-            
-            root_images = [item for item in all_items if os.path.isfile(os.path.join(source_folder_path, item)) 
-                          and any(item.lower().endswith(ext) for ext in image_extensions_config)]
-            if root_images:
-                for img in root_images[:5]:  # Show first 5
-                    print(f"    - {img}")
-                if len(root_images) > 5:
-                    print(f"    ... and {len(root_images) - 5} more images")
-                    
-        except Exception as e:
-            print(f"  Error reading folder contents: {e}")
-    else:
-        print(f"  ERROR: Source folder does not exist!")
+    
+    print(f"Workflow started for folder: {source_folder_path}")
     
     clear_fallback_comparisons()
     start_time = time.time()
@@ -85,32 +60,64 @@ def run_complete_image_processing_workflow(
     if background_color_tolerance is None:
         background_color_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
-    print(f"Workflow started for folder: {source_folder_path}")
-
-    cached_px_per_cm = None
-    cached_measurements_used = None
-    cached_detected_bg_color = None
-    cached_output_bg_color = None
-    is_first_subfolder = True
-
     progress_callback(2)
 
     image_extensions_tuple = tuple(ext.lower() for ext in image_extensions_config) + \
         ((raw_ext_config.lower(),) if isinstance(raw_ext_config, str)
          else tuple(r_ext.lower() for r_ext in raw_ext_config))
 
+    # Get rotation settings from advanced tab
+    rotation_angle = 0
+    try:
+        if app_root_window and hasattr(app_root_window, 'advanced_tab'):
+            advanced_settings = app_root_window.advanced_tab.get_settings()
+            rotation_angle = advanced_settings.get('rotation_angle', 0)
+            print(f"DEBUG: Got rotation angle from advanced settings: {rotation_angle}")
+    except Exception as e:
+        print(f"Warning: Could not get rotation settings: {e}")
+
     try:
         processed_subfolders = organize_project_subfolders(
             source_folder_path, image_extensions_tuple, organize_files_func)
     except Exception as e_org:
-        print(
-            f"   Workflow halted due to error during file organization: {e_org}")
+        print(f"   Workflow halted due to error during file organization: {e_org}")
         progress_callback(100)
         finished_callback()
         return
 
+    # Apply rotation BEFORE any other processing
+    if rotation_angle and rotation_angle > 0:
+        print(f"Step 0a: Rotating images by {rotation_angle}°...")
+        total_rotated = 0
+        
+        try:
+            from image_rotation import rotate_images_in_folder
+            
+            for subfolder_path in processed_subfolders:
+                subfolder_name = os.path.basename(subfolder_path)
+                print(f"   Checking folder for rotation: {subfolder_name}")
+                
+                rotated_count = rotate_images_in_folder(
+                    subfolder_path, rotation_angle, image_extensions_tuple)
+                total_rotated += rotated_count
+                
+                if rotated_count > 0:
+                    print(f"   Rotated {rotated_count} images in {subfolder_name}")
+            
+            if total_rotated > 0:
+                print(f"   Rotation complete: {total_rotated} images rotated by {rotation_angle}°")
+            else:
+                print(f"   No images needed rotation")
+            
+        except ImportError:
+            print("   Warning: Could not import rotation module. Skipping rotation.")
+        except Exception as e:
+            print(f"   Warning: Error during rotation: {e}")
+    else:
+        print(f"DEBUG: No rotation requested (angle: {rotation_angle})")
+
     if enable_hdr_processing:
-        print("Step 0.5: HDR Processing...")
+        print("Step 0b: HDR Processing...")
 
         try:
             from hdr_processor import should_use_hdr_processing, process_hdr_images

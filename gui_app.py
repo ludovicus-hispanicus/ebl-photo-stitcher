@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import tkinter as tk
 from tkinter import messagebox, ttk
 import webbrowser
@@ -245,6 +246,13 @@ class ImageProcessorApp:
 
     def save_config(self):
         """Save application configuration."""
+        advanced_settings = {}
+        try:
+            if hasattr(self, 'advanced_tab'):
+                advanced_settings = self.advanced_tab.get_settings()
+        except:
+            pass
+            
         config_data = {
             'input_folder': self.input_folder_var.get(),
             'ruler_position': self.ruler_position_var.get(),
@@ -252,17 +260,16 @@ class ImageProcessorApp:
             'museum': self.museum_var.get(),
             'use_measurements': self.use_measurements_var.get(),
             'enable_hdr_processing': self.enable_hdr_processing.get(),
+            'advanced_settings': advanced_settings  # Save advanced settings including rotation
         }
-        import json
         try:
             with open(self.config_file_path, 'w') as f:
                 json.dump(config_data, f, indent=2)
         except Exception as e:
-            print(f"Warning: Could not save config: {e}")
+            print(f"Error saving config: {e}")
 
     def load_config(self):
         """Load application configuration."""
-        import json
         config_data = None
         try:
             if os.path.exists(self.config_file_path):
@@ -275,19 +282,18 @@ class ImageProcessorApp:
         if config_data:
             self.input_folder_var.set(config_data.get('input_folder', ''))
             self.ruler_position_var.set(config_data.get('ruler_position', 'bottom'))
-            self.photographer_var.set(config_data.get(
-                'photographer', DEFAULT_PHOTOGRAPHER))
+            self.photographer_var.set(config_data.get('photographer', DEFAULT_PHOTOGRAPHER))
             self.museum_var.set(config_data.get('museum', 'British Museum'))
             self.use_measurements_var.set(config_data.get('use_measurements', False))
-            self.enable_hdr_processing.set(
-                config_data.get('enable_hdr_processing', False))
-        else:
-            self.input_folder_var.set('')
-            self.ruler_position_var.set('top')
-            self.photographer_var.set(DEFAULT_PHOTOGRAPHER)
-            self.museum_var.set('British Museum')
-            self.use_measurements_var.set(False)
-            self.enable_hdr_processing.set(False)
+            self.enable_hdr_processing.set(config_data.get('enable_hdr_processing', False))
+            
+            # Load advanced settings including rotation
+            if hasattr(self, 'advanced_tab') and 'advanced_settings' in config_data:
+                try:
+                    self.advanced_tab.set_settings(config_data['advanced_settings'])
+                except Exception as e:
+                    print(f"Warning: Could not load advanced settings: {e}")
+
         self.use_first_photo_measurements_var.set(False)
 
     def update_progress_bar(self, value):
@@ -332,7 +338,7 @@ class ImageProcessorApp:
 
         workflow_kwargs = {
             'museum_selection': self.museum_var.get(),
-            'app_root_window': self.root,
+            'app_root_window': self,
             'background_color_tolerance': advanced_settings['background_color_tolerance'],
             'use_measurements_from_database': self.use_measurements_var.get(),
             'measurements_dict': self.measurements_dict,
