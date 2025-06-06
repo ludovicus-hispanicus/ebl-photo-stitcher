@@ -197,13 +197,26 @@ def run_complete_image_processing_workflow(
         print("Using first photo measurements mode - ruler detection will only run on first image set")
 
     try:
+        # Check if app_root_window exists and has advanced_tab attribute
+        if app_root_window and hasattr(app_root_window, 'advanced_tab'):
+            advanced_settings = app_root_window.advanced_tab.get_settings()
+        else:
+            # Use default settings if advanced_tab is not available
+            advanced_settings = {
+                'gradient_width_fraction': gradient_width_fraction,
+                'background_color_tolerance': DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
+                'add_logo': add_logo,
+                'logo_path': logo_path
+            }
+        
+        # Apply ruler detection settings if available
         from ruler_detector import update_ruler_detection_settings
-        advanced_settings = app_root_window.advanced_tab.get_settings() if app_root_window else {}
-        if advanced_settings:
-            update_ruler_detection_settings(advanced_settings)
+        update_ruler_detection_settings(advanced_settings)
+        
     except Exception as e:
         print(f"Warning: Could not apply ruler detection settings: {e}")
-
+        # Continue processing with default settings
+    
     successful_presets = {}
     failed_folders = []
     

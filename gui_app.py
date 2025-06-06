@@ -277,11 +277,17 @@ class ImageProcessorApp:
             self.ruler_position_var.set(config_data.get('ruler_position', 'bottom'))
             self.photographer_var.set(config_data.get(
                 'photographer', DEFAULT_PHOTOGRAPHER))
-            self.museum_var.set(config_data.get('museum', 'BM'))
+            self.museum_var.set(config_data.get('museum', 'British Museum'))
             self.use_measurements_var.set(config_data.get('use_measurements', False))
             self.enable_hdr_processing.set(
                 config_data.get('enable_hdr_processing', False))
-
+        else:
+            self.input_folder_var.set('')
+            self.ruler_position_var.set('top')
+            self.photographer_var.set(DEFAULT_PHOTOGRAPHER)
+            self.museum_var.set('British Museum')
+            self.use_measurements_var.set(False)
+            self.enable_hdr_processing.set(False)
         self.use_first_photo_measurements_var.set(False)
 
     def update_progress_bar(self, value):

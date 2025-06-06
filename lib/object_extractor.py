@@ -168,3 +168,12 @@ def extract_and_save_center_object(
     except Exception as e:
         raise IOError(
             f"Error saving extracted artifact to {output_image_filepath}: {e}")
+
+    # Ensure output background color is properly typed
+    if output_image_background_color is not None:
+        output_image_background_color = tuple(int(c) for c in output_image_background_color)
+    else:
+        output_image_background_color = (0, 0, 0)
+    
+    # Ensure background color tolerance is an integer
+    background_color_tolerance_value = int(background_color_tolerance_value)
