@@ -19,7 +19,7 @@ def rotate_image(image_path, angle, output_path=None):
         return image_path
     
     try:
-        # Use PIL for better format support
+
         with Image.open(image_path) as img:
             if angle == 90:
                 rotated = img.transpose(Image.ROTATE_270)  # PIL's 270 = our 90 clockwise
@@ -30,8 +30,7 @@ def rotate_image(image_path, angle, output_path=None):
             else:
                 print(f"Warning: Unsupported rotation angle {angle}. Skipping rotation.")
                 return image_path
-            
-            # Save to output path or overwrite original
+
             save_path = output_path if output_path else image_path
             rotated.save(save_path, quality=95 if save_path.lower().endswith('.jpg') else None)
             

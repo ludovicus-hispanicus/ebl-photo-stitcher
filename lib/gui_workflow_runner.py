@@ -66,7 +66,6 @@ def run_complete_image_processing_workflow(
         ((raw_ext_config.lower(),) if isinstance(raw_ext_config, str)
          else tuple(r_ext.lower() for r_ext in raw_ext_config))
 
-    # Get rotation settings from advanced tab
     rotation_angle = 0
     try:
         if app_root_window and hasattr(app_root_window, 'advanced_tab'):
@@ -85,7 +84,6 @@ def run_complete_image_processing_workflow(
         finished_callback()
         return
 
-    # Apply rotation BEFORE any other processing
     if rotation_angle and rotation_angle > 0:
         print(f"Step 0a: Rotating images by {rotation_angle}°...")
         total_rotated = 0
@@ -193,28 +191,36 @@ def run_complete_image_processing_workflow(
         print("Using first photo measurements mode - ruler detection will only run on first image set")
 
     try:
-        # Check if app_root_window exists and has advanced_tab attribute
+
         if app_root_window and hasattr(app_root_window, 'advanced_tab'):
             advanced_settings = app_root_window.advanced_tab.get_settings()
         else:
-            # Use default settings if advanced_tab is not available
+
             advanced_settings = {
                 'gradient_width_fraction': gradient_width_fraction,
                 'background_color_tolerance': DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
                 'add_logo': add_logo,
                 'logo_path': logo_path
             }
-        
-        # Apply ruler detection settings if available
+
         from ruler_detector import update_ruler_detection_settings
         update_ruler_detection_settings(advanced_settings)
         
     except Exception as e:
         print(f"Warning: Could not apply ruler detection settings: {e}")
-        # Continue processing with default settings
+
     
     successful_presets = {}
     failed_folders = []
+
+    enable_multi_object = False
+    try:
+        if app_root_window and hasattr(app_root_window, 'advanced_tab'):
+            advanced_settings = app_root_window.advanced_tab.get_settings()
+            enable_multi_object = advanced_settings.get('multi_object_detection', False)
+            print(f"DEBUG: Multi-object detection enabled: {enable_multi_object}")
+    except Exception as e:
+        print(f"Warning: Could not get multi-object settings: {e}")
     
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
@@ -244,7 +250,8 @@ def run_complete_image_processing_workflow(
                 gradient_width_fraction, source_folder_path, photographer_name,
                 add_logo, logo_path, current_prog_base, prog_per_folder, progress_callback,
                 use_cached_measurements, cached_px_per_cm, cached_measurements_used,
-                cached_detected_bg_color, cached_output_bg_color
+                cached_detected_bg_color, cached_output_bg_color,
+                enable_multi_object  # Add this parameter
             )
 
             if result['success']:
@@ -302,7 +309,9 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                              source_folder_path, photographer_name, add_logo, logo_path,
                              current_prog_base, prog_per_folder, progress_callback,
                              use_cached_measurements=False, cached_px_per_cm=None, cached_measurements_used=None,
-                             cached_detected_bg_color=None, cached_output_bg_color=None):
+                             cached_detected_bg_color=None, cached_output_bg_color=None,
+                             enable_multi_object=False  # Add new parameter
+):
     """Process a single subfolder."""
 
     result = {'success': False, 'cr2_conversions': 0}
@@ -361,9 +370,10 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
         art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
             path_ruler_extract_img, object_extraction_bg_mode,
-            object_artifact_suffix_config, museum_selection
+            object_artifact_suffix_config, museum_selection,
+            enable_multi_object, ruler_position  # Pass multi-object setting
         )
-
+        
         detected_bg_color = cached_detected_bg_color
         output_bg_color = cached_output_bg_color
         print(f"   Using cached background colors for {subfolder_name_item}")
@@ -391,7 +401,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
         art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
             path_ruler_extract_img, object_extraction_bg_mode,
-            object_artifact_suffix_config, museum_selection
+            object_artifact_suffix_config, museum_selection,
+            enable_multi_object, ruler_position  # Pass multi-object setting
         )
 
         progress += sub_steps["ruler_art"] * prog_per_folder

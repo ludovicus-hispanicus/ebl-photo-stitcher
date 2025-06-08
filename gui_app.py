@@ -34,7 +34,7 @@ try:
     )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
     from measurements_utils import load_measurements_from_json
-    from gui_advanced import AdvancedTab
+    from gui_advanced import AdvancedTab, AdvancedRulerTab, AdvancedLogoTab
 
     from gui_components import UIComponents
     from gui_layout import LayoutManager
@@ -211,7 +211,10 @@ class ImageProcessorApp:
 
         sys.stdout = TextRedirector(self.lt)
 
+        # Create advanced tabs
         self.advanced_tab = AdvancedTab(self.notebook)
+        self.advanced_ruler_tab = AdvancedRulerTab(self.notebook)
+        self.advanced_logo_tab = AdvancedLogoTab(self.notebook)
 
         settings = {
             'gradient_width_fraction': self.gradient_width_fraction,
@@ -219,7 +222,7 @@ class ImageProcessorApp:
             'add_logo': False,
             'logo_path': ''
         }
-        self.advanced_tab.apply_settings(settings)
+        self.advanced_tab.set_settings(settings)
 
     def draw_ruler_selector(self):
         """Draw the ruler selector canvas."""
@@ -281,13 +284,12 @@ class ImageProcessorApp:
 
         if config_data:
             self.input_folder_var.set(config_data.get('input_folder', ''))
-            self.ruler_position_var.set(config_data.get('ruler_position', 'bottom'))
+            self.ruler_position_var.set(config_data.get('ruler_position', 'top'))
             self.photographer_var.set(config_data.get('photographer', DEFAULT_PHOTOGRAPHER))
             self.museum_var.set(config_data.get('museum', 'British Museum'))
             self.use_measurements_var.set(config_data.get('use_measurements', False))
             self.enable_hdr_processing.set(config_data.get('enable_hdr_processing', False))
-            
-            # Load advanced settings including rotation
+
             if hasattr(self, 'advanced_tab') and 'advanced_settings' in config_data:
                 try:
                     self.advanced_tab.set_settings(config_data['advanced_settings'])
@@ -316,24 +318,19 @@ class ImageProcessorApp:
     def start_processing_thread(self):
         """Start the processing thread with current settings."""
         advanced_settings = self.advanced_tab.get_settings()
+        logo_settings = self.advanced_logo_tab.get_settings()
+        ruler_settings = self.advanced_ruler_tab.get_settings()
+        
+        combined_settings = {**advanced_settings, **logo_settings, **ruler_settings}
 
         workflow_args = [
             self.input_folder_var.get(),
             self.ruler_position_var.get(),
             self.photographer_var.get(),
             'rembg',
-            advanced_settings['add_logo'],
-            advanced_settings['logo_path'],
-            self.RAW_IMAGE_EXTENSION,
-            self.VALID_IMAGE_EXTENSIONS,
-            self.RULER_TEMPLATE_1CM_PATH_ASSET,
-            self.RULER_TEMPLATE_2CM_PATH_ASSET,
-            self.RULER_TEMPLATE_5CM_PATH_ASSET,
-            self.STITCH_VIEW_PATTERNS_WITH_EXT,
-            self.TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
-            self.OBJECT_ARTIFACT_SUFFIX,
-            self.update_progress_bar,
-            self.processing_finished_ui_update,
+            logo_settings['add_logo'],  # Use logo settings
+            logo_settings['logo_path'],  # Use logo settings
+            # ... rest of args
         ]
 
         workflow_kwargs = {
