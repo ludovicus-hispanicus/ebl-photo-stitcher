@@ -51,43 +51,7 @@ def run_complete_image_processing_workflow(
 ):
     """Main workflow orchestration function."""
     
-    print("="*50)
-    print(f"DEBUG: Starting workflow for folder: {source_folder_path}")
-    print(f"  Folder exists: {os.path.exists(source_folder_path)}")
-    
-    if os.path.exists(source_folder_path):
-        try:
-            all_items = os.listdir(source_folder_path)
-            print(f"  Total items in folder: {len(all_items)}")
-            
-            # Check for subfolders
-            subfolders = [item for item in all_items if os.path.isdir(os.path.join(source_folder_path, item))]
-            print(f"  Subfolders found: {len(subfolders)}")
-            for i, subfolder in enumerate(subfolders[:10]):  # Show first 10
-                subfolder_path = os.path.join(source_folder_path, subfolder)
-                subfolder_files = os.listdir(subfolder_path)
-                image_files = [f for f in subfolder_files if any(f.lower().endswith(ext) for ext in image_extensions_config)]
-                print(f"    {i+1}. '{subfolder}' - {len(subfolder_files)} files, {len(image_files)} images")
-            
-            if len(subfolders) > 10:
-                print(f"    ... and {len(subfolders) - 10} more subfolders")
-            
-            # Check for root-level images
-            root_images = [item for item in all_items if os.path.isfile(os.path.join(source_folder_path, item)) 
-                          and any(item.lower().endswith(ext) for ext in image_extensions_config)]
-            print(f"  Root-level images: {len(root_images)}")
-            if root_images:
-                for img in root_images[:5]:  # Show first 5
-                    print(f"    - {img}")
-                if len(root_images) > 5:
-                    print(f"    ... and {len(root_images) - 5} more images")
-                    
-        except Exception as e:
-            print(f"  Error reading folder contents: {e}")
-    else:
-        print(f"  ERROR: Source folder does not exist!")
-        
-    print("="*50)
+    print(f"Workflow started for folder: {source_folder_path}")
     
     clear_fallback_comparisons()
     start_time = time.time()
@@ -96,32 +60,62 @@ def run_complete_image_processing_workflow(
     if background_color_tolerance is None:
         background_color_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
-    print(f"Workflow started for folder: {source_folder_path}")
-
-    cached_px_per_cm = None
-    cached_measurements_used = None
-    cached_detected_bg_color = None
-    cached_output_bg_color = None
-    is_first_subfolder = True
-
     progress_callback(2)
 
     image_extensions_tuple = tuple(ext.lower() for ext in image_extensions_config) + \
         ((raw_ext_config.lower(),) if isinstance(raw_ext_config, str)
          else tuple(r_ext.lower() for r_ext in raw_ext_config))
 
+    rotation_angle = 0
+    try:
+        if app_root_window and hasattr(app_root_window, 'advanced_tab'):
+            advanced_settings = app_root_window.advanced_tab.get_settings()
+            rotation_angle = advanced_settings.get('rotation_angle', 0)
+            print(f"DEBUG: Got rotation angle from advanced settings: {rotation_angle}")
+    except Exception as e:
+        print(f"Warning: Could not get rotation settings: {e}")
+
     try:
         processed_subfolders = organize_project_subfolders(
             source_folder_path, image_extensions_tuple, organize_files_func)
     except Exception as e_org:
-        print(
-            f"   Workflow halted due to error during file organization: {e_org}")
+        print(f"   Workflow halted due to error during file organization: {e_org}")
         progress_callback(100)
         finished_callback()
         return
 
+    if rotation_angle and rotation_angle > 0:
+        print(f"Step 0a: Rotating images by {rotation_angle}°...")
+        total_rotated = 0
+        
+        try:
+            from image_rotation import rotate_images_in_folder
+            
+            for subfolder_path in processed_subfolders:
+                subfolder_name = os.path.basename(subfolder_path)
+                print(f"   Checking folder for rotation: {subfolder_name}")
+                
+                rotated_count = rotate_images_in_folder(
+                    subfolder_path, rotation_angle, image_extensions_tuple)
+                total_rotated += rotated_count
+                
+                if rotated_count > 0:
+                    print(f"   Rotated {rotated_count} images in {subfolder_name}")
+            
+            if total_rotated > 0:
+                print(f"   Rotation complete: {total_rotated} images rotated by {rotation_angle}°")
+            else:
+                print(f"   No images needed rotation")
+            
+        except ImportError:
+            print("   Warning: Could not import rotation module. Skipping rotation.")
+        except Exception as e:
+            print(f"   Warning: Error during rotation: {e}")
+    else:
+        print(f"DEBUG: No rotation requested (angle: {rotation_angle})")
+
     if enable_hdr_processing:
-        print("Step 0.5: HDR Processing...")
+        print("Step 0b: HDR Processing...")
 
         try:
             from hdr_processor import should_use_hdr_processing, process_hdr_images
@@ -197,29 +191,27 @@ def run_complete_image_processing_workflow(
         print("Using first photo measurements mode - ruler detection will only run on first image set")
 
     try:
-        # Check if app_root_window exists and has advanced_tab attribute
+
         if app_root_window and hasattr(app_root_window, 'advanced_tab'):
             advanced_settings = app_root_window.advanced_tab.get_settings()
         else:
-            # Use default settings if advanced_tab is not available
+
             advanced_settings = {
                 'gradient_width_fraction': gradient_width_fraction,
                 'background_color_tolerance': DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
                 'add_logo': add_logo,
                 'logo_path': logo_path
             }
-        
-        # Apply ruler detection settings if available
+
         from ruler_detector import update_ruler_detection_settings
         update_ruler_detection_settings(advanced_settings)
         
     except Exception as e:
         print(f"Warning: Could not apply ruler detection settings: {e}")
-        # Continue processing with default settings
     
     successful_presets = {}
     failed_folders = []
-    
+
     for i, subfolder_path_item in enumerate(processed_subfolders):
         subfolder_name_item = os.path.basename(subfolder_path_item)
         print(
@@ -306,7 +298,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                              source_folder_path, photographer_name, add_logo, logo_path,
                              current_prog_base, prog_per_folder, progress_callback,
                              use_cached_measurements=False, cached_px_per_cm=None, cached_measurements_used=None,
-                             cached_detected_bg_color=None, cached_output_bg_color=None):
+                             cached_detected_bg_color=None, cached_output_bg_color=None
+):
     """Process a single subfolder."""
 
     result = {'success': False, 'cr2_conversions': 0}
@@ -365,9 +358,9 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
         art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
             path_ruler_extract_img, object_extraction_bg_mode,
-            object_artifact_suffix_config, museum_selection
+            object_artifact_suffix_config, museum_selection, ruler_position
         )
-
+        
         detected_bg_color = cached_detected_bg_color
         output_bg_color = cached_output_bg_color
         print(f"   Using cached background colors for {subfolder_name_item}")
@@ -395,7 +388,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
         art_fp, art_cont, detected_bg_color, output_bg_color = extract_object_and_detect_background(
             path_ruler_extract_img, object_extraction_bg_mode,
-            object_artifact_suffix_config, museum_selection
+            object_artifact_suffix_config, museum_selection,
+            ruler_position
         )
 
         progress += sub_steps["ruler_art"] * prog_per_folder

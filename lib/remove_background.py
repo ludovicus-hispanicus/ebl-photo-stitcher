@@ -88,23 +88,20 @@ def create_foreground_mask_from_background(
     image_bgr_array, background_bgr_color_tuple, color_similarity_tolerance
 ):
     """Create foreground mask by removing background color."""
-    # Ensure background_color and tolerance are proper types
+
     if background_bgr_color_tuple is not None:
         background_bgr_color_tuple = tuple(int(c) for c in background_bgr_color_tuple)
     else:
         background_bgr_color_tuple = (0, 0, 0)
     
     color_similarity_tolerance = int(color_similarity_tolerance)
-    
-    # Create bounds with consistent uint8 type
+
     lower_bound = tuple(max(0, int(c) - color_similarity_tolerance) for c in background_bgr_color_tuple)
     upper_bound = tuple(min(255, int(c) + color_similarity_tolerance) for c in background_bgr_color_tuple)
-    
-    # Convert to numpy arrays with explicit uint8 dtype
+
     lower_bound = np.array(lower_bound, dtype=np.uint8)
     upper_bound = np.array(upper_bound, dtype=np.uint8)
-    
-    # Apply color range mask with consistent types
+
     mask = cv2.inRange(image_bgr_array, lower_bound, upper_bound)
     return cv2.bitwise_not(mask)  # Invert to get foreground
 

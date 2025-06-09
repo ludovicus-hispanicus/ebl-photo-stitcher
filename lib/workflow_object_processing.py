@@ -27,18 +27,22 @@ def prepare_ruler_image(ruler_for_scale_fp, subfolder_path_item, raw_ext_config)
 
 
 def extract_object_and_detect_background(path_ruler_extract_img, object_extraction_bg_mode,
-                                         object_artifact_suffix_config, museum_selection):
-    """Extract center object and detect background color."""
+                                         object_artifact_suffix_config, museum_selection,
+                                         ruler_position="bottom"):
+    """Extract center object(s) and detect background color."""
     img_for_bg_detection = cv2.imread(path_ruler_extract_img)
     if img_for_bg_detection is None:
-        raise ValueError(
-            f"Failed to load image for background detection: {path_ruler_extract_img}")
+        raise ValueError(f"Failed to load image for background detection: {path_ruler_extract_img}")
 
-    detected_bg_color_from_image = detect_dominant_corner_background_color(
-        img_for_bg_detection)
+    detected_bg_color_from_image = detect_dominant_corner_background_color(img_for_bg_detection)
     output_bg_color = get_museum_background_color(
         museum_selection=museum_selection, detected_bg_color=detected_bg_color_from_image)
 
+    if object_extraction_bg_mode == 'rembg':
+        from object_extractor_rembg import extract_and_save_center_object
+    else:
+        from object_extractor import extract_and_save_center_object
+        
     art_fp, art_cont = extract_and_save_center_object(
         path_ruler_extract_img,
         source_background_detection_mode=object_extraction_bg_mode,
@@ -46,7 +50,7 @@ def extract_object_and_detect_background(path_ruler_extract_img, object_extracti
         output_filename_suffix=object_artifact_suffix_config,
         museum_selection=museum_selection
     )
-
+    
     return art_fp, art_cont, detected_bg_color_from_image, output_bg_color
 
 

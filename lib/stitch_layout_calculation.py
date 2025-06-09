@@ -39,26 +39,16 @@ def calculate_stitching_layout(
     print(f"  logo_image_path: {logo_image_path}")
     print(f"  custom_layout: {custom_layout}")
     print(f"  museum_selection: {museum_selection}")
-    
-    # Check if object_images_dict has any valid entries
+
     if not object_images_dict:
         raise ValueError("No object images provided for layout calculation")
-    
-    # Check each image in the dictionary
+
     for view_name, image_data in object_images_dict.items():
         print(f"  Checking view '{view_name}':")
         if isinstance(image_data, np.ndarray):
             if image_data.size > 0:
                 height, width = image_data.shape[:2]
-                print(f"    ✓ NumPy array: {width}x{height}")
-            else:
-                print(f"    ✗ Empty NumPy array")
-        elif isinstance(image_data, str) and os.path.exists(image_data):
-            print(f"    ✓ Valid file path: {image_data}")
-        else:
-            print(f"    ✗ Invalid data type or missing file")
-    
-    # Existing layout calculation logic
+
     standard_keys = ["obverse", "reverse", "top", "bottom"]
 
     if len(object_images_dict) == 4 and not any(key in standard_keys for key in object_images_dict.keys()):
