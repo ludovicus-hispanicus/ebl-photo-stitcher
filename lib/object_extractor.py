@@ -173,5 +173,4 @@ def extract_and_save_center_object(
         output_image_background_color = tuple(int(c) for c in output_image_background_color)
     else:
         output_image_background_color = (0, 0, 0)
-
     background_color_tolerance_value = int(background_color_tolerance_value)

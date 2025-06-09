@@ -208,7 +208,6 @@ def run_complete_image_processing_workflow(
         
     except Exception as e:
         print(f"Warning: Could not apply ruler detection settings: {e}")
-
     
     successful_presets = {}
     failed_folders = []
