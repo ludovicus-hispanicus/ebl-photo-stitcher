@@ -23,15 +23,12 @@ class ConfigManager:
                 'museum_selection': app_instance.museum_var.get(),
                 'use_measurements': app_instance.use_measurements_var.get(),
                 'enable_hdr_processing': app_instance.enable_hdr_processing.get(),
-                # Advanced settings
+
                 'gradient_width_fraction': advanced_settings['gradient_width_fraction'],
                 'background_color_tolerance': advanced_settings['background_color_tolerance'],
                 'rotation_angle': advanced_settings['rotation_angle'],
-                'multi_object_detection': advanced_settings['multi_object_detection'],
-                # Logo settings
                 'add_logo': logo_settings['add_logo'],
                 'logo_path': logo_settings['logo_path'],
-                # Ruler settings
                 'ruler_settings': ruler_settings
             }
 
@@ -63,23 +60,19 @@ class ConfigManager:
             app_instance.use_measurements_var.set(config.get('use_measurements', False))
             app_instance.enable_hdr_processing.set(config.get('enable_hdr_processing', False))
 
-            # Load advanced settings
             advanced_settings = {
                 'gradient_width_fraction': config.get('gradient_width_fraction', 0.5),
                 'background_color_tolerance': config.get('background_color_tolerance', app_instance.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE),
-                'rotation_angle': config.get('rotation_angle', 0),
-                'multi_object_detection': config.get('multi_object_detection', False)
+                'rotation_angle': config.get('rotation_angle', 0)
             }
             app_instance.advanced_tab.set_settings(advanced_settings)  # Changed from apply_settings
 
-            # Load logo settings
             logo_settings = {
                 'add_logo': config.get('add_logo', False),
                 'logo_path': config.get('logo_path', '')
             }
             app_instance.advanced_logo_tab.set_settings(logo_settings)
 
-            # Load ruler settings
             ruler_settings = config.get('ruler_settings', {})
             if ruler_settings:
                 app_instance.advanced_ruler_tab.set_settings(ruler_settings)

@@ -8,18 +8,15 @@ class AdvancedTab:
         self.main_frame = ttk.Frame(notebook)
         notebook.add(self.main_frame, text="Advanced")
 
-        # Initialize all variables
         self.gradient_width_var = tk.DoubleVar(value=0.5)
         self.bg_tolerance_var = tk.IntVar(value=40)
         self.rotation_var = tk.StringVar(value="0")
-        self.multi_object_var = tk.BooleanVar(value=False)
 
         self.create_widgets()
 
     def create_widgets(self):
         """Create basic advanced settings widgets."""
 
-        # Background tolerance section
         bg_frame = ttk.LabelFrame(
             self.main_frame, text="Background Detection", padding="10")
         bg_frame.pack(fill="x", pady=(0, 10))
@@ -54,34 +51,7 @@ class AdvancedTab:
         self.gradient_label = ttk.Label(gradient_scale_frame, text="0.50", width=6)
         self.gradient_label.pack(side="right", padx=(10, 0))
 
-        # Extraction section
-        self.create_extraction_section()
-
-        # Rotation section
         self.create_rotation_section()
-
-    def create_extraction_section(self):
-        """Create object extraction controls section."""
-        extraction_frame = ttk.LabelFrame(
-            self.main_frame, text="Object Extraction", padding="10")
-        extraction_frame.pack(fill="x", pady=(0, 10))
-
-        # Multi-object detection option
-        multi_object_cb = ttk.Checkbutton(
-            extraction_frame,
-            text="Detect multiple objects",
-            variable=self.multi_object_var
-        )
-        multi_object_cb.pack(anchor="w", pady=(0, 5))
-
-        # Explanation label
-        explanation_label = ttk.Label(
-            extraction_frame,
-            text="Use if there are several fragments in the same image",
-            font=("TkDefaultFont", 8),
-            foreground="gray"
-        )
-        explanation_label.pack(anchor="w", padx=(20, 0))
 
     def create_rotation_section(self):
         """Create rotation controls section."""
@@ -92,11 +62,9 @@ class AdvancedTab:
         ttk.Label(rotation_frame, text="Rotate all images before processing:").pack(
             anchor="w", pady=(0, 5))
 
-        # Rotation options frame
         rotation_options_frame = ttk.Frame(rotation_frame)
         rotation_options_frame.pack(fill="x")
 
-        # Radio buttons for rotation angles
         ttk.Radiobutton(rotation_options_frame, text="No rotation (0°)",
                         variable=self.rotation_var, value="0").pack(side="left", padx=(0, 15))
 
@@ -114,8 +82,7 @@ class AdvancedTab:
         return {
             'gradient_width_fraction': self.gradient_width_var.get(),
             'background_color_tolerance': self.bg_tolerance_var.get(),
-            'rotation_angle': int(self.rotation_var.get()),
-            'multi_object_detection': self.multi_object_var.get()
+            'rotation_angle': int(self.rotation_var.get())
         }
 
     def set_settings(self, settings_dict):
@@ -126,10 +93,7 @@ class AdvancedTab:
             self.bg_tolerance_var.set(settings_dict['background_color_tolerance'])
         if 'rotation_angle' in settings_dict:
             self.rotation_var.set(str(settings_dict['rotation_angle']))
-        if 'multi_object_detection' in settings_dict:
-            self.multi_object_var.set(settings_dict['multi_object_detection'])
 
-        # Update display labels
         self._update_bg_tolerance_label(str(self.bg_tolerance_var.get()))
         self._update_gradient_label(str(self.gradient_width_var.get()))
 
@@ -148,7 +112,6 @@ class AdvancedRulerTab:
         self.main_frame = ttk.Frame(notebook)
         notebook.add(self.main_frame, text="Advanced (Ruler)")
 
-        # Create a scrollable frame for all content
         self.canvas = tk.Canvas(self.main_frame)
         self.scrollbar = ttk.Scrollbar(
             self.main_frame, orient="vertical", command=self.canvas.yview)
@@ -162,11 +125,9 @@ class AdvancedRulerTab:
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        # Pack the canvas and scrollbar
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        # Initialize ruler detection variables
         self.roi_vertical_start_var = tk.DoubleVar(value=0.02)
         self.roi_vertical_end_var = tk.DoubleVar(value=0.30)
         self.roi_horizontal_start_var = tk.DoubleVar(value=0.02)
@@ -183,7 +144,6 @@ class AdvancedRulerTab:
     def create_widgets(self):
         """Create ruler detection widgets."""
 
-        # Quick presets section
         presets_frame = ttk.LabelFrame(
             self.scrollable_frame, text="Quick Presets", padding="10")
         presets_frame.pack(fill="x", pady=(0, 10))
@@ -200,12 +160,10 @@ class AdvancedRulerTab:
         ttk.Button(preset_buttons_frame, text="Fine Detail",
                    command=self.apply_fine_detail_preset).pack(side="left")
 
-        # ROI settings
         roi_frame = ttk.LabelFrame(self.scrollable_frame,
                                    text="Region of Interest", padding="10")
         roi_frame.pack(fill="x", pady=(0, 10))
 
-        # Vertical ROI
         ttk.Label(roi_frame, text="Vertical ROI:").pack(anchor="w", pady=(0, 5))
         roi_v_frame = ttk.Frame(roi_frame)
         roi_v_frame.pack(fill="x", pady=(0, 10))
@@ -217,7 +175,6 @@ class AdvancedRulerTab:
         ttk.Scale(roi_v_frame, from_=0.0, to=1.0, variable=self.roi_vertical_end_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Horizontal ROI
         ttk.Label(roi_frame, text="Horizontal ROI:").pack(anchor="w", pady=(0, 5))
         roi_h_frame = ttk.Frame(roi_frame)
         roi_h_frame.pack(fill="x")
@@ -229,19 +186,16 @@ class AdvancedRulerTab:
         ttk.Scale(roi_h_frame, from_=0.0, to=1.0, variable=self.roi_horizontal_end_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Analysis settings
         analysis_frame = ttk.LabelFrame(
             self.scrollable_frame, text="Analysis Parameters", padding="10")
         analysis_frame.pack(fill="x", pady=(0, 10))
 
-        # Scanline count
         scanline_frame = ttk.Frame(analysis_frame)
         scanline_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(scanline_frame, text="Scanline Count:", width=20).pack(side="left")
         ttk.Scale(scanline_frame, from_=10, to=200, variable=self.analysis_scanline_count_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Threshold
         threshold_frame = ttk.Frame(analysis_frame)
         threshold_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(threshold_frame, text="Binarization Threshold:",
@@ -249,33 +203,28 @@ class AdvancedRulerTab:
         ttk.Scale(threshold_frame, from_=50, to=255, variable=self.mark_binarization_threshold_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Mark width settings
         width_frame = ttk.LabelFrame(
             self.scrollable_frame, text="Mark Width Detection", padding="10")
         width_frame.pack(fill="x", pady=(0, 10))
 
-        # Min width
         min_width_frame = ttk.Frame(width_frame)
         min_width_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(min_width_frame, text="Min Mark Width:", width=20).pack(side="left")
         ttk.Scale(min_width_frame, from_=0.01, to=0.2, variable=self.min_mark_width_fraction_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Max width
         max_width_frame = ttk.Frame(width_frame)
         max_width_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(max_width_frame, text="Max Mark Width:", width=20).pack(side="left")
         ttk.Scale(max_width_frame, from_=0.2, to=1.0, variable=self.max_mark_width_fraction_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Tolerance
         tolerance_frame = ttk.Frame(width_frame)
         tolerance_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(tolerance_frame, text="Width Tolerance:", width=20).pack(side="left")
         ttk.Scale(tolerance_frame, from_=0.1, to=2.0, variable=self.mark_width_tolerance_var,
                   orient="horizontal").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # Min marks
         min_marks_frame = ttk.Frame(width_frame)
         min_marks_frame.pack(fill="x")
         ttk.Label(min_marks_frame, text="Min Alternating Marks:",
@@ -384,7 +333,6 @@ class AdvancedLogoTab:
         self.main_frame = ttk.Frame(notebook)
         notebook.add(self.main_frame, text="Advanced (Logo)")
 
-        # Initialize logo variables
         self.add_logo_var = tk.BooleanVar(value=False)
         self.logo_path_var = tk.StringVar(value="")
 
@@ -393,7 +341,6 @@ class AdvancedLogoTab:
     def create_widgets(self):
         """Create logo settings widgets."""
 
-        # Logo section
         logo_frame = ttk.LabelFrame(self.main_frame, text="Logo Settings", padding="10")
         logo_frame.pack(fill="x", pady=(0, 10))
 
@@ -402,7 +349,6 @@ class AdvancedLogoTab:
                                            command=self._toggle_logo_path_entry)
         self.add_logo_cb.pack(anchor="w", pady=(0, 10))
 
-        # Logo path
         ttk.Label(logo_frame, text="Logo file path:").pack(anchor="w")
 
         path_entry_frame = ttk.Frame(logo_frame)
@@ -416,7 +362,6 @@ class AdvancedLogoTab:
                                           command=self._browse_logo_file)
         self.logo_browse_btn.pack(side="right", padx=(5, 0))
 
-        # Logo info
         info_frame = ttk.LabelFrame(
             self.main_frame, text="Logo Information", padding="10")
         info_frame.pack(fill="x", pady=(0, 10))
@@ -436,7 +381,6 @@ The logo will be automatically resized to fit the image layout.
                   font=("TkDefaultFont", 8),
                   foreground="gray", justify="left").pack(anchor="w")
 
-        # Initialize states
         self._toggle_logo_path_entry()
 
     def get_settings(self):

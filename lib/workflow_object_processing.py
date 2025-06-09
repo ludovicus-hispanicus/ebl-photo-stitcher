@@ -28,7 +28,7 @@ def prepare_ruler_image(ruler_for_scale_fp, subfolder_path_item, raw_ext_config)
 
 def extract_object_and_detect_background(path_ruler_extract_img, object_extraction_bg_mode,
                                          object_artifact_suffix_config, museum_selection,
-                                         enable_multi_object=False, ruler_position="bottom"):
+                                         ruler_position="bottom"):
     """Extract center object(s) and detect background color."""
     img_for_bg_detection = cv2.imread(path_ruler_extract_img)
     if img_for_bg_detection is None:
@@ -38,43 +38,20 @@ def extract_object_and_detect_background(path_ruler_extract_img, object_extracti
     output_bg_color = get_museum_background_color(
         museum_selection=museum_selection, detected_bg_color=detected_bg_color_from_image)
 
-    if enable_multi_object:
-        print(f"  Using multi-object extraction mode")
-
-        from object_extractor_multiple import extract_and_save_multiple_objects
-        
-        extracted_objects = extract_and_save_multiple_objects(
-            path_ruler_extract_img,
-            source_background_detection_mode=object_extraction_bg_mode,
-            output_image_background_color=output_bg_color,
-            output_filename_suffix=object_artifact_suffix_config,
-            museum_selection=museum_selection,
-            ruler_position=ruler_position
-        )
-        
-        if extracted_objects:
-
-            art_fp, art_cont = extracted_objects[0]
-            print(f"  Multi-object extraction: saved {len(extracted_objects)} objects")
-            return art_fp, art_cont, detected_bg_color_from_image, output_bg_color
-        else:
-            raise ValueError("No valid objects found in multi-object extraction")
+    if object_extraction_bg_mode == 'rembg':
+        from object_extractor_rembg import extract_and_save_center_object
     else:
-
-        if object_extraction_bg_mode == 'rembg':
-            from object_extractor_rembg import extract_and_save_center_object
-        else:
-            from object_extractor import extract_and_save_center_object
-            
-        art_fp, art_cont = extract_and_save_center_object(
-            path_ruler_extract_img,
-            source_background_detection_mode=object_extraction_bg_mode,
-            output_image_background_color=output_bg_color,
-            output_filename_suffix=object_artifact_suffix_config,
-            museum_selection=museum_selection
-        )
+        from object_extractor import extract_and_save_center_object
         
-        return art_fp, art_cont, detected_bg_color_from_image, output_bg_color
+    art_fp, art_cont = extract_and_save_center_object(
+        path_ruler_extract_img,
+        source_background_detection_mode=object_extraction_bg_mode,
+        output_image_background_color=output_bg_color,
+        output_filename_suffix=object_artifact_suffix_config,
+        museum_selection=museum_selection
+    )
+    
+    return art_fp, art_cont, detected_bg_color_from_image, output_bg_color
 
 
 def extract_ruler_contour(path_ruler_extract_img, detected_bg_color_from_image,

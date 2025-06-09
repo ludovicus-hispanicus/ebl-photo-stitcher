@@ -211,7 +211,6 @@ class ImageProcessorApp:
 
         sys.stdout = TextRedirector(self.lt)
 
-        # Create advanced tabs
         self.advanced_tab = AdvancedTab(self.notebook)
         self.advanced_ruler_tab = AdvancedRulerTab(self.notebook)
         self.advanced_logo_tab = AdvancedLogoTab(self.notebook)
@@ -328,9 +327,18 @@ class ImageProcessorApp:
             self.ruler_position_var.get(),
             self.photographer_var.get(),
             'rembg',
-            logo_settings['add_logo'],  # Use logo settings
-            logo_settings['logo_path'],  # Use logo settings
-            # ... rest of args
+            logo_settings['add_logo'],
+            logo_settings['logo_path'],
+            self.RAW_IMAGE_EXTENSION,
+            self.VALID_IMAGE_EXTENSIONS,
+            self.RULER_TEMPLATE_1CM_PATH_ASSET,
+            self.RULER_TEMPLATE_2CM_PATH_ASSET,
+            self.RULER_TEMPLATE_5CM_PATH_ASSET,
+            self.STITCH_VIEW_PATTERNS_WITH_EXT,
+            self.TEMP_EXTRACTED_RULER_FOR_SCALING_FILENAME,
+            self.OBJECT_ARTIFACT_SUFFIX,
+            self.update_progress_bar,
+            self.processing_finished_ui_update,
         ]
 
         workflow_kwargs = {
