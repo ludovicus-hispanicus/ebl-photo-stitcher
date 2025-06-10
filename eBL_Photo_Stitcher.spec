@@ -12,7 +12,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
-    ],
+        ('lib', 'lib'),
+    ] + pyexiv2_datas,
     hiddenimports=[
         'cv2', 
         'numpy',
@@ -25,7 +26,7 @@ a = Analysis(
         'cairosvg',
         'rembg',
         'onnxruntime',
-    ],
+    ] + pyexiv2_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
