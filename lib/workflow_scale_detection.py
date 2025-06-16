@@ -271,18 +271,42 @@ def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_
     measurements_used = False
     cr2_conv_count = 0
 
+    # First try measurements if requested
     if use_measurements_from_database and measurements_dict:
         px_cm_val, measurements_used = get_scale_from_measurements(
             subfolder_path_item, measurements_dict, ruler_for_scale_fp, background_color_tolerance)
 
+    # If no measurement found or not using measurements, try ruler detection
     if px_cm_val is None:
         try:
             px_cm_val, cr2_conv_count = detect_scale_from_ruler(
                 ruler_for_scale_fp, subfolder_path_item, raw_ext_config,
                 museum_selection, ruler_position)
+            
+            # NEW: Check if detected size is unreasonably high (over 1000 px/cm)
+            if px_cm_val is not None and px_cm_val > 1000:
+                print(f"   WARNING: Detected px/cm value ({px_cm_val:.2f}) seems too high (>1000), trying measurement fallback...")
+                
+                # Try to get measurement from database as fallback
+                if measurements_dict:
+                    fallback_px_cm, fallback_measurements_used = get_scale_from_measurements(
+                        subfolder_path_item, measurements_dict, ruler_for_scale_fp, background_color_tolerance)
+                    
+                    if fallback_px_cm is not None:
+                        print(f"   FALLBACK: Using measurement from database ({fallback_px_cm:.2f} px/cm) instead of high detection value")
+                        px_cm_val = fallback_px_cm
+                        measurements_used = fallback_measurements_used
+                    else:
+                        print(f"   No measurement available in database, keeping high detection value ({px_cm_val:.2f} px/cm)")
+                        # Keep the detected value since no measurement exists
+                else:
+                    print(f"   No measurements database available, keeping high detection value ({px_cm_val:.2f} px/cm)")
+                    # Keep the detected value since no measurements exist
+                
         except Exception as e:
             print(f"   Error during ruler scale detection: {e}")
 
+            # Original fallback logic for when ruler detection completely fails
             if not measurements_used and measurements_dict:
                 px_cm_val, measurements_used = get_scale_from_measurements(
                     subfolder_path_item, measurements_dict, ruler_for_scale_fp, background_color_tolerance)
@@ -294,7 +318,6 @@ def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_
 
                     tablet_id = extract_tablet_id_from_path(subfolder_path_item)
                     if tablet_id:
-
                         object_files = [f for f in os.listdir(subfolder_path_item)
                                         if f.endswith('_object.tif')]
                         if object_files:
