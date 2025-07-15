@@ -6,9 +6,9 @@ try:
     import cairosvg
     from io import BytesIO
     SVG_SUPPORT = True
-except ImportError:
+except (ImportError, OSError) as e:
     SVG_SUPPORT = False
-    print("Warning: cairosvg not installed, SVG ruler support will be limited.")
+    print(f"Warning: cairosvg or its dependencies not found ({e}). SVG ruler support is disabled.")
 
 RULER_TARGET_PHYSICAL_WIDTHS_CM = {
     "1cm": 1.752173913043478,

@@ -11,10 +11,22 @@ from PyInstaller.utils.hooks import collect_all
 pyexiv2_datas, pyexiv2_binaries, pyexiv2_hiddenimports = collect_all("pyexiv2")
 block_cipher = None
 
+homebrew_lib_path = '/opt/homebrew/lib' 
+
+cairo_binaries = [
+    (f'{homebrew_lib_path}/libcairo.2.dylib', '.'),
+    (f'{homebrew_lib_path}/libpixman-1.0.dylib', '.'),
+    (f'{homebrew_lib_path}/libfontconfig.1.dylib', '.'),
+    (f'{homebrew_lib_path}/libfreetype.6.dylib', '.'),
+    (f'{homebrew_lib_path}/libpng16.16.dylib', '.'),
+    (f'{homebrew_lib_path}/libbrotlidec.1.dylib', '.'),
+    (f'{homebrew_lib_path}/libbrotlicommon.1.dylib', '.'),
+]
+
 a = Analysis(
     ["gui_app.py"],
     pathex=["./lib"],
-    binaries=pyexiv2_binaries,
+    binaries=pyexiv2_binaries + cairo_binaries,
     datas=[
         ("assets", "assets"),
         ("lib", "lib"),
@@ -27,8 +39,6 @@ a = Analysis(
         "rawpy",
         "piexif",
         "pyexiv2",
-        "cairo",
-        "cairo-2",
         "cairosvg",
         "rembg",
         "onnxruntime",
