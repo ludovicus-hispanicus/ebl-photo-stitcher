@@ -82,24 +82,6 @@ a = Analysis(
     noarchive=False,
 )
 
-excluded_binaries = [
-    "opengl32sw.dll",
-    "VCRUNTIME140.dll",
-    "MSVCP140.dll",
-    "api-ms-win-core*.dll",
-    "api-ms-win-crt*.dll",
-    "opencv_videoio_ffmpeg*.dll",
-    "libopenblas*.dll",
-]
-
-a.binaries = TOC(
-    [
-        x
-        for x in a.binaries
-        if not any(excluded in x[0] for excluded in excluded_binaries)
-    ]
-)
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
