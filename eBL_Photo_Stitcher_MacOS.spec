@@ -1,8 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""
-PyInstaller spec file for eBL Photo Stitcher - macOS App Bundle + DMG
-This builds a macOS app bundle and packages it into a DMG installer.
-"""
+
 import os
 import subprocess
 from pathlib import Path
@@ -11,17 +8,49 @@ from PyInstaller.utils.hooks import collect_all
 pyexiv2_datas, pyexiv2_binaries, pyexiv2_hiddenimports = collect_all("pyexiv2")
 block_cipher = None
 
-homebrew_lib_path = '/opt/homebrew/lib' 
+def get_homebrew_prefix():
+    """Get the Homebrew prefix path (/usr/local or /opt/homebrew)."""
+    try:
+        prefix = subprocess.check_output(['brew', '--prefix'], text=True).strip()
+        return prefix
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        if os.path.exists('/opt/homebrew'):
+            return '/opt/homebrew'
+        return '/usr/local'
 
-cairo_binaries = [
-    (f'{homebrew_lib_path}/libcairo.2.dylib', '.'),
-    (f'{homebrew_lib_path}/libpixman-1.0.dylib', '.'),
-    (f'{homebrew_lib_path}/libfontconfig.1.dylib', '.'),
-    (f'{homebrew_lib_path}/libfreetype.6.dylib', '.'),
-    (f'{homebrew_lib_path}/libpng16.16.dylib', '.'),
-    (f'{homebrew_lib_path}/libbrotlidec.1.dylib', '.'),
-    (f'{homebrew_lib_path}/libbrotlicommon.1.dylib', '.'),
-]
+def get_cairo_dependencies():
+    prefix = get_homebrew_prefix()
+    main_lib_path = Path(prefix) / 'lib' / 'libcairo.2.dylib'
+
+    if not main_lib_path.exists():
+        print(f"WARNING: libcairo.2.dylib not found at {main_lib_path}. SVG support will likely fail.")
+        return []
+
+    def find_deps(file_path):
+        deps = set()
+        try:
+            output = subprocess.check_output(['otool', '-L', str(file_path)], text=True)
+            for line in output.splitlines()[1:]:
+                dep_path_str = line.strip().split(' ')[0]
+                if dep_path_str.startswith(prefix):
+                    deps.add(dep_path_str)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        return deps
+
+    all_deps = {str(main_lib_path.resolve())}
+    processed_deps = set()
+    while True:
+        new_deps_to_check = all_deps - processed_deps
+        if not new_deps_to_check:
+            break
+        for dep in new_deps_to_check:
+            found = find_deps(dep)
+            all_deps.update(found)
+            processed_deps.add(dep)
+    return [(dep, '.') for dep in all_deps]
+
+cairo_binaries = get_cairo_dependencies()
 
 a = Analysis(
     ["gui_app.py"],
@@ -38,7 +67,6 @@ a = Analysis(
         "imageio",
         "rawpy",
         "piexif",
-        "pyexiv2",
         "cairosvg",
         "rembg",
         "onnxruntime",
