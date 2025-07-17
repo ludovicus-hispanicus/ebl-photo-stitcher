@@ -32,6 +32,12 @@ def select_ruler_template(museum_selection, art_fp, px_cm_val, ruler_template_1c
         custom_ruler_size_cm = 4.599
         print(f"Using Iraq Museum ruler: {chosen_ruler_tpl}")
 
+    elif museum_selection == "Iraq Museum (Sippar Library)":
+        chosen_ruler_tpl = os.path.join(
+            os.path.dirname(ruler_template_1cm_asset_path), "Sippar_Library_Ruler.svg")
+        custom_ruler_size_cm = 3.886
+        print(f"Using Iraq Museum (Sippar Library) ruler: {chosen_ruler_tpl}")
+        
     elif museum_selection == "eBL Ruler (CBS)":
         chosen_ruler_tpl = os.path.join(
             os.path.dirname(ruler_template_1cm_asset_path), "General_eBL_photo_ruler.svg")

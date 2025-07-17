@@ -9,44 +9,135 @@ from PIL import Image, ImageOps
 from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
 
 
-def _download_with_progress(url, destination):
-    """Download a file with progress reporting."""
+def _download_with_progress(url, destination, max_retries=3):
+    """Download a file with progress reporting and retry logic."""
     import requests
     from tqdm import tqdm
-
+    try:
+        import signal
+        has_signal = True
+    except ImportError:
+        has_signal = False
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Download timed out")
+    
     print(f"  Downloading U2NET model from {url}")
     print(f"  This is a large file (~176MB) and may take several minutes.")
+    print(f"  If download hangs, it will timeout after 10 minutes and retry up to {max_retries} times.")
 
-    try:
-
-        response = requests.get(url, stream=True, timeout=300)
-        response.raise_for_status()
-
-        total_size = int(response.headers.get('content-length', 0))
-
+    for attempt in range(max_retries):
+        if attempt > 0:
+            print(f"  Retry attempt {attempt + 1}/{max_retries}...")
+        
         temp_destination = destination + ".download"
+        
+        try:
+            # Set up timeout signal (Unix/Linux/Mac only)
+            if has_signal and hasattr(signal, 'SIGALRM'):
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(600)  # 10 minute timeout
+            
+            # Use shorter initial timeout, but allow for connection retries
+            response = requests.get(url, stream=True, timeout=(30, 60))
+            response.raise_for_status()
 
-        with open(temp_destination, 'wb') as f, tqdm(
-            desc="  Downloading",
-            total=total_size,
-            unit='B',
-            unit_scale=True,
-            unit_divisor=1024,
-        ) as bar:
-            for data in response.iter_content(chunk_size=1024 * 1024):
-                if data:
-                    size = f.write(data)
-                    bar.update(size)
+            total_size = int(response.headers.get('content-length', 0))
+            
+            downloaded_size = 0
+            last_progress_time = time.time()
 
-        shutil.move(temp_destination, destination)
-        print(f"  Download complete! Model saved to {destination}")
+            with open(temp_destination, 'wb') as f, tqdm(
+                desc="  Downloading",
+                total=total_size,
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as bar:
+                for data in response.iter_content(chunk_size=64 * 1024):  # Smaller chunks
+                    if data:
+                        size = f.write(data)
+                        bar.update(size)
+                        downloaded_size += size
+                        
+                        # Check for stalled download
+                        current_time = time.time()
+                        if current_time - last_progress_time > 120:  # 2 minutes without progress
+                            raise TimeoutError("Download stalled - no progress for 2 minutes")
+                        last_progress_time = current_time
+
+            # Disable timeout signal
+            if has_signal and hasattr(signal, 'SIGALRM'):
+                signal.alarm(0)
+
+            # Verify file size
+            if total_size > 0 and downloaded_size < total_size * 0.95:
+                raise RuntimeError(f"Download incomplete: {downloaded_size}/{total_size} bytes")
+
+            shutil.move(temp_destination, destination)
+            print(f"  Download complete! Model saved to {destination}")
+            return True
+
+        except (requests.exceptions.RequestException, TimeoutError, RuntimeError) as e:
+            print(f"  Download attempt {attempt + 1} failed: {e}")
+            
+            # Clean up partial download
+            if os.path.exists(temp_destination):
+                os.remove(temp_destination)
+            
+            # Disable timeout signal
+            if has_signal and hasattr(signal, 'SIGALRM'):
+                signal.alarm(0)
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"  Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            else:
+                print(f"  All {max_retries} download attempts failed.")
+                return False
+
+        except Exception as e:
+            print(f"  Unexpected error during download: {e}")
+            
+            # Clean up and disable timeout
+            if os.path.exists(temp_destination):
+                os.remove(temp_destination)
+            if has_signal and hasattr(signal, 'SIGALRM'):
+                signal.alarm(0)
+            
+            return False
+
+    return False
+
+
+def _validate_model_file(model_path):
+    """Validate that the model file is complete and correct."""
+    try:
+        if not os.path.exists(model_path):
+            return False
+        
+        # Check file size (u2net.onnx should be approximately 176MB)
+        file_size = os.path.getsize(model_path)
+        expected_size = 176681672  # Exact size of u2net.onnx
+        size_tolerance = 1024 * 1024  # 1MB tolerance
+        
+        if abs(file_size - expected_size) > size_tolerance:
+            print(f"  Warning: Model file size ({file_size} bytes) doesn't match expected size ({expected_size} bytes)")
+            print("  The file may be corrupted or incomplete.")
+            return False
+        
+        # Try to read the first few bytes to make sure it's not corrupted
+        with open(model_path, 'rb') as f:
+            header = f.read(16)
+            if len(header) < 16:
+                print("  Warning: Model file appears to be too small or corrupted.")
+                return False
+        
         return True
-
+        
     except Exception as e:
-        print(f"  Error downloading model: {e}")
-
-        if os.path.exists(temp_destination):
-            os.remove(temp_destination)
+        print(f"  Error validating model file: {e}")
         return False
 
 
@@ -56,11 +147,16 @@ def _ensure_local_model():
     model_dir = os.path.join(user_home, ".u2net")
     model_path = os.path.join(model_dir, "u2net.onnx")
 
-    if os.path.exists(model_path):
+    # Check if model already exists and is valid
+    if _validate_model_file(model_path):
         return True
+    elif os.path.exists(model_path):
+        print("  Existing model file appears to be corrupted. Re-downloading...")
+        os.remove(model_path)
 
     os.makedirs(model_dir, exist_ok=True)
 
+    # Get the base directory for assets
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -68,24 +164,69 @@ def _ensure_local_model():
 
     assets_model_path = os.path.join(base_dir, "assets", "u2net.onnx")
 
-    if os.path.exists(assets_model_path):
+    # Try to copy from assets first
+    if _validate_model_file(assets_model_path):
         print(f"  Copying U2NET model from local assets")
         try:
             shutil.copy2(assets_model_path, model_path)
-            return True
+            if _validate_model_file(model_path):
+                return True
+            else:
+                print("  Error: Copied model file failed validation")
         except Exception as e:
             print(f"  Error copying model: {e}")
 
+    # Download from internet as fallback
     url = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
-    success = _download_with_progress(url, model_path)
+    
+    print("\n" + "="*60)
+    print("  U2NET AI Model Required")
+    print("="*60)
+    print("  The AI-powered object extraction requires downloading")
+    print("  the U2NET model (~176MB) from the internet.")
+    print("\n  This download may take several minutes depending on")
+    print("  your internet connection speed.")
+    print("="*60)
+    
+    # Give user a chance to cancel if they prefer manual download
+    try:
+        # Check if we're running in an interactive environment
+        if sys.stdin.isatty():
+            user_input = input("\n  Continue with automatic download? (y/n) [y]: ").strip().lower()
+            if user_input in ['n', 'no']:
+                print("\n  Skipping automatic download.")
+                success = False
+            else:
+                success = _download_with_progress(url, model_path)
+        else:
+            # Non-interactive environment (GUI), proceed with download
+            print("\n  Proceeding with automatic download...")
+            success = _download_with_progress(url, model_path)
+    except (KeyboardInterrupt, EOFError):
+        print("\n  Download cancelled by user.")
+        success = False
+
+    if success and _validate_model_file(model_path):
+        return True
 
     if not success:
-        print("\n================================================================")
-        print("  ERROR: Could not download or find the U2NET model.")
-        print("  You can download it manually from:")
-        print("  https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx")
-        print(f"  And save it to: {model_path}")
-        print("================================================================\n")
+        print("\n" + "="*80)
+        print("  ERROR: Could not download the U2NET model automatically.")
+        print("  This model is required for AI-powered object extraction.")
+        print("\n  MANUAL DOWNLOAD INSTRUCTIONS:")
+        print("  1. Open your web browser and go to:")
+        print("     https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx")
+        print("  2. Download the u2net.onnx file (approximately 176MB)")
+        print("  3. Save it to one of these locations:")
+        print(f"     - Primary location: {model_path}")
+        print(f"     - Alternative: {assets_model_path}")
+        print("\n  TROUBLESHOOTING:")
+        print("  - If the download is slow, try using a download manager")
+        print("  - If the GitHub link doesn't work, search for 'rembg u2net.onnx' online")
+        print("  - Make sure you have a stable internet connection")
+        print("  - The file should be exactly 176,681,672 bytes")
+        print("\n  After downloading, restart the application and try again.")
+        print("="*80 + "\n")
 
     return success
 

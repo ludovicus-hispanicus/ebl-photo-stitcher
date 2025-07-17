@@ -55,7 +55,7 @@ class UIComponents:
             museum_frame,
             textvariable=museum_var,
             width=20,
-            values=["British Museum", "Iraq Museum",
+            values=["British Museum", "Iraq Museum", "Iraq Museum (Sippar Library)",
                     "eBL Ruler (CBS)", "Non-eBL Ruler (VAM)"]
         )
         museum_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)

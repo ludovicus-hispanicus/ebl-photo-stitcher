@@ -38,7 +38,7 @@ class EventHandlers:
     def handle_ruler_canvas_click(event, canvas_params, ruler_position_var, museum_var, draw_ruler_callback):
         """Handle clicks on the ruler position canvas."""
         current_museum = museum_var.get()
-        if current_museum == "Iraq Museum":
+        if current_museum == "Iraq Museum" or current_museum == "Iraq Museum (Sippar Library)":
 
             print("Ruler position is fixed for Iraq Museum.")
             return
@@ -70,7 +70,7 @@ class EventHandlers:
         museum_selection = museum_var.get()
         print(f"Museum selected: {museum_selection}")
 
-        if museum_selection == "Iraq Museum":
+        if museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)":
             ruler_position_var.set("bottom-left-fixed")
         else:
 

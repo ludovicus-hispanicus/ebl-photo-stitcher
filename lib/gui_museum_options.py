@@ -13,6 +13,10 @@ class MuseumOptionsManager:
                 "Cuneiform Artefacts of Iraq in Context (CAIC), "
                 "Bayerische Akademie der Wissenschaften"
             )
+        elif museum_selection == "Iraq Museum (Sippar Library)":
+            stitch_config.STITCH_CREDIT_LINE = (
+                "College of Arts, University of Baghdad"
+            )
         elif museum_selection == "Non-eBL Ruler (VAM)":
             stitch_config.STITCH_CREDIT_LINE = ""
         else:
@@ -20,6 +24,8 @@ class MuseumOptionsManager:
 
         if museum_selection == "Iraq Museum":
             stitch_config.STITCH_INSTITUTION = "The Iraq Museum – eBL Project"
+        elif museum_selection == "Iraq Museum (Sippar Library)":
+            stitch_config.STITCH_INSTITUTION = "University of Baghdad"
         elif museum_selection == "Non-eBL Ruler (VAM)":
             stitch_config.STITCH_INSTITUTION = (
                 "Staatliche Museen zu Berlin, Vorderasiatisches Museum"

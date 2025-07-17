@@ -115,6 +115,12 @@ MUSEUM_CONFIGS = {
         "ruler_template": "IM_photo_ruler.svg",
         "ruler_size_cm": 4.599
     },
+    "Iraq Museum (Sippar Library)": {
+        "background_color": (255, 255, 255),
+        "ruler_type": "svg",
+        "ruler_template": "Sippar_Library_Ruler.svg",
+        "ruler_size_cm": 3.886
+    },
     "eBL Ruler (CBS)": {
         "background_color": (255, 255, 255),
         "ruler_type": "svg",

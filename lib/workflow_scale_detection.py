@@ -15,8 +15,9 @@ def try_ruler_detection_with_fallback(primary_image_path, subfolder_path_item, r
         tuple: (px_cm_val, cr2_conv_count)
     """
 
-    if museum_selection == "Iraq Museum":
-        detector_func = ruler_detector_iraq_museum.detect_1cm_distance_iraq
+    if museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)":
+        def detector_func(img_path): return ruler_detector_iraq_museum.detect_1cm_distance_iraq(
+            img_path, museum_selection=museum_selection)
         detector_name = "Iraq Museum"
     else:
         def detector_func(img_path): return ruler_detector.estimate_pixels_per_centimeter_from_ruler(
@@ -142,7 +143,7 @@ def detect_scale_from_ruler(ruler_for_scale_fp, subfolder_path_item, raw_ext_con
     )
 
     if px_cm_val is None or px_cm_val <= 0:
-        detector_name = "Iraq Museum" if museum_selection == "Iraq Museum" else "general"
+        detector_name = "Iraq Museum" if museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)" else "general"
         raise ValueError(
             f"{detector_name} ruler detection failed for primary image and all fallback images.")
 

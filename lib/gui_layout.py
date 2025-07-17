@@ -156,7 +156,7 @@ class LayoutManager:
         canvas.create_text(s / 2, s / 2, text="Object",
                            font=('Helvetica', 9, 'italic'), fill="gray")
 
-        is_iraq_museum = (museum_selection == "Iraq Museum")
+        is_iraq_museum = (museum_selection == "Iraq Museum") or museum_selection == "Iraq Museum (Sippar Library)"
 
         active_fill_color = "lightblue"
         selected_fill_color = "blue"

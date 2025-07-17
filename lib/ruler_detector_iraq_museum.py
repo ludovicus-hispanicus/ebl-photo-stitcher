@@ -11,13 +11,14 @@ from remove_background import (
 from object_extractor_rembg import extract_and_save_center_object
 
 
-def detect_1cm_distance_iraq(image_path):
+def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
     """
     Detects the pixel distance corresponding to 1 cm on a ruler in an image,
     specifically for the Iraq Museum style ruler (lower-left corner, vertical ticks, "1 cm" text).
 
     Args:
         image_path (str): Path to the image containing the ruler.
+        museum_selection (str): Museum selection ("Iraq Museum" or "Iraq Museum (Sippar Library)").
 
     Returns:
         float: Pixel distance representing 1 cm, or None if not found.
@@ -35,9 +36,18 @@ def detect_1cm_distance_iraq(image_path):
             return None
         height, width, _ = img.shape
 
-        roi_width = width // 3
+        # Calculate ROI width based on museum selection
+        if museum_selection == "Iraq Museum (Sippar Library)":
+            # For Sippar Library, divide width by 3 and take center third
+            third_width = width // 3
+            roi_width = third_width
+            roi_x = third_width  # Start at the center third
+        else:
+            # For regular Iraq Museum, use one third from left edge
+            roi_width = width // 3
+            roi_x = 0
+
         roi_height = height // 2
-        roi_x = 0
         roi_y = height - roi_height
         initial_roi = img[roi_y:height, roi_x:roi_x + roi_width]
 
@@ -199,7 +209,7 @@ def detect_1cm_distance_iraq(image_path):
             cv2.imwrite(debug_path, roi)
             return None
 
-        one_cm_text_info = find_1cm_text_location(roi)
+        one_cm_text_info = find_1cm_text_location(roi, debug_path)
         if one_cm_text_info is not None:
             pass
         else:
@@ -215,19 +225,21 @@ def detect_1cm_distance_iraq(image_path):
         return None
 
 
-def find_1cm_text_location(roi):
+def find_1cm_text_location(roi, debug_path=None):
     """
     Finds the location of the "1 cm" text in the ROI using template matching.
 
     Args:
         roi (numpy.ndarray): The region of interest containing the ruler.
+        debug_path (str, optional): Path to save debug images.
 
     Returns:
         tuple: (x, y) coordinates of the "1 cm" text, or None if not found.
     """
     if roi is None or roi.size == 0:
         print("Error: ROI is empty in find_1cm_text_location.")
-        cv2.imwrite(debug_path, roi)
+        if debug_path:
+            cv2.imwrite(debug_path, roi)
         return None
 
     if len(roi.shape) == 3 and roi.shape[2] == 3:
@@ -236,7 +248,8 @@ def find_1cm_text_location(roi):
         roi_gray_for_match = roi
     else:
         print(f"Error: ROI has unexpected shape {roi.shape} for template matching.")
-        cv2.imwrite(debug_path, roi)
+        if debug_path:
+            cv2.imwrite(debug_path, roi)
         return None
 
     template_height = 30
