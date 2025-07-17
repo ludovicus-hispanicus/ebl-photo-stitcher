@@ -27,15 +27,15 @@ def get_detection_parameters(museum_selection="Iraq Museum"):
     
     if museum_selection == "Iraq Museum (Sippar Library)":
         base_params.update({
-        "hough_min_line_length": 8,         # Very short lines for partial ticks
-        "hough_max_line_gap": 15,           # Smaller gaps for broken lines
-        "hough_threshold": 40,              # Lower threshold for weak edges
-        "tick_max_width": 50,               # Reasonable max width
-        "tick_min_height": 3,               # Very short ticks allowed
-        "max_tick_thickness_px": 40,        # Moderate grouping
+        "hough_min_line_length": 10,        # Reasonable minimum length for clear ticks
+        "hough_max_line_gap": 15,           # Allow moderate gaps
+        "hough_threshold": 30,              # Lower threshold for clear lines
+        "tick_max_width": 8,                # Narrow width for thin tick marks
+        "tick_min_height": 15,              # Minimum height for substantial ticks
+        "max_tick_thickness_px": 25,        # Tight grouping for precise ticks
         "min_ticks_required": 5,            # Fewer required ticks
         "num_ticks_for_1cm": 11,            # Correct: 11 ticks per cm
-        "consistency_threshold": 0.8,       # More tolerant spacing
+        "consistency_threshold": 0.75,      # Balanced tolerance
         })
     
     return base_params
@@ -59,9 +59,9 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
         height, width, _ = img.shape
 
         if museum_selection == "Iraq Museum (Sippar Library)":
-            third_width = width // 2
+            third_width = width
             roi_width = third_width
-            roi_x = third_width
+            roi_x = 0
         else:
             roi_width = width // 3
             roi_x = 0
