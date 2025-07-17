@@ -11,23 +11,45 @@ from remove_background import (
 from object_extractor_rembg import extract_and_save_center_object
 
 
+def get_detection_parameters(museum_selection="Iraq Museum"):
+    base_params = {
+        "hough_min_line_length": 30,
+        "hough_max_line_gap": 10,
+        "hough_threshold": 60,
+        "tick_max_width": 20,
+        "tick_min_width": 1,
+        "tick_min_height": 20,
+        "max_tick_thickness_px": 30,
+        "min_ticks_required": 11,
+        "num_ticks_for_1cm": 11,
+        "consistency_threshold": 0.7
+    }
+    
+    if museum_selection == "Iraq Museum (Sippar Library)":
+        base_params.update({
+        "hough_min_line_length": 8,         # Very short lines for partial ticks
+        "hough_max_line_gap": 15,           # Smaller gaps for broken lines
+        "hough_threshold": 40,              # Lower threshold for weak edges
+        "tick_max_width": 50,               # Reasonable max width
+        "tick_min_height": 3,               # Very short ticks allowed
+        "max_tick_thickness_px": 40,        # Moderate grouping
+        "min_ticks_required": 8,            # Fewer required ticks
+        "num_ticks_for_1cm": 11,            # Correct: 11 ticks per cm
+        "consistency_threshold": 0.8,       # More tolerant spacing
+        })
+    
+    return base_params
+
+
 def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
-    """
-    Detects the pixel distance corresponding to 1 cm on a ruler in an image,
-    specifically for the Iraq Museum style ruler (lower-left corner, vertical ticks, "1 cm" text).
-
-    Args:
-        image_path (str): Path to the image containing the ruler.
-        museum_selection (str): Museum selection ("Iraq Museum" or "Iraq Museum (Sippar Library)").
-
-    Returns:
-        float: Pixel distance representing 1 cm, or None if not found.
-    """
     base_filename = os.path.splitext(os.path.basename(image_path))[0]
     debug_filename = f"{base_filename}_debugging.jpg"
     debug_path = os.path.join(os.path.dirname(image_path), debug_filename)
     
-    print(f"     Processing image: {os.path.basename(image_path)}")
+    params = get_detection_parameters(museum_selection)
+    
+    print(f"DEBUG: Processing {os.path.basename(image_path)} with Sippar Library parameters")
+    print(f"DEBUG: min_height={params['tick_min_height']}, threshold={params['hough_threshold']}")
 
     try:
         img = cv2.imread(image_path)
@@ -36,14 +58,11 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
             return None
         height, width, _ = img.shape
 
-        # Calculate ROI width based on museum selection
         if museum_selection == "Iraq Museum (Sippar Library)":
-            # For Sippar Library, divide width by 3 and take center third
             third_width = width // 3
             roi_width = third_width
-            roi_x = third_width  # Start at the center third
+            roi_x = third_width
         else:
-            # For regular Iraq Museum, use one third from left edge
             roi_width = width // 3
             roi_x = 0
 
@@ -57,7 +76,6 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
         cv2.imwrite(roi_temp_path, roi)
 
         try:
-            print(f"     Applying AI-based background removal...")
             bg_removed_path, _ = extract_and_save_center_object(
                 roi_temp_path,
                 output_image_background_color=(255, 255, 255),
@@ -69,9 +87,6 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
             bg_removed_img = cv2.imread(bg_removed_path)
             if bg_removed_img is not None:
                 roi = bg_removed_img
-                print(f"     AI background removal applied successfully for {os.path.basename(image_path)}")
-            else:
-                print(f"     Warning: Could not load AI-processed image, using original ROI")
 
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
@@ -79,8 +94,6 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
                 os.remove(bg_removed_path)
 
         except Exception as e:
-            print(f"     AI background removal failed: {e}, using original ROI")
-
             if os.path.exists(roi_temp_path):
                 os.remove(roi_temp_path)
 
@@ -107,32 +120,39 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
         contrast_adjusted_roi = cv2.convertScaleAbs(
             trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
 
-        contrast_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_contrast.jpg")
-        cv2.imwrite(contrast_path, contrast_adjusted_roi)
-
         edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
 
-        lines_roi = cv2.HoughLinesP(edges_roi, 1, np.pi / 180,
-                                    60, minLineLength=30, maxLineGap=10)
+        lines_roi = cv2.HoughLinesP(
+            edges_roi, 
+            1, 
+            np.pi / 180,
+            params['hough_threshold'], 
+            minLineLength=params['hough_min_line_length'], 
+            maxLineGap=params['hough_max_line_gap']
+        )
 
         if lines_roi is None or len(lines_roi) < 2:
-            print(f"     Error: Could not detect enough lines in the ROI for {os.path.basename(image_path)}")
+            print(f"DEBUG: No lines detected - Hough found {0 if lines_roi is None else len(lines_roi)} lines")
             cv2.imwrite(debug_path, roi)
             return None
 
+        print(f"DEBUG: Hough detected {len(lines_roi)} total lines")
         potential_ticks_props = []
+        
         for line in lines_roi:
             x1, y1, x2, y2 = line[0]
             line_height = abs(y2 - y1)
             line_width = abs(x2 - x1)
 
-            if line_width < 20 and line_height > 20:
+            if (line_width >= params['tick_min_width'] and 
+                line_width <= params['tick_max_width'] and 
+                line_height >= params['tick_min_height']):
                 avg_x = (x1 + x2) / 2.0
                 potential_ticks_props.append({'x': avg_x, 'y1': min(
-                    y1, y2), 'y2': max(y1, y2), 'h': line_height})
+                    y1, y2), 'y2': max(y1, y2), 'h': line_height, 'w': line_width})
 
+        print(f"DEBUG: After filtering: {len(potential_ticks_props)} potential ticks")
         if not potential_ticks_props:
-            print(f"     Error: No potential tick lines found after initial filtering for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
@@ -142,15 +162,13 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
         if not potential_ticks_props:
             return None
 
-        MAX_TICK_THICKNESS_PX = 30
-
         i = 0
         while i < len(potential_ticks_props):
             current_group_ticks_x = [potential_ticks_props[i]['x']]
             group_scan_idx = i
 
             for j in range(i + 1, len(potential_ticks_props)):
-                if (potential_ticks_props[j]['x'] - potential_ticks_props[i]['x']) < MAX_TICK_THICKNESS_PX:
+                if (potential_ticks_props[j]['x'] - potential_ticks_props[i]['x']) < params['max_tick_thickness_px']:
                     current_group_ticks_x.append(potential_ticks_props[j]['x'])
                     group_scan_idx = j
                 else:
@@ -161,14 +179,13 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
 
             i = group_scan_idx + 1
 
-        if len(merged_tick_x_values) < 11:
-            print(f"     Error: Not enough merged tick marks found ({len(merged_tick_x_values)}) for {os.path.basename(image_path)}. Need at least 11.")
+        if len(merged_tick_x_values) < params['min_ticks_required']:
             cv2.imwrite(debug_path, roi)
             return None
 
         tick_x_coords = merged_tick_x_values
 
-        num_ticks_for_1cm = 11
+        num_ticks_for_1cm = params['num_ticks_for_1cm']
         candidate_1cm_distances = []
 
         if len(tick_x_coords) >= num_ticks_for_1cm:
@@ -191,53 +208,33 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
                     continue
 
                 std_dev_internal_spacing = np.std(internal_spacings)
-                relative_std_dev_threshold = 0.6
-                consistency_threshold = median_internal_spacing * relative_std_dev_threshold
+                consistency_threshold = median_internal_spacing * params['consistency_threshold']
 
                 if std_dev_internal_spacing < consistency_threshold:
                     candidate_1cm_distances.append(current_span_distance)
 
         if not candidate_1cm_distances:
-            print(f"     Error: Could not find any suitable 1cm segments after consistency checks for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
         one_cm_distance = np.median(candidate_1cm_distances)
 
         if one_cm_distance <= 0:
-            print(f"     Error: Calculated 1cm distance ({one_cm_distance:.2f}px) is not positive for {os.path.basename(image_path)}")
             cv2.imwrite(debug_path, roi)
             return None
 
         one_cm_text_info = find_1cm_text_location(roi, debug_path)
-        if one_cm_text_info is not None:
-            pass
-        else:
-            pass
-
-        print(f"     SUCCESS: Found 1cm distance of {one_cm_distance:.2f}px in {os.path.basename(image_path)}")
+        
         return one_cm_distance
 
     except Exception as e:
-        print(f"     An error occurred in detect_1cm_distance_iraq for {os.path.basename(image_path)}: {e}")
         if 'roi' in locals():
             cv2.imwrite(debug_path, roi)
         return None
 
 
 def find_1cm_text_location(roi, debug_path=None):
-    """
-    Finds the location of the "1 cm" text in the ROI using template matching.
-
-    Args:
-        roi (numpy.ndarray): The region of interest containing the ruler.
-        debug_path (str, optional): Path to save debug images.
-
-    Returns:
-        tuple: (x, y) coordinates of the "1 cm" text, or None if not found.
-    """
     if roi is None or roi.size == 0:
-        print("Error: ROI is empty in find_1cm_text_location.")
         if debug_path:
             cv2.imwrite(debug_path, roi)
         return None
@@ -247,7 +244,6 @@ def find_1cm_text_location(roi, debug_path=None):
     elif len(roi.shape) == 2:
         roi_gray_for_match = roi
     else:
-        print(f"Error: ROI has unexpected shape {roi.shape} for template matching.")
         if debug_path:
             cv2.imwrite(debug_path, roi)
         return None
@@ -268,7 +264,6 @@ def find_1cm_text_location(roi, debug_path=None):
         result = cv2.matchTemplate(
             roi_gray_for_match, template_gray, cv2.TM_CCOEFF_NORMED)
     except cv2.error as e:
-        print(f"OpenCV error during matchTemplate: {e}")
         return None
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
