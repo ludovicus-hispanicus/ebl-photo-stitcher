@@ -9,6 +9,7 @@
 - [Setup](#setup)
 - [Usage (Python)](#usage-python)
 - [Usage (GUI)](#usage-gui)
+- [Custom Measurements](#custom-measurements)
 - [HDR Processing](#hdr-processing)
 - [Configuration](#configuration)
 - [Packaging (Optional)](#packaging-optional)
@@ -35,6 +36,8 @@ This project has been developed to streamline the image processing pipeline, ins
     * Supports ruler placement at top, bottom, left, or right of the image.
     * Special Iraq Museum ruler detection with dedicated algorithm.
     * Fallback to database measurements for British Museum Sippar Collection.
+    * Custom Excel measurements support - upload your own tablet width measurements as fallback.
+    * Three-tier priority system: ruler detection → custom measurements → built-in database.
 * **Object Extraction:**
     * Uses state-of-the-art `rembg` library with U2NET model for precise object extraction.
     * Automatically selects the object closest to the image center among the largest detected objects.
@@ -76,7 +79,8 @@ The project is modular, with specific tasks handled by different Python scripts:
 * `lib/stitch_enhancement_utils.py`: Handles logo addition and final cropping/margin for stitched images.
 * `lib/metadata_utils.py`: Functions for writing EXIF and XMP metadata.
 * `lib/image_utils.py`: Generic image processing helper functions.
-* `lib/measurements_utils.py`: Functions for working with tablet measurements database.
+* `lib/measurements_utils.py`: Functions for working with tablet measurements database and custom Excel measurements.
+* `lib/gui_advanced.py`: Advanced configuration tabs including custom measurements upload interface.
 
 ## Prerequisites
 
@@ -90,6 +94,8 @@ The project is modular, with specific tasks handled by different Python scripts:
     * `rawpy` (for reading RAW image files)
     * `piexif` (for basic EXIF metadata handling)
     * `pyexiv2` (recommended, for comprehensive metadata handling including XMP)
+    * `pandas` (for Excel file processing in custom measurements)
+    * `openpyxl` (for Excel file format support)
     * `lensfunpy` (optional, for lens corrections in RAW processing - requires Lensfun database installed system-wide)
 
 ## Setup
@@ -101,7 +107,7 @@ The project is modular, with specific tasks handled by different Python scripts:
     ```
 2.  Install required Python libraries:
     ```bash
-    pip install opencv-python numpy pillow rembg imageio rawpy piexif lensfunpy pyexiv2
+    pip install opencv-python numpy pillow rembg imageio rawpy piexif lensfunpy pyexiv2 pandas openpyxl
     ```
 3.  (Optional) Install the Lensfun database for `lensfunpy` to work. The method varies by OS.
 4.  **Asset Files:**
@@ -163,7 +169,11 @@ For Iraq Museum tablets:
 
 These options use similar detection methods to the British Museum style but apply different digital ruler templates to the final output.
 
-### Database Measurements Option
+### Database Measurements and Custom Measurements
+
+The eBL Photo Stitcher supports two types of fallback measurements when ruler detection fails or is unreliable:
+
+#### Database Measurements (Sippar Collection)
 
 For the British Museum's Sippar Collection, you can optionally use pre-recorded measurements:
 
@@ -172,6 +182,27 @@ For the British Museum's Sippar Collection, you can optionally use pre-recorded 
    - The program will look up the tablet's dimensions in the included database
    - Physical dimensions are used to calculate the scale without ruler detection
    - This can be useful when ruler detection is challenging or the ruler isn't clearly visible
+
+#### Custom Excel Measurements
+
+You can upload your own tablet width measurements via Excel files for any collection:
+
+1. **Prepare Excel File**: Create a file with Tablet ID in the first column and width in centimeters in the second column
+2. **Upload via GUI**: Go to the "Advanced (Ruler)" tab and click "Browse..." to select your Excel file
+3. **Automatic Integration**: Custom measurements are automatically merged with the built-in database
+4. **Priority System**: Custom measurements take precedence over built-in ones for matching tablet IDs
+
+**Example Excel format:**
+| Tablet ID | Width (cm) |
+|-----------|------------|
+| BM.12345  | 8.5        |
+| BM.58103  | 12.3       |
+| CBS.5256  | 7.5        |
+
+**Measurement Priority Order:**
+1. **Ruler recognition** from photograph (highest priority)
+2. **Custom Excel measurements** (user uploaded)
+3. **Built-in database** measurements (lowest priority)
 
 ### Best Practices for Optimal Ruler Detection
 
@@ -187,6 +218,93 @@ If ruler detection fails, the application will report an error. You can:
 - Try a different ruler position
 - Improve the lighting or clarity of the ruler in your images
 - For British Museum Sippar Collection tablets, try using the database measurements option
+- Upload custom measurements via Excel file (see Custom Measurements section below)
+
+## Custom Measurements
+
+The eBL Photo Stitcher supports uploading custom tablet width measurements via Excel files. This feature allows you to provide your own width measurements for tablets, which are used as a fallback when the ruler recognition system cannot determine scale from photographs.
+
+### Key Features
+
+#### Excel File Support
+- **File formats**: .xlsx and .xls
+- **Content**: Tablet ID in first column, width in centimeters in second column
+- **Flexible tablet ID matching**: Supports various ID formats (e.g., "12345", "BM.12345", "BM 12345")
+
+#### User Interface
+- **Location**: Advanced (Ruler) tab
+- **Components**: 
+  - File browse button with validation
+  - Clear button to remove loaded file
+  - Status label showing load results
+  - Descriptive instructions
+
+#### Measurement Priority
+The system uses measurements in this priority order:
+1. **Ruler recognition** from photograph (highest priority)
+2. **Custom Excel measurements** (user uploaded)
+3. **Built-in database** measurements (lowest priority)
+
+#### Data Persistence
+- Excel file path and loaded measurements are saved in application configuration
+- Previously loaded files are automatically reloaded when application starts
+- Settings persist across application sessions
+
+### Excel File Format
+
+#### Requirements
+- Excel file (.xlsx or .xls)
+- Minimum 2 columns
+- First column: Tablet ID (e.g., "BM.12345", "BM.58103", "CBS.5256")
+- Second column: Width measurement value in centimeters
+
+#### Example Excel Structure
+
+| Tablet ID | Width (cm) |
+|-----------|------------|
+| BM.12345  | 8.5        |
+| BM.58103  | 12.3       |
+| CBS.5256  | 7.5        |
+| BM.67890  | 6.7        |
+
+### Usage Instructions
+
+1. **Prepare your Excel file** following the format above
+2. **Open eBL Photo Stitcher** and go to the "Advanced (Ruler)" tab
+3. **Click "Browse..."** in the "Custom Tablet Measurements" section
+4. **Select your Excel file** - the system will validate and load it
+5. **Check the status** - a green checkmark indicates successful loading
+6. **Run your workflow** - custom measurements will be used when available
+
+### Error Handling and Troubleshooting
+
+- **File validation**: Checks for proper Excel format and minimum columns
+- **Data validation**: Skips invalid rows, validates numeric values
+- **User feedback**: Clear error messages and status indicators
+- **Graceful degradation**: Falls back to built-in measurements if custom loading fails
+
+**Common issues:**
+- **"Invalid Excel file"**: Ensure your file has at least 2 columns with valid data
+- **"No valid measurements found"**: Check that your width values are numeric and positive
+- **"Error loading file"**: Verify the file isn't corrupted and is a valid Excel format
+
+### Integration with Existing Workflow
+
+The custom measurements system integrates seamlessly with existing workflow:
+- **Ruler detection**: Continues to work as primary measurement source
+- **Database fallback**: Built-in measurements remain available
+- **Processing pipeline**: No changes needed to core image processing
+- **Configuration**: Extends existing settings system
+
+### Technical Requirements
+
+**Dependencies:**
+- **pandas**: For Excel file reading and processing
+- **openpyxl**: For Excel file format support
+- **tkinter.filedialog**: For file selection interface
+
+**Installation:**
+These dependencies are included in the standard requirements.txt file.
 
 ## Usage (Python)
 
@@ -232,8 +350,12 @@ For example, if your tablet has ID "IM.136546", the obverse image would be named
    - Non-eBL Ruler (VAM): For tablets with external/VAM rulers
 5. **Ruler Position:** Click on the abstract image representation to indicate where the physical ruler is located in your source images (used for scale detection). For Iraq Museum, the position is fixed at bottom-left.
 6. **Use measurements from database (Sippar Collection)**: When this option is checked and available, the application will use the known physical dimensions of a tablet from the program's database instead of relying on ruler detection. Only available for British Museum's Sippar Collection.
-7. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
-8. Click **"Start Processing"**.
+7. **Advanced Options**: The application includes several advanced tabs:
+   - **Advanced Tab**: Configure background detection tolerance, gradient settings, and image rotation
+   - **Advanced (Ruler) Tab**: Upload custom tablet measurements via Excel files, configure ruler detection parameters
+   - **Advanced (Logo) Tab**: Configure logo placement and appearance options
+8. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
+9. Click **"Start Processing"**.
 
 The application will:
 1.  Organize images from the source folder into subfolders based on their base name.
