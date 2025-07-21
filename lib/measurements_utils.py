@@ -2,6 +2,11 @@ import json
 import os
 import re
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 
 def load_measurements_from_json(json_path):
     """
@@ -48,9 +53,20 @@ def extract_tablet_id_from_path(folder_path):
 
     folder_name = os.path.basename(folder_path)
 
-    match = re.search(r'(?:BM[_\s])?(\d+)', folder_name, re.IGNORECASE)
-    if match:
-        return match.group(1)
+    # First try to match CBS format (CBS.5256)
+    cbs_match = re.search(r'CBS\.(\d+)', folder_name, re.IGNORECASE)
+    if cbs_match:
+        return f"CBS.{cbs_match.group(1)}"
+    
+    # Then try to match BM format (BM.12345 or BM_12345 or BM 12345)
+    bm_match = re.search(r'BM[_\s\.]*(\d+)', folder_name, re.IGNORECASE)
+    if bm_match:
+        return f"BM.{bm_match.group(1)}"
+    
+    # Finally, just try to extract any number
+    number_match = re.search(r'(\d+)', folder_name)
+    if number_match:
+        return number_match.group(1)
 
     return None
 
@@ -70,21 +86,36 @@ def get_tablet_width_from_measurements(folder_path, measurements_dict):
     if not tablet_id:
         return None
 
-    potential_ids = [
-        tablet_id,
-        f"BM.{tablet_id}",
-        f"BM {tablet_id}",
-        f"BM_{tablet_id}"
-    ]
+    # If we got a full ID (like CBS.5256), try it directly first
+    if tablet_id in measurements_dict:
+        width_cm = measurements_dict[tablet_id].get("width")
+        if width_cm is not None and isinstance(width_cm, (int, float)) and width_cm > 0:
+            print(f"Found width measurement for ID {tablet_id}: {width_cm} cm")
+            return width_cm
 
-    for id_format in potential_ids:
-        if id_format in measurements_dict:
-            width_cm = measurements_dict[id_format].get("width")
-            if width_cm is not None and isinstance(width_cm, (int, float)) and width_cm > 0:
-                print(f"Found measurement for ID {id_format}: {width_cm} cm")
-                return width_cm
+    # Extract just the numeric part for additional matching attempts
+    numeric_part = re.search(r'(\d+)', tablet_id)
+    if numeric_part:
+        numeric_id = numeric_part.group(1)
+        
+        potential_ids = [
+            numeric_id,
+            f"BM.{numeric_id}",
+            f"BM {numeric_id}",
+            f"BM_{numeric_id}",
+            f"CBS.{numeric_id}",
+            f"CBS {numeric_id}",
+            f"CBS_{numeric_id}"
+        ]
 
-    print(f"No measurement found for tablet ID: {tablet_id}")
+        for id_format in potential_ids:
+            if id_format in measurements_dict:
+                width_cm = measurements_dict[id_format].get("width")
+                if width_cm is not None and isinstance(width_cm, (int, float)) and width_cm > 0:
+                    print(f"Found width measurement for ID {id_format}: {width_cm} cm")
+                    return width_cm
+
+    print(f"No width measurement found for tablet ID: {tablet_id}")
     return None
 
 
@@ -111,3 +142,103 @@ def is_valid_measurements_file(file_path):
         return "_id" in data[0] and "width" in data[0]
     except:
         return False
+
+
+def load_measurements_from_excel(excel_path):
+    """
+    Load width measurements data from an Excel file.
+    Expects _id in first column and width in second column.
+
+    Args:
+        excel_path: Path to the Excel file containing width measurements
+
+    Returns:
+        Dictionary mapping tablet IDs to their width measurements, or empty dict if file not found
+    """
+    if pd is None:
+        print("Error: pandas is required for Excel file loading")
+        print("Install with: pip install pandas openpyxl")
+        return {}
+
+    if not os.path.exists(excel_path):
+        print(f"Excel file not found: {excel_path}")
+        return {}
+
+    try:
+        # Read Excel file
+        df = pd.read_excel(excel_path)
+        
+        if df.empty or len(df.columns) < 2:
+            print("Error: Excel file must have at least 2 columns")
+            return {}
+
+        measurements_dict = {}
+        
+        for index, row in df.iterrows():
+            try:
+                tablet_id = str(row.iloc[0]).strip()
+                width_value = float(row.iloc[1])
+                
+                if tablet_id and width_value > 0:
+                    measurements_dict[tablet_id] = {
+                        "_id": tablet_id,
+                        "width": width_value
+                    }
+                    
+            except (ValueError, TypeError):
+                # Skip invalid rows
+                continue
+
+        print(f"Loaded {len(measurements_dict)} width measurements from Excel file")
+        return measurements_dict
+
+    except Exception as e:
+        print(f"Error loading Excel measurements file: {e}")
+        return {}
+
+
+def is_valid_excel_measurements_file(file_path):
+    """
+    Check if the given Excel file is valid for measurements.
+
+    Args:
+        file_path: Path to the Excel file
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if pd is None:
+        return False
+        
+    if not os.path.exists(file_path):
+        return False
+
+    try:
+        df = pd.read_excel(file_path)
+        return not df.empty and len(df.columns) >= 2
+    except:
+        return False
+
+
+def merge_measurements_dicts(dict1, dict2):
+    """
+    Merge two measurements dictionaries, with dict2 taking precedence.
+    
+    Args:
+        dict1: First measurements dictionary
+        dict2: Second measurements dictionary (takes precedence)
+        
+    Returns:
+        Merged dictionary
+    """
+    merged = dict1.copy()
+    
+    for tablet_id, measurements in dict2.items():
+        if tablet_id in merged:
+            # Update existing entry with new measurements
+            merged[tablet_id].update(measurements)
+        else:
+            # Add new entry
+            merged[tablet_id] = measurements.copy()
+    
+    return merged

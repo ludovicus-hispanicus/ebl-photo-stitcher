@@ -153,7 +153,7 @@ def detect_scale_from_ruler(ruler_for_scale_fp, subfolder_path_item, raw_ext_con
 def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_for_scale_fp,
                                 background_color_tolerance=None):
     """
-    Get scale from measurements database.
+    Get scale from measurements database (sippar.json) or Excel measurements.
 
     Returns:
         tuple: (px_cm_val, measurements_used)
@@ -166,18 +166,39 @@ def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_fo
     if tablet_width_cm is None or tablet_width_cm <= 0:
         return None, False
 
+    # Check if this is Excel measurements (has '_id' field) vs sippar.json
+    from measurements_utils import extract_tablet_id_from_path
+    tablet_id = extract_tablet_id_from_path(subfolder_path_item)
+    
+    # Check if this measurement comes from Excel (custom measurements)
+    is_excel_measurement = False
+    if tablet_id and tablet_id in measurements_dict:
+        measurement_data = measurements_dict[tablet_id]
+        if isinstance(measurement_data, dict) and '_id' in measurement_data:
+            is_excel_measurement = True
+
     try:
-        px_cm_val = determine_pixels_per_cm_from_measurement(
-            ruler_for_scale_fp,
-            tablet_width_cm,
-            should_extract_object=True,
-            bg_color_tolerance=background_color_tolerance
-        )
-        print(
-            f"   Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
-        return px_cm_val, True
+        if is_excel_measurement:
+            # Use Excel measurement workflow (extracts object and creates measurement record)
+            from extract_measurements import get_scale_from_excel_and_create_measurement
+            px_cm_val, measurements_used = get_scale_from_excel_and_create_measurement(
+                ruler_for_scale_fp, subfolder_path_item, measurements_dict, tablet_id,
+                background_color_tolerance
+            )
+            return px_cm_val, measurements_used
+        else:
+            # Use sippar.json workflow (just calculates scale)
+            px_cm_val = determine_pixels_per_cm_from_measurement(
+                ruler_for_scale_fp,
+                tablet_width_cm,
+                should_extract_object=True,
+                bg_color_tolerance=background_color_tolerance
+            )
+            print(
+                f"   Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
+            return px_cm_val, True
     except Exception as e:
-        print(f"   Error using measurement from database: {e}")
+        print(f"   Error using measurement: {e}")
         return None, False
 
 
