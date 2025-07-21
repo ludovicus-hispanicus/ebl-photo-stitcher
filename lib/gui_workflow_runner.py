@@ -582,9 +582,14 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                     measurement_image_path = art_fp
                     
                 # Recalculate scale using the measurement image (should be same as before)
-                recalc_scale = calculate_scale_from_measurement_and_object(
-                    measurement_image_path, subfolder_path_item, measurements_dict, gap_pixels=50
-                )
+                # First get the tablet width from Excel measurements
+                if tablet_width_cm and tablet_width_cm > 0:
+                    recalc_scale = calculate_scale_from_measurement_and_object(
+                        measurement_image_path, tablet_width_cm, gap_pixels=50
+                    )
+                else:
+                    print(f"   ✗ Could not get tablet width for scale calculation")
+                    recalc_scale = None
                 
                 if recalc_scale and recalc_scale > 0:
                     px_cm_val = recalc_scale
