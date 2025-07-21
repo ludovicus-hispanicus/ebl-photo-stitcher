@@ -276,12 +276,147 @@ def create_measurement_record_with_known_width(object_image_path: str, pixels_pe
         return None
 
 
+def get_scale_from_excel_measurement(image_path: str, subfolder_path: str, 
+                                   measurements_dict: dict, file_id: str,
+                                   background_color_tolerance: int = 20) -> tuple:
+    """
+    Get scale from Excel measurements WITHOUT extracting objects during scale detection.
+    This function only validates that a measurement exists and returns a placeholder scale.
+    The actual pixels_per_cm calculation happens after main object extraction.
+
+    Args:
+        image_path: Path to the ruler/first image (not used for calculation)
+        subfolder_path: Path to the subfolder (for ID extraction)
+        measurements_dict: Dictionary of Excel measurements
+        file_id: The tablet ID
+        background_color_tolerance: Background tolerance (not used)
+
+    Returns:
+        tuple: (placeholder_scale, measurements_used) or (None, False) if failed
+    """
+    try:
+        from measurements_utils import get_tablet_width_from_measurements
+        
+        # Get Excel width measurement to validate it exists
+        tablet_width_cm = get_tablet_width_from_measurements(subfolder_path, measurements_dict)
+        if tablet_width_cm is None or tablet_width_cm <= 0:
+            return None, False
+
+        print(f"   Found Excel measurement for {file_id}: {tablet_width_cm} cm")
+        print(f"   Scale calculation deferred to after object extraction")
+        print(f"   Returning placeholder scale: 100.0 px/cm")
+        
+        # Return a placeholder scale that will be recalculated later
+        # Using a reasonable default that will be overridden
+        placeholder_scale = 100.0  # pixels per cm placeholder
+        
+        return placeholder_scale, True
+
+    except Exception as e:
+        print(f"   Error validating Excel measurement: {e}")
+        return None, False
+
+
+def calculate_scale_from_measurement_and_object(object_image_path: str, tablet_width_cm: float,
+                                               gap_pixels: int = 50) -> float:
+    """
+    Calculate pixels per cm from extracted object and known measurement.
+    This function calculates the actual scale using the final extracted object.
+
+    Args:
+        object_image_path: Path to the final _object.tif file
+        tablet_width_cm: Known width from Excel or Sippar.json
+        gap_pixels: Gap pixels added during extraction
+
+    Returns:
+        float: Calculated pixels per cm
+    """
+    try:
+        import cv2
+        
+        img = cv2.imread(object_image_path)
+        if img is None:
+            raise ValueError(f"Could not load object image: {object_image_path}")
+
+        height, width, _ = img.shape
+        actual_width_pixels = width - (2 * gap_pixels)
+        
+        pixels_per_cm = actual_width_pixels / tablet_width_cm
+        
+        print(f"   Calculated scale from extracted object: {actual_width_pixels}px / {tablet_width_cm}cm = {pixels_per_cm:.2f} px/cm")
+        return pixels_per_cm
+
+    except Exception as e:
+        print(f"   Error calculating scale from object: {e}")
+        raise
+
+
+def create_measurement_record_from_excel(object_image_path: str, pixels_per_cm: float,
+                                       file_id: str, measurements_dict: dict, 
+                                       subfolder_path: str, gap_pixels: int = 50) -> bool:
+    """
+    Create measurement record from Excel measurements using the final extracted object.
+    This function is called AFTER main object extraction to ensure measurements
+    are calculated on the correct final object file.
+
+    Args:
+        object_image_path: Path to the final _object.tif file from main workflow
+        pixels_per_cm: Pixels per cm calculated during scale detection
+        file_id: The tablet ID
+        measurements_dict: Dictionary of Excel measurements
+        subfolder_path: Path to the subfolder
+        gap_pixels: Number of gap pixels added during extraction
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        from measurements_utils import get_tablet_width_from_measurements
+        
+        # Check if measurement record already exists to avoid duplicates
+        if measurement_record_exists(file_id, subfolder_path):
+            print(f"   Measurement record already exists for {file_id}, skipping creation")
+            return True
+        
+        # Get Excel width measurement
+        tablet_width_cm = get_tablet_width_from_measurements(subfolder_path, measurements_dict)
+        if tablet_width_cm is None or tablet_width_cm <= 0:
+            print(f"   Warning: Could not get Excel width measurement for {file_id}")
+            return False
+
+        # Create measurement record with Excel width and calculated length
+        measurement_record = create_measurement_record_with_known_width(
+            object_image_path, pixels_per_cm, file_id, tablet_width_cm, gap_pixels
+        )
+        
+        if measurement_record:
+            # Save the measurement record
+            existing_measurements = load_existing_measurements(subfolder_path)
+            existing_measurements = [m for m in existing_measurements if m.get("_id") != file_id]
+            existing_measurements.append(measurement_record)
+            save_measurements_to_json(existing_measurements, subfolder_path)
+            print(f"   ✓ Excel measurement record created for {file_id} using final extracted object")
+            return True
+        else:
+            print(f"   Error: Could not create measurement record for {file_id}")
+            return False
+
+    except Exception as e:
+        print(f"   Error creating Excel measurement record for {file_id}: {e}")
+        return False
+
+
 def get_scale_from_excel_and_create_measurement(image_path: str, subfolder_path: str, 
                                               measurements_dict: dict, file_id: str,
                                               background_color_tolerance: int = 20) -> tuple:
     """
-    Get scale from Excel measurements and create measurement record.
-    Reuses the existing determine_pixels_per_cm_from_measurement workflow.
+    DEPRECATED: Get scale from Excel measurements and create measurement record.
+    
+    This function is deprecated and should not be used. It creates measurement records
+    during scale detection which uses temporary object extractions, not the final ones.
+    
+    Use get_scale_from_excel_measurement() for scale detection and 
+    create_measurement_record_from_excel() after main object extraction instead.
 
     Args:
         image_path: Path to the ruler/first image
@@ -293,6 +428,9 @@ def get_scale_from_excel_and_create_measurement(image_path: str, subfolder_path:
     Returns:
         tuple: (pixels_per_cm, measurements_used) or (None, False) if failed
     """
+    print(f"   WARNING: Using deprecated get_scale_from_excel_and_create_measurement()")
+    print(f"   This creates measurement records at wrong time - use new split functions instead")
+    
     try:
         from measurements_utils import get_tablet_width_from_measurements
         from workflow_processing_steps import determine_pixels_per_cm_from_measurement

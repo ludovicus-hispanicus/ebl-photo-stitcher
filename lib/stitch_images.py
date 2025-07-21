@@ -159,7 +159,11 @@ def process_tablet_subfolder(
 
             # Check if measurement record already exists (e.g., from Excel workflow)
             from extract_measurements import measurement_record_exists
-            if measurement_record_exists(output_base_name, main_input_folder_path):
+            # Check both subfolder and main folder for existing measurement records
+            record_exists_subfolder = measurement_record_exists(output_base_name, subfolder_path)
+            record_exists_main = measurement_record_exists(output_base_name, main_input_folder_path)
+            
+            if record_exists_subfolder or record_exists_main:
                 print(f"  Measurement record already exists for {output_base_name} (skipping calculation)")
             else:
                 success = add_measurement_record(

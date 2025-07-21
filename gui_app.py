@@ -343,11 +343,17 @@ class ImageProcessorApp:
         # Prepare measurements - prioritize custom Excel measurements if available
         final_measurements_dict = self.measurements_dict.copy()
         custom_measurements = ruler_settings.get('custom_measurements_dict', {})
+        has_excel_measurements = bool(custom_measurements)
         if custom_measurements:
             print(f"Using custom measurements from Excel file ({len(custom_measurements)} entries)")
             # Import merge function and merge the measurements
             from measurements_utils import merge_measurements_dicts
             final_measurements_dict = merge_measurements_dicts(final_measurements_dict, custom_measurements)
+
+        # Determine if measurements should be used - either from GUI checkbox or automatically if Excel measurements exist
+        use_measurements = self.use_measurements_var.get() or has_excel_measurements
+        if has_excel_measurements and not self.use_measurements_var.get():
+            print("Automatically enabling measurements processing for Excel measurements")
 
         workflow_args = [
             self.input_folder_var.get(),
@@ -372,7 +378,7 @@ class ImageProcessorApp:
             'museum_selection': self.museum_var.get(),
             'app_root_window': self,
             'background_color_tolerance': advanced_settings['background_color_tolerance'],
-            'use_measurements_from_database': self.use_measurements_var.get(),
+            'use_measurements_from_database': use_measurements,
             'measurements_dict': final_measurements_dict,
             'gradient_width_fraction': advanced_settings['gradient_width_fraction'],
             'enable_hdr_processing': self.enable_hdr_processing.get(),
