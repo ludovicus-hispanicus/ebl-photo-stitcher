@@ -153,7 +153,7 @@ def detect_scale_from_ruler(ruler_for_scale_fp, subfolder_path_item, raw_ext_con
 def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_for_scale_fp,
                                 background_color_tolerance=None):
     """
-    Get scale from measurements database.
+    Get scale from measurements database (sippar.json) or Excel measurements.
 
     Returns:
         tuple: (px_cm_val, measurements_used)
@@ -166,18 +166,36 @@ def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_fo
     if tablet_width_cm is None or tablet_width_cm <= 0:
         return None, False
 
+    # Check if this is Excel measurements (has '_id' field) vs sippar.json
+    from measurements_utils import extract_tablet_id_from_path
+    tablet_id = extract_tablet_id_from_path(subfolder_path_item)
+    
+    # Check if this measurement comes from Excel (custom measurements)
+    is_excel_measurement = False
+    if tablet_id and tablet_id in measurements_dict:
+        measurement_data = measurements_dict[tablet_id]
+        if isinstance(measurement_data, dict) and '_id' in measurement_data:
+            is_excel_measurement = True
+
     try:
-        px_cm_val = determine_pixels_per_cm_from_measurement(
-            ruler_for_scale_fp,
-            tablet_width_cm,
-            should_extract_object=True,
-            bg_color_tolerance=background_color_tolerance
-        )
-        print(
-            f"   Using measurement from database: {tablet_width_cm} cm, calculated {px_cm_val:.2f} px/cm")
-        return px_cm_val, True
+        if is_excel_measurement:
+            # Use Excel measurement workflow (scale calculation only, no measurement record creation)
+            from extract_measurements import get_scale_from_excel_measurement
+            px_cm_val, measurements_used = get_scale_from_excel_measurement(
+                ruler_for_scale_fp, subfolder_path_item, measurements_dict, tablet_id,
+                background_color_tolerance
+            )
+            return px_cm_val, measurements_used
+        else:
+            # Use sippar.json workflow (defer scale calculation to after object extraction)
+            print(f"   Using measurement from database: {tablet_width_cm} cm")
+            print(f"   Scale calculation deferred to after object extraction")
+            
+            # Return a placeholder scale that will be recalculated later
+            placeholder_scale = 100.0  # pixels per cm placeholder
+            return placeholder_scale, True
     except Exception as e:
-        print(f"   Error using measurement from database: {e}")
+        print(f"   Error using measurement: {e}")
         return None, False
 
 
@@ -307,28 +325,48 @@ def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_
         except Exception as e:
             print(f"   Error during ruler scale detection: {e}")
 
-            # Original fallback logic for when ruler detection completely fails
+            # Fallback logic for when ruler detection completely fails
             if not measurements_used and measurements_dict:
                 px_cm_val, measurements_used = get_scale_from_measurements(
                     subfolder_path_item, measurements_dict, ruler_for_scale_fp, background_color_tolerance)
                 if px_cm_val is not None:
                     print(f"   FALLBACK: Using measurement from database")
-
-                    from extract_measurements import add_measurement_record
-                    from measurements_utils import extract_tablet_id_from_path
-
-                    tablet_id = extract_tablet_id_from_path(subfolder_path_item)
-                    if tablet_id:
-                        object_files = [f for f in os.listdir(subfolder_path_item)
-                                        if f.endswith('_object.tif')]
-                        if object_files:
-                            object_path = os.path.join(subfolder_path_item, object_files[0])
-                            add_measurement_record(
-                                object_path, px_cm_val, tablet_id,
-                                gap_pixels=0, output_dir=subfolder_path_item,
-                                was_fallback_measurement=True
-                            )
+                    # NOTE: Measurement record creation will happen after object extraction in gui_workflow_runner.py
                 else:
                     print(f"   No measurement found in database for this tablet")
 
     return px_cm_val, measurements_used, cr2_conv_count
+
+
+def was_excel_measurement_used(subfolder_path_item, measurements_dict):
+    """
+    Check if Excel measurements were used for this tablet.
+    
+    Args:
+        subfolder_path_item: Path to the subfolder
+        measurements_dict: Dictionary of measurements
+        
+    Returns:
+        tuple: (is_excel_measurement, tablet_id, tablet_width_cm) or (False, None, None)
+    """
+    try:
+        from measurements_utils import extract_tablet_id_from_path, get_tablet_width_from_measurements
+        
+        tablet_id = extract_tablet_id_from_path(subfolder_path_item)
+        if not tablet_id or tablet_id not in measurements_dict:
+            return False, None, None
+            
+        measurement_data = measurements_dict[tablet_id]
+        
+        # Check if this measurement comes from Excel (has '_id' field)
+        is_excel_measurement = isinstance(measurement_data, dict) and '_id' in measurement_data
+        
+        if is_excel_measurement:
+            tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
+            return True, tablet_id, tablet_width_cm
+        
+        return False, None, None
+        
+    except Exception as e:
+        print(f"   Error checking if Excel measurement was used: {e}")
+        return False, None, None

@@ -157,18 +157,27 @@ def process_tablet_subfolder(
 
             gap_pixels = 50
 
-            success = add_measurement_record(
-                object_image_path=obverse_object_path,
-                pixels_per_cm=pixels_per_cm,
-                file_id=output_base_name,
-                gap_pixels=gap_pixels,
-                output_dir=main_input_folder_path
-            )
-
-            if success:
-                print(f"  Measurements calculated and saved for {output_base_name}")
+            # Check if measurement record already exists (e.g., from Excel workflow)
+            from extract_measurements import measurement_record_exists
+            # Check both subfolder and main folder for existing measurement records
+            record_exists_subfolder = measurement_record_exists(output_base_name, subfolder_path)
+            record_exists_main = measurement_record_exists(output_base_name, main_input_folder_path)
+            
+            if record_exists_subfolder or record_exists_main:
+                print(f"  Measurement record already exists for {output_base_name} (skipping calculation)")
             else:
-                print(f"  Failed to calculate measurements for {output_base_name}")
+                success = add_measurement_record(
+                    object_image_path=obverse_object_path,
+                    pixels_per_cm=pixels_per_cm,
+                    file_id=output_base_name,
+                    gap_pixels=gap_pixels,
+                    output_dir=main_input_folder_path
+                )
+
+                if success:
+                    print(f"  Measurements calculated and saved for {output_base_name}")
+                else:
+                    print(f"  Failed to calculate measurements for {output_base_name}")
         else:
             print(
                 f"  Warning: No obverse object file found for measurements ({obverse_object_pattern})")

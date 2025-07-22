@@ -50,6 +50,15 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
                 item_path = os.path.join(main_folder, item_name)
                 if os.path.isdir(item_path) and item_name.endswith(HDR_SUFFIX):
                     try:
+                        # Check for and preserve calculated_measurements.json before removing HDR folder
+                        measurements_file = os.path.join(item_path, "calculated_measurements.json")
+                        if os.path.exists(measurements_file):
+                            # Extract base tablet ID (remove _HDR suffix)
+                            base_tablet_id = item_name[:-len(HDR_SUFFIX)] if item_name.endswith(HDR_SUFFIX) else item_name
+                            preserved_path = os.path.join(main_folder, f"{base_tablet_id}_measurements.json")
+                            shutil.copy2(measurements_file, preserved_path)
+                            print(f"    Preserved measurements: {base_tablet_id}_measurements.json")
+                        
                         shutil.rmtree(item_path)
                         hdr_folders_removed += 1
                         total_removed += 1

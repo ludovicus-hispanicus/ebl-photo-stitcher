@@ -163,7 +163,8 @@ class AdvancedTab:
 
 
 class AdvancedRulerTab:
-    def __init__(self, notebook):
+    def __init__(self, notebook, root_window=None):
+        self.root_window = root_window
         self.notebook = notebook
         self.main_frame = ttk.Frame(notebook)
         notebook.add(self.main_frame, text="Advanced (Ruler)")
@@ -195,6 +196,10 @@ class AdvancedRulerTab:
         self.max_mark_width_fraction_var = tk.DoubleVar(value=0.40)
         self.mark_width_tolerance_var = tk.DoubleVar(value=0.5)
         self.min_alternating_marks_var = tk.IntVar(value=8)
+        
+        # Excel measurements upload variables
+        self.custom_measurements_file_var = tk.StringVar(value="")
+        self.custom_measurements_dict = {}
 
         self.create_widgets()
 
@@ -210,11 +215,13 @@ class AdvancedRulerTab:
             'roi_horizontal_end': self.roi_horizontal_end_var.get(),
             'roi_horizontal_start': self.roi_horizontal_start_var.get(),
             'roi_vertical_end': self.roi_vertical_end_var.get(),
-            'roi_vertical_start': self.roi_vertical_start_var.get()
+            'roi_vertical_start': self.roi_vertical_start_var.get(),
+            'custom_measurements_file': self.custom_measurements_file_var.get(),
+            'custom_measurements_dict': self.custom_measurements_dict
         }
 
     def set_settings(self, settings_dict):
-        """Set logo settings from a dictionary."""
+        """Set ruler settings from a dictionary."""
         if 'analysis_scanline_count' in settings_dict:
             self.analysis_scanline_count_var.set(
                 settings_dict['analysis_scanline_count'])
@@ -244,10 +251,48 @@ class AdvancedRulerTab:
         if 'roi_vertical_start' in settings_dict:
             self.roi_vertical_start_var.set(
                 settings_dict['roi_vertical_start'])
-        self._toggle_logo_path_entry()
+        if 'custom_measurements_file' in settings_dict:
+            self.custom_measurements_file_var.set(settings_dict['custom_measurements_file'])
+        if 'custom_measurements_dict' in settings_dict:
+            self.custom_measurements_dict = settings_dict['custom_measurements_dict']
 
     def create_widgets(self):
         """Create detailed ruler detection widgets."""
+        
+        # Custom Measurements Upload Section
+        measurements_frame = ttk.LabelFrame(
+            self.scrollable_frame, text="Custom Tablet Measurements", padding="10")
+        measurements_frame.pack(fill="x", pady=(0, 10))
+        
+        description_label = ttk.Label(measurements_frame, 
+            text="Upload an Excel file with tablet ID in first column and width (cm) in second column.")
+        description_label.pack(anchor="w", pady=(0, 10))
+        
+        excel_frame = ttk.Frame(measurements_frame)
+        excel_frame.pack(fill="x", pady=(0, 5))
+        
+        ttk.Label(excel_frame, text="Excel file:").pack(anchor="w")
+        
+        file_entry_frame = ttk.Frame(excel_frame)
+        file_entry_frame.pack(fill="x", pady=(5, 0))
+        
+        self.excel_path_entry = ttk.Entry(
+            file_entry_frame, textvariable=self.custom_measurements_file_var, state="readonly")
+        self.excel_path_entry.pack(side="left", fill="x", expand=True)
+        
+        self.excel_browse_btn = ttk.Button(file_entry_frame, text="Browse...",
+                                          command=self._browse_excel_file)
+        self.excel_browse_btn.pack(side="right", padx=(5, 0))
+        
+        # Clear button
+        self.excel_clear_btn = ttk.Button(file_entry_frame, text="Clear",
+                                         command=self._clear_excel_file)
+        self.excel_clear_btn.pack(side="right", padx=(5, 0))
+        
+        # Status label
+        self.excel_status_label = ttk.Label(excel_frame, text="No file selected", foreground="gray")
+        self.excel_status_label.pack(anchor="w", pady=(5, 0))
+        
         # Quick Presets
         presets_frame = ttk.LabelFrame(
             self.scrollable_frame, text="Quick Presets", padding="10")
@@ -371,9 +416,78 @@ class AdvancedRulerTab:
             if hasattr(self, f"{key}_var"):
                 getattr(self, f"{key}_var").set(value)
 
+    def _browse_excel_file(self):
+        """Browse for Excel measurements file."""
+        filename = filedialog.askopenfilename(
+            parent=self.root_window,
+            title="Select Excel Measurements File",
+            filetypes=[
+                ("Excel files", "*.xlsx *.xls"),
+                ("All files", "*.*")
+            ]
+        )
+        if filename:
+            self._load_excel_measurements(filename)
+    
+    def _clear_excel_file(self):
+        """Clear the selected Excel file."""
+        self.custom_measurements_file_var.set("")
+        self.custom_measurements_dict = {}
+        self.excel_status_label.config(text="No file selected", foreground="gray")
+        print("Custom measurements file cleared")
+    
+    def _load_excel_measurements(self, file_path):
+        """Load measurements from Excel file."""
+        try:
+            from measurements_utils import load_measurements_from_excel, is_valid_excel_measurements_file
+            
+            if not is_valid_excel_measurements_file(file_path):
+                self.excel_status_label.config(
+                    text="Invalid Excel file - must have at least 2 columns", 
+                    foreground="red"
+                )
+                return
+            
+            measurements_dict = load_measurements_from_excel(file_path)
+            
+            if measurements_dict:
+                self.custom_measurements_file_var.set(file_path)
+                self.custom_measurements_dict = measurements_dict
+                count = len(measurements_dict)
+                self.excel_status_label.config(
+                    text=f"✓ Loaded {count} measurement{'s' if count != 1 else ''}", 
+                    foreground="green"
+                )
+                print(f"Successfully loaded {count} custom measurements from Excel file")
+                
+                # Trigger config save if parent app is available
+                try:
+                    # Navigate up to find the main app window to trigger config save
+                    widget = self.main_frame
+                    while widget and not hasattr(widget, 'save_config'):
+                        widget = widget.master
+                    if widget and hasattr(widget, 'save_config'):
+                        widget.save_config()
+                except:
+                    pass  # Config save failed, but that's not critical
+                    
+            else:
+                self.excel_status_label.config(
+                    text="No valid measurements found in file", 
+                    foreground="red"
+                )
+                
+        except Exception as e:
+            self.excel_status_label.config(
+                text=f"Error loading file: {str(e)}", 
+                foreground="red"
+            )
+            print(f"Error loading Excel measurements: {e}")
+
 
 class AdvancedLogoTab:
-    def __init__(self, notebook):
+    def __init__(self, notebook, root_window=None):
+        self.root_window = root_window
         self.notebook = notebook
         self.main_frame = ttk.Frame(notebook)
         notebook.add(self.main_frame, text="Advanced (Logo)")
@@ -433,6 +547,7 @@ class AdvancedLogoTab:
     def _browse_logo_file(self):
         """Browse for logo file."""
         filename = filedialog.askopenfilename(
+            parent=self.root_window,
             title="Select Logo File",
             filetypes=[
                 ("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.tiff")]
