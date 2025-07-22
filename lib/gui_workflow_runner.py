@@ -471,8 +471,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                         result['px_per_cm'] = px_cm_val
                         
                         if is_excel:
-                            print(f"   Excel scale calculation complete: {px_cm_val:.2f} px/cm")
-                            print(f"   Measurement record will be created after all objects are extracted")
+                            print(f"   ✓ Scale recalculated for Excel measurement: {px_cm_val:.2f} px/cm")
+                            print(f"   Excel measurement record will be created after all objects are extracted")
                         else:
                             print(f"   ✓ Scale recalculated for Sippar.json measurement: {px_cm_val:.2f} px/cm")
                             
@@ -559,17 +559,25 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     result['cr2_conversions'] += cr2_conv_other
 
     # Create Excel measurement record after all objects are extracted
+    print(f"   Debug: Excel measurement record creation check:")
+    print(f"     use_measurements_from_database: {use_measurements_from_database}")
+    print(f"     measurements_dict: {measurements_dict is not None}")
+    print(f"     measurements_used: {measurements_used}")
+    
     if use_measurements_from_database and measurements_dict and measurements_used:
         # Check if Excel measurements were used for this tablet
         from workflow_scale_detection import was_excel_measurement_used
         is_excel, tablet_id, tablet_width_cm = was_excel_measurement_used(
             subfolder_path_item, measurements_dict)
         
+        print(f"     is_excel: {is_excel}, tablet_id: {tablet_id}")
+        
         if is_excel:
             print("   Creating final Excel measurement record with all objects available...")
             try:
                 from extract_measurements import create_measurement_record_from_excel, calculate_scale_from_measurement_and_object
-            
+                from measurements_utils import get_tablet_width_from_measurements
+                
                 # Find the obverse object file (_01) for measurement record instead of scale detection image
                 obverse_object_pattern = f"{subfolder_name_item}_01_object.tif"
                 obverse_object_path = os.path.join(subfolder_path_item, obverse_object_pattern)
@@ -581,37 +589,63 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                     print(f"   Obverse image not found, using scale detection image: {os.path.basename(art_fp)}")
                     measurement_image_path = art_fp
                     
-                # Recalculate scale using the measurement image (should be same as before)
-                # First get the tablet width from Excel measurements
+                # Get tablet width for final calculation
+                tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
+                
                 if tablet_width_cm and tablet_width_cm > 0:
+                    # Recalculate scale using the measurement image (should be same as before)
                     recalc_scale = calculate_scale_from_measurement_and_object(
                         measurement_image_path, tablet_width_cm, gap_pixels=50
                     )
-                else:
-                    print(f"   ✗ Could not get tablet width for scale calculation")
-                    recalc_scale = None
-                
-                if recalc_scale and recalc_scale > 0:
-                    px_cm_val = recalc_scale
-                    result["pixels_per_cm"] = px_cm_val
-                    print(f"   Confirmed scale using final objects: {px_cm_val:.2f} px/cm")
                     
-                    success = create_measurement_record_from_excel(
-                        measurement_image_path, px_cm_val, subfolder_name_item, measurements_dict, 
-                        subfolder_path_item, gap_pixels=50
-                    )
-                    if success:
-                        print(f"   ✓ Final Excel measurement record created for {subfolder_name_item}")
+                    if recalc_scale and recalc_scale > 0:
+                        px_cm_val = recalc_scale
+                        result['px_per_cm'] = px_cm_val
+                        print(f"   Confirmed scale using final objects: {px_cm_val:.2f} px/cm")
+                        
+                        success = create_measurement_record_from_excel(
+                            measurement_image_path, px_cm_val, subfolder_name_item, measurements_dict, 
+                            subfolder_path_item, gap_pixels=50
+                        )
+                        if success:
+                            print(f"   ✓ Final Excel measurement record created for {subfolder_name_item}")
+                            
+                            # Regenerate ruler with corrected Excel-based scale
+                            print(f"   Regenerating ruler with corrected Excel scale: {px_cm_val:.2f} px/cm")
+                            
+                            try:
+                                # Get the same ruler template that was used before
+                                chosen_ruler_tpl, custom_ruler_size_cm = select_ruler_template(
+                                    museum_selection, measurement_image_path, px_cm_val, 
+                                    ruler_template_1cm_asset_path, ruler_template_2cm_asset_path, 
+                                    ruler_template_5cm_asset_path
+                                )
+                                
+                                # Regenerate the ruler with the corrected scale
+                                ruler_success = generate_digital_ruler(
+                                    px_cm_val, chosen_ruler_tpl, subfolder_name_item,
+                                    subfolder_path_item, custom_ruler_size_cm
+                                )
+                                
+                                if ruler_success:
+                                    print(f"   ✓ Ruler regenerated with Excel-based scale: {px_cm_val:.2f} px/cm")
+                                else:
+                                    print(f"   ✗ Failed to regenerate ruler with corrected scale")
+                                    
+                            except Exception as ruler_e:
+                                print(f"   ✗ Error regenerating ruler: {ruler_e}")
+                        else:
+                            print(f"   ✗ Failed to create final Excel measurement record for {subfolder_name_item}")
                     else:
-                        print(f"   ✗ Failed to create final Excel measurement record for {subfolder_name_item}")
+                        print(f"   ✗ Could not recalculate scale with final objects")
                 else:
-                    print(f"   ✗ Could not recalculate scale with final objects")
+                    print(f"   ✗ Could not get tablet width for final calculation")
                         
             except Exception as e:
                 print(f"   ✗ Error creating final Excel measurement record: {e}")
         else:
             print(f"   No Excel measurements to process for {subfolder_name_item}")
-    
+
     cr2_conv_intermediate = process_intermediate_images(
         all_files, subfolder_path_item, subfolder_name_item,
         image_extensions_tuple, object_artifact_suffix_config,
