@@ -104,8 +104,7 @@ def detect_intermediate_images(subfolder_path, base_name, intermediate_suffix_ba
     for file_name in all_files:
         if not file_name.startswith(base_name) or not file_name.endswith(OBJECT_FILE_SUFFIX):
             continue
-
-        match = re.search(r'_([a-z]{2}\d*)_', file_name.lower())
+        match = re.search(r'_([a-z]{2}\d*|\d{2})_', file_name.lower())
         if not match:
             continue
 

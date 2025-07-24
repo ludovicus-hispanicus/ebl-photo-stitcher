@@ -360,10 +360,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
             path_ruler_extract_img, object_extraction_bg_mode,
             object_artifact_suffix_config, museum_selection, ruler_position
         )
-        
-        # Recalculate scale using final extracted object (if measurements are available and scale needs recalculation)
         should_recalculate = (use_measurements_from_database and measurements_dict and 
-                            (measurements_used or px_cm_val == 100.0))  # Check for placeholder scale
+                            (measurements_used or px_cm_val == 100.0))
         
         print(f"   Scale recalculation check: use_db={use_measurements_from_database}, has_dict={measurements_dict is not None}, measurements_used={measurements_used}, px_cm={px_cm_val}")
         print(f"   Should recalculate: {should_recalculate}")
@@ -381,17 +379,13 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                     print(f"   Recalculating scale using final extracted object (Excel measurement)...")
                 else:
                     print(f"   Recalculating scale using final extracted object (Sippar.json measurement)...")
-                    # Get tablet width for Sippar.json measurements
                     tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
                 
                 if tablet_width_cm and tablet_width_cm > 0:
-                    # Recalculate actual pixels_per_cm using the final extracted object
                     try:
                         actual_px_cm_val = calculate_scale_from_measurement_and_object(
                             art_fp, tablet_width_cm, gap_pixels=50
                         )
-                        
-                        # Update the scale value for the rest of the workflow
                         px_cm_val = actual_px_cm_val
                         result['px_per_cm'] = px_cm_val
                         
@@ -435,10 +429,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
             object_artifact_suffix_config, museum_selection,
             ruler_position
         )
-
-        # Recalculate scale using final extracted object (if measurements are available and scale needs recalculation)  
         should_recalculate = (use_measurements_from_database and measurements_dict and 
-                            (measurements_used or px_cm_val == 100.0))  # Check for placeholder scale
+                            (measurements_used or px_cm_val == 100.0))
         
         print(f"   Scale recalculation check: use_db={use_measurements_from_database}, has_dict={measurements_dict is not None}, measurements_used={measurements_used}, px_cm={px_cm_val}")
         print(f"   Should recalculate: {should_recalculate}")
@@ -456,17 +448,13 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                     print(f"   Recalculating scale using final extracted object (Excel measurement)...")
                 else:
                     print(f"   Recalculating scale using final extracted object (Sippar.json measurement)...")
-                    # Get tablet width for Sippar.json measurements
                     tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
                 
                 if tablet_width_cm and tablet_width_cm > 0:
-                    # Recalculate actual pixels_per_cm using the final extracted object
                     try:
                         actual_px_cm_val = calculate_scale_from_measurement_and_object(
                             art_fp, tablet_width_cm, gap_pixels=50
                         )
-                        
-                        # Update the scale value for the rest of the workflow
                         px_cm_val = actual_px_cm_val
                         result['px_per_cm'] = px_cm_val
                         
@@ -519,6 +507,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     for ext in image_extensions_tuple:
         pattern = os.path.join(subfolder_path_item, f"*{ext}")
         all_image_files.extend(glob.glob(pattern))
+    from stitch_config import get_extended_intermediate_suffixes
+    intermediate_suffix_patterns = get_extended_intermediate_suffixes()
 
     other_views_to_process_list = []
 
@@ -536,6 +526,16 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
         if '_ruler.' in filename.lower():
             print(f"     Skipping ruler file: {filename}")
+            continue
+        is_intermediate = False
+        for suffix in intermediate_suffix_patterns.keys():
+            suffix_pattern = f"_{suffix}."
+            if suffix_pattern.lower() in filename.lower():
+                is_intermediate = True
+                print(f"     Skipping intermediate view: {filename} (will be processed separately)")
+                break
+
+        if is_intermediate:
             continue
 
         other_views_to_process_list.append(img_file)
@@ -557,15 +557,12 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
         object_artifact_suffix_config, museum_selection
     )
     result['cr2_conversions'] += cr2_conv_other
-
-    # Create Excel measurement record after all objects are extracted
     print(f"   Debug: Excel measurement record creation check:")
     print(f"     use_measurements_from_database: {use_measurements_from_database}")
     print(f"     measurements_dict: {measurements_dict is not None}")
     print(f"     measurements_used: {measurements_used}")
     
     if use_measurements_from_database and measurements_dict and measurements_used:
-        # Check if Excel measurements were used for this tablet
         from workflow_scale_detection import was_excel_measurement_used
         is_excel, tablet_id, tablet_width_cm = was_excel_measurement_used(
             subfolder_path_item, measurements_dict)
@@ -577,8 +574,6 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
             try:
                 from extract_measurements import create_measurement_record_from_excel, calculate_scale_from_measurement_and_object
                 from measurements_utils import get_tablet_width_from_measurements
-                
-                # Find the obverse object file (_01) for measurement record instead of scale detection image
                 obverse_object_pattern = f"{subfolder_name_item}_01_object.tif"
                 obverse_object_path = os.path.join(subfolder_path_item, obverse_object_pattern)
                 
@@ -588,12 +583,9 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                 else:
                     print(f"   Obverse image not found, using scale detection image: {os.path.basename(art_fp)}")
                     measurement_image_path = art_fp
-                    
-                # Get tablet width for final calculation
                 tablet_width_cm = get_tablet_width_from_measurements(subfolder_path_item, measurements_dict)
                 
                 if tablet_width_cm and tablet_width_cm > 0:
-                    # Recalculate scale using the measurement image (should be same as before)
                     recalc_scale = calculate_scale_from_measurement_and_object(
                         measurement_image_path, tablet_width_cm, gap_pixels=50
                     )
@@ -609,19 +601,14 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                         )
                         if success:
                             print(f"   ✓ Final Excel measurement record created for {subfolder_name_item}")
-                            
-                            # Regenerate ruler with corrected Excel-based scale
                             print(f"   Regenerating ruler with corrected Excel scale: {px_cm_val:.2f} px/cm")
                             
                             try:
-                                # Get the same ruler template that was used before
                                 chosen_ruler_tpl, custom_ruler_size_cm = select_ruler_template(
                                     museum_selection, measurement_image_path, px_cm_val, 
                                     ruler_template_1cm_asset_path, ruler_template_2cm_asset_path, 
                                     ruler_template_5cm_asset_path
                                 )
-                                
-                                # Regenerate the ruler with the corrected scale
                                 ruler_success = generate_digital_ruler(
                                     px_cm_val, chosen_ruler_tpl, subfolder_name_item,
                                     subfolder_path_item, custom_ruler_size_cm

@@ -143,20 +143,20 @@ STITCH_XMP_USAGE_TERMS = f"Published under a CC BY NC 4.0 license."
 def get_extended_intermediate_suffixes():
     """
     Generate a dictionary of all intermediate suffixes including numbered variants.
+    Includes support for _07/_08 equivalence to _ol/_or as documented in README.
 
     Returns:
-        Dictionary mapping all suffix codes (e.g., 'ol', 'ol2', 'or3') to their position names
+        Dictionary mapping all suffix codes (e.g., 'ol', 'ol2', 'or3', '07', '08') to their position names
     """
     extended_suffixes = {}
-
     for code in INTERMEDIATE_SUFFIX_BASE.keys():
         extended_suffixes[code] = INTERMEDIATE_SUFFIX_BASE[code]
-
     for code in INTERMEDIATE_SUFFIX_BASE.keys():
         base_position = INTERMEDIATE_SUFFIX_BASE[code]
         for i in range(2, MAX_ADDITIONAL_INTERMEDIATES + 1):
             numbered_code = f"{code}{i}"
-
             extended_suffixes[numbered_code] = base_position
+    extended_suffixes["07"] = INTERMEDIATE_SUFFIX_BASE["ol"]
+    extended_suffixes["08"] = INTERMEDIATE_SUFFIX_BASE["or"]
 
     return extended_suffixes

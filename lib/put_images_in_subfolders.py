@@ -1,4 +1,4 @@
-from lib.stitch_config import STITCH_VIEW_PATTERNS_BASE, get_extended_intermediate_suffixes, MAX_ADDITIONAL_INTERMEDIATES
+from stitch_config import STITCH_VIEW_PATTERNS_BASE, get_extended_intermediate_suffixes, MAX_ADDITIONAL_INTERMEDIATES
 import os
 import re
 import shutil

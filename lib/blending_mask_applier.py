@@ -1,4 +1,4 @@
-from lib.stitch_config import get_extended_intermediate_suffixes
+from stitch_config import get_extended_intermediate_suffixes
 import os
 import sys
 import cv2
@@ -15,18 +15,12 @@ def generate_position_patterns():
     """
     Generate regex patterns for intermediate image positions based on configuration.
     """
-
     intermediate_suffixes = get_extended_intermediate_suffixes()
     all_codes = list(intermediate_suffixes.keys())
-
     code_pattern = r'_(' + '|'.join(all_codes) + r')_'
-
     full_name_pattern = r'intermediate_[^_]+_([^_\.]+)(?:_\d+)?'
-
+    
     return [code_pattern, full_name_pattern]
-
-
-position_patterns = generate_position_patterns()
 
 
 def apply_blending_mask_to_intermediate(
@@ -102,18 +96,19 @@ def apply_blending_mask_to_intermediate(
 def _normalize_position_name(position):
     """Normalize various position name formats to a standard form"""
     position = position.lower()
-
     base_position = re.sub(r'\d+$', '', position)
-
-    if base_position == 'ol' or base_position == 'rl' or base_position == '07':
+    if base_position == '07' or position == '07':
         return 'left'
-    elif base_position == 'or' or base_position == 'rr' or base_position == '08':
+    elif base_position == '08' or position == '08':
+        return 'right'
+    elif base_position == 'ol' or base_position == 'rl':
+        return 'left'
+    elif base_position == 'or' or base_position == 'rr':
         return 'right'
     elif base_position == 'ot' or base_position == 'rt':
         return 'top'
     elif base_position == 'ob' or base_position == 'rb':
         return 'bottom'
-
     if 'left' in position:
         return 'left'
     elif 'right' in position:
@@ -146,28 +141,21 @@ def process_intermediate_image_with_mask(
     basename = os.path.basename(input_image_path)
 
     position = None
-
+    position_patterns = generate_position_patterns()
     for pattern in position_patterns:
         match = re.search(pattern, basename.lower())
         if match:
             position = match.group(1)
             break
-
     if not position:
-
         for code in get_extended_intermediate_suffixes().keys():
             if f"_{code}_" in basename.lower():
                 position = code
-                print(
-                    f"  Detected numbered intermediate position using fallback: {code}")
                 break
 
     if not position:
         print(f"  Warning: Could not detect intermediate position from {basename}")
         return input_image_path
-
-    print(
-        f"  Applying blending mask to intermediate image: {basename} (position: {position})")
 
     image = cv2.imread(input_image_path, cv2.IMREAD_UNCHANGED)
     if image is None:

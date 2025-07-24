@@ -194,7 +194,7 @@ def process_intermediate_images(all_files_in_subfolder, subfolder_path_item, sub
                     )
                     print(f"   Successfully processed intermediate image: {file_basename}")
                 else:
-                    print(f"   Warning: Object file not created for {file_basename}")
+                    print(f"   Warning: Object file not created for {file_basename}: {object_filepath}")
 
             except Exception as e:
                 print(f"   Error processing {file_basename}: {e}")
