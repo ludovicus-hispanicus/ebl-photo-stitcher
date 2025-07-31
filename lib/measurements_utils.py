@@ -98,15 +98,22 @@ def get_tablet_width_from_measurements(folder_path, measurements_dict):
     if numeric_part:
         numeric_id = numeric_part.group(1)
         
-        potential_ids = [
-            numeric_id,
-            f"BM.{numeric_id}",
-            f"BM {numeric_id}",
-            f"BM_{numeric_id}",
-            f"CBS.{numeric_id}",
-            f"CBS {numeric_id}",
-            f"CBS_{numeric_id}"
-        ]
+        potential_ids = [numeric_id]  # Start with just the numeric ID
+        
+        pattern = rf'^([A-Z]+|[A-Z][a-z]+-[IV]+|[A-Z][a-z]+)[\.\s_]{re.escape(numeric_id)}$'
+        
+        for key in measurements_dict.keys():
+            if re.match(pattern, key):
+                potential_ids.append(key)
+        
+        common_prefixes = ['BM', 'CBS', 'VAM', 'IM', 'K', 'Sm', 'Rm']
+        separators = ['.', ' ', '_']
+        
+        for prefix in common_prefixes:
+            for sep in separators:
+                candidate_id = f"{prefix}{sep}{numeric_id}"
+                if candidate_id not in potential_ids:
+                    potential_ids.append(candidate_id)
 
         for id_format in potential_ids:
             if id_format in measurements_dict:
