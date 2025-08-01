@@ -30,12 +30,12 @@ def get_detection_parameters(museum_selection="Iraq Museum"):
             "hough_min_line_length": 8,  # Reduced for shorter ticks
             "hough_max_line_gap": 20,    # Increased to bridge small gaps
             "hough_threshold": 60,       # Can be adjusted based on edge detection
-            "tick_max_width": 15,        # Adjusted for thinner lines
-            "tick_min_width": 2,         # Adjusted for thinner lines
-            "tick_min_height": 15,       # Adjusted for shorter ticks
+            "tick_max_width": 10,        # Adjusted for thinner lines
+            "tick_min_width": 1,         # Adjusted for thinner lines
+            "tick_min_height": 10,       # Adjusted for shorter ticks
             "min_ticks_required": 8,     # Reduced as 1cm might have fewer clear ticks
             "num_ticks_for_1cm": 10,     # Standard for Sippar Library rulers
-            "consistency_threshold": 0.5,# Increased flexibility for spacing
+            "consistency_threshold": 5,# Increased flexibility for spacing
         })
     
     return base_params
