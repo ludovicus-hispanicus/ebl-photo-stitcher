@@ -27,15 +27,15 @@ def get_detection_parameters(museum_selection="Iraq Museum"):
     
     if museum_selection == "Iraq Museum (Sippar Library)":
         base_params.update({
-        "hough_min_line_length": 2,
-        "hough_max_line_gap": 100,
-        "hough_threshold": 5,
-        "tick_max_width": 50,
-        "tick_min_height": 2,
-        "max_tick_thickness_px": 50,
-        "min_ticks_required": 11,
-        "num_ticks_for_1cm": 11,
-        "consistency_threshold": 2,
+            "hough_min_line_length": 8,  # Reduced for shorter ticks
+            "hough_max_line_gap": 20,    # Increased to bridge small gaps
+            "hough_threshold": 60,       # Can be adjusted based on edge detection
+            "tick_max_width": 15,        # Adjusted for thinner lines
+            "tick_min_width": 2,         # Adjusted for thinner lines
+            "tick_min_height": 15,       # Adjusted for shorter ticks
+            "min_ticks_required": 8,     # Reduced as 1cm might have fewer clear ticks
+            "num_ticks_for_1cm": 10,     # Standard for Sippar Library rulers
+            "consistency_threshold": 0.5,# Increased flexibility for spacing
         })
     
     return base_params
@@ -55,11 +55,12 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
             return None
         height, width, _ = img.shape
 
+        # Define ROI
         if museum_selection == "Iraq Museum (Sippar Library)":
-            # Use wider ROI for Sippar Library - full width, bottom 60%
+            # Wider ROI for Sippar Library - full width, bottom 40-50%
             roi_width = width
             roi_x = 0
-            roi_height = int(height * 0.2)
+            roi_height = int(height * 0.45)  # Adjusted roi_height
             roi_y = height - roi_height
         else:
             roi_width = width // 3
@@ -68,12 +69,12 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
             roi_y = height - roi_height
         initial_roi = img[roi_y:height, roi_x:roi_x + roi_width]
 
-        roi = initial_roi
+        roi = initial_roi.copy() # Make a copy to avoid modifying original roi_temp_path for debugging
 
-        roi_temp_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_temp_roi.jpg")
-        cv2.imwrite(roi_temp_path, roi)
-
+        # Skip background removal for Sippar Library
         if museum_selection != "Iraq Museum (Sippar Library)":
+            roi_temp_path = os.path.join(os.path.dirname(image_path), f"{base_filename}_temp_roi.jpg")
+            cv2.imwrite(roi_temp_path, roi)
             try:
                 bg_removed_path, _ = extract_and_save_center_object(
                     roi_temp_path,
@@ -93,20 +94,47 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
                     os.remove(bg_removed_path)
 
             except Exception as e:
+                print(f"Error during background removal: {e}")
                 if os.path.exists(roi_temp_path):
                     os.remove(roi_temp_path)
-        else:
-            if os.path.exists(roi_temp_path):
-                os.remove(roi_temp_path)
-
+        # else: for Sippar, we directly use 'roi' as 'initial_roi'
+        
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         
+        processed_roi = gray_roi.copy()
+
         if museum_selection == "Iraq Museum (Sippar Library)":
-            # Minimal preprocessing for high-quality Sippar Library images
-            processed_roi = gray_roi.copy()
-            # Skip most of the aggressive preprocessing
-        else:
-            # Original preprocessing for other museum specimens
+            # Apply trimming for Sippar Library after minimal processing
+            height_p, width_p = processed_roi.shape[:2]
+            left_margin = int(width_p * 0.05)   # Less aggressive trimming
+            right_margin = int(width_p * 0.95)
+            bottom_margin = int(height_p * 0.80)
+            top_margin = int(height_p * 0.20)
+            
+            trimmed_roi = processed_roi[top_margin:bottom_margin,
+                                        left_margin:right_margin]
+            
+            # Very light contrast adjustment
+            alpha_contrast = 1.1
+            beta_brightness = 0
+            contrast_adjusted_roi = cv2.convertScaleAbs(
+                trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
+
+            # Sharpening - use a more pronounced sharpening
+            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+            sharpened = cv2.filter2D(contrast_adjusted_roi, -1, kernel)
+            
+            # Use morphological operations to enhance vertical lines
+            # Close operation with a slightly larger vertical kernel to connect more gaps
+            vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 7)) # Increased kernel height
+            enhanced = cv2.morphologyEx(sharpened, cv2.MORPH_CLOSE, vertical_kernel)
+            
+            # Apply a binary threshold to make lines stark black/white before Canny
+            # This is a critical step for consistent edge detection on subtle lines
+            _, processed_roi_for_edges = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+
+        else: # Original preprocessing for other museum specimens
             blurred_roi = cv2.GaussianBlur(gray_roi, (3, 3), 0)
 
             contrast_factor = 10
@@ -115,43 +143,31 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
                 for i in np.arange(0, 256)
             ]).astype("uint8")
             linear_contrast_roi = cv2.LUT(blurred_roi, lookup_table)
-            height, width = linear_contrast_roi.shape[:2]
-            left_margin = int(width * 0.10)
-            right_margin = int(width * 0.90)
-            bottom_margin = int(height * 0.50)
-            top_margin = int(height * 0.10)
+            height_p, width_p = linear_contrast_roi.shape[:2]
+            left_margin = int(width_p * 0.10)
+            right_margin = int(width_p * 0.90)
+            bottom_margin = int(height_p * 0.50)
+            top_margin = int(height_p * 0.10)
 
             trimmed_roi = linear_contrast_roi[top_margin:bottom_margin,
-                                              left_margin:right_margin]
+                                            left_margin:right_margin]
 
             alpha_contrast = 1.5
             beta_brightness = -1
-            processed_roi = cv2.convertScaleAbs(
+            processed_roi_for_edges = cv2.convertScaleAbs(
                 trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
         
-        # Apply trimming for Sippar Library after minimal processing
+        # Canny Edge Detection
         if museum_selection == "Iraq Museum (Sippar Library)":
-            height, width = processed_roi.shape[:2]
-            left_margin = int(width * 0.05)  # Less aggressive trimming
-            right_margin = int(width * 0.95)
-            bottom_margin = int(height * 0.80)
-            top_margin = int(height * 0.20)
-            
-            trimmed_roi = processed_roi[top_margin:bottom_margin,
-                                       left_margin:right_margin]
-            
-            # Very light contrast adjustment
-            alpha_contrast = 1.1
-            beta_brightness = 0
-            contrast_adjusted_roi = cv2.convertScaleAbs(
-                trimmed_roi, alpha=alpha_contrast, beta=beta_brightness)
+            # Significantly lowered Canny thresholds
+            edges_roi = cv2.Canny(processed_roi_for_edges, 5, 20) # Even more sensitive
         else:
-            contrast_adjusted_roi = processed_roi
+            edges_roi = cv2.Canny(processed_roi_for_edges, 40, 60)
 
-        if museum_selection == "Iraq Museum (Sippar Library)":
-            edges_roi = cv2.Canny(contrast_adjusted_roi, 10, 30)
-        else:
-            edges_roi = cv2.Canny(contrast_adjusted_roi, 40, 60)
+        # For debugging purposes, save the processed ROI and edges
+        cv2.imwrite(debug_path, roi) # Save the initial ROI
+        cv2.imwrite(os.path.join(os.path.dirname(image_path), f"{base_filename}_processed_roi.jpg"), processed_roi_for_edges)
+        cv2.imwrite(os.path.join(os.path.dirname(image_path), f"{base_filename}_edges.jpg"), edges_roi)
 
         lines_roi = cv2.HoughLinesP(
             edges_roi, 
@@ -163,11 +179,16 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
         )
 
         if lines_roi is None or len(lines_roi) < 2:
-            cv2.imwrite(debug_path, roi)
+            print("No sufficient lines detected.")
+            # Before returning, draw the ROI and its edges on the debug image
+            debug_img_with_lines = initial_roi.copy()
+            cv2.putText(debug_img_with_lines, "No sufficient lines detected", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.imwrite(debug_path, debug_img_with_lines)
             return None
 
         potential_ticks_props = []
-        
+        # Drawing lines on a copy for debugging
+        debug_img_with_lines = initial_roi.copy()
         for line in lines_roi:
             x1, y1, x2, y2 = line[0]
             line_height = abs(y2 - y1)
@@ -179,9 +200,12 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
                 avg_x = (x1 + x2) / 2.0
                 potential_ticks_props.append({'x': avg_x, 'y1': min(
                     y1, y2), 'y2': max(y1, y2), 'h': line_height, 'w': line_width})
+                cv2.line(debug_img_with_lines, (x1, y1), (x2, y2), (0, 255, 0), 2) # Draw green lines
+
+        cv2.imwrite(debug_path, debug_img_with_lines) # Save the debug image with detected lines
 
         if not potential_ticks_props:
-            cv2.imwrite(debug_path, roi)
+            print("No potential ticks found after filtering.")
             return None
 
         potential_ticks_props.sort(key=lambda tick: tick['x'])
@@ -208,7 +232,7 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
             i = group_scan_idx + 1
 
         if len(merged_tick_x_values) < params['min_ticks_required']:
-            cv2.imwrite(debug_path, roi)
+            print(f"Not enough merged ticks found: {len(merged_tick_x_values)} vs required {params['min_ticks_required']}")
             return None
 
         tick_x_coords = merged_tick_x_values
@@ -242,21 +266,23 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
                     candidate_1cm_distances.append(current_span_distance)
 
         if not candidate_1cm_distances:
-            cv2.imwrite(debug_path, roi)
+            print("No consistent 1cm candidates found.")
             return None
 
         one_cm_distance = np.median(candidate_1cm_distances)
 
         if one_cm_distance <= 0:
-            cv2.imwrite(debug_path, roi)
+            print("Calculated 1cm distance is zero or negative.")
             return None
 
-        one_cm_text_info = find_1cm_text_location(roi, debug_path)
-        
+        one_cm_text_info = find_1cm_text_location(roi, debug_path) # Pass roi to find_1cm_text_location for text detection
+
         return one_cm_distance
 
     except Exception as e:
-        if 'roi' in locals():
+        print(f"An error occurred: {e}")
+        # Save the current state of roi for debugging if an error occurs
+        if 'roi' in locals() and roi is not None:
             cv2.imwrite(debug_path, roi)
         return None
 
@@ -264,7 +290,7 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
 def find_1cm_text_location(roi, debug_path=None):
     if roi is None or roi.size == 0:
         if debug_path:
-            cv2.imwrite(debug_path, roi)
+            cv2.imwrite(debug_path, np.zeros((100, 100, 3), dtype=np.uint8)) # Save a blank image
         return None
 
     if len(roi.shape) == 3 and roi.shape[2] == 3:
@@ -292,11 +318,12 @@ def find_1cm_text_location(roi, debug_path=None):
         result = cv2.matchTemplate(
             roi_gray_for_match, template_gray, cv2.TM_CCOEFF_NORMED)
     except cv2.error as e:
+        print(f"Error during template matching: {e}")
         return None
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
-    if max_val > 0.6:
+    if max_val > 0.6: # Confidence threshold for template matching
         top_left = max_loc
         text_center_x = top_left[0] + template_width // 2
         text_center_y = top_left[1] + template_height // 2
