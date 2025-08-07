@@ -8,7 +8,13 @@ lib_directory = os.path.join(script_directory, "lib")
 if lib_directory not in sys.path:
     sys.path.insert(0, lib_directory)
 
+# Add tests directory to path for test_config
+tests_directory = os.path.dirname(os.path.abspath(__file__))
+if tests_directory not in sys.path:
+    sys.path.insert(0, tests_directory)
+
 from ruler_detector_iraq_museum import detect_1cm_distance_iraq
+from test_config import EXPECTED_MEASUREMENTS
 
 
 class TestRulerDetectorIraqMuseum:
@@ -23,11 +29,7 @@ class TestRulerDetectorIraqMuseum:
     @pytest.fixture
     def expected_measurements(self):
         """Expected measurements for test images with acceptable ranges."""
-        return {
-            "IM.124625.H_02.JPG": {"expected": 726, "min": 650, "max": 750},
-            "IM.124625.K_02.JPG": {"expected": 716, "min": 650, "max": 750},
-            "IM.124625.O_01.JPG": {"expected": 707, "min": 650, "max": 750}
-        }
+        return EXPECTED_MEASUREMENTS
     
     def test_detect_1cm_distance_all_images(self, test_images_path, expected_measurements):
         """Test ruler detection on all Sippar example images."""
@@ -117,11 +119,6 @@ class TestRulerDetectorIraqMuseum:
 if __name__ == "__main__":
     # Allow running the test directly
     test_images_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Examples", "Sippar")
-    expected_measurements = {
-        "IM.124625.H_02.JPG": {"expected": 726, "min": 650, "max": 750},
-        "IM.124625.K_02.JPG": {"expected": 716, "min": 650, "max": 750},
-        "IM.124625.O_01.JPG": {"expected": 707, "min": 650, "max": 750}
-    }
     
     print("Running Sippar Library Ruler Detector Tests...")
     print("="*50)
@@ -130,7 +127,7 @@ if __name__ == "__main__":
         print(f"ERROR: Test images directory not found: {test_images_path}")
         sys.exit(1)
     
-    for image_name, expected_data in expected_measurements.items():
+    for image_name, expected_data in EXPECTED_MEASUREMENTS.items():
         image_path = os.path.join(test_images_path, image_name)
         
         if not os.path.exists(image_path):

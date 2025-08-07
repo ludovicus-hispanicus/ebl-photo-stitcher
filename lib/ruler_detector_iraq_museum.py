@@ -27,18 +27,18 @@ def get_detection_parameters(museum_selection="Iraq Museum"):
     
     if museum_selection == "Iraq Museum (Sippar Library)":
         base_params.update({
-            "hough_min_line_length": 20,  # Increased
+            "hough_min_line_length": 15,  # Increased
             "hough_max_line_gap": 30,
-            "hough_threshold": 80,       # Increased
+            "hough_threshold": 60,
             "tick_max_width": 20,
             "tick_min_width": 1,
-            "tick_min_height": 25,       # Increased
+            "tick_min_height": 30,       # Increased
             "max_tick_thickness_px": 30,
             "min_ticks_required": 11,
             "num_ticks_for_1cm": 11,
-            "consistency_threshold": 0.5,
-            "canny_low_threshold": 20,   # Add these new parameters
-            "canny_high_threshold": 50   # Add these new parameters
+            "consistency_threshold": 0.7,
+            "canny_low_threshold": 5,   # Add these new parameters
+            "canny_high_threshold": 30   # Add these new parameters
         })
     
     return base_params
@@ -60,10 +60,9 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
 
         # Define ROI
         if museum_selection == "Iraq Museum (Sippar Library)":
-            # Wider ROI for Sippar Library - full width, bottom 40-50%
             roi_width = width
             roi_x = 0
-            roi_height = int(height * 0.60)  # Adjusted roi_height
+            roi_height = int(height * 0.60)
             roi_y = height - roi_height
         else:
             roi_width = width // 3
@@ -165,8 +164,8 @@ def detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum"):
             # Use the new, adjusted Canny thresholds from the parameters
             edges_roi = cv2.Canny(
                 processed_roi_for_edges,
-                params.get('canny_low_threshold', 5),
-                params.get('canny_high_threshold', 20)
+                params.get('canny_low_threshold', 20),
+                params.get('canny_high_threshold', 50)
             )
         else:
             edges_roi = cv2.Canny(processed_roi_for_edges, 40, 60)
