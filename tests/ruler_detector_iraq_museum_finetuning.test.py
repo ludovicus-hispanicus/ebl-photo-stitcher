@@ -39,15 +39,16 @@ class TestRulerDetectorIraqMuseum:
         if not os.path.exists(test_images_path):
             pytest.skip(f"Test images directory not found: {test_images_path}")
         
-        # Define the parameter space to search (including roi_height)
+        # Define the parameter space to search (expanded for ~10,000+ combinations)
         param_grid = {
-            'hough_threshold': range(40, 120, 20),  # Reduced step size for faster search
-            'hough_min_line_length': range(10, 35, 10),
-            'tick_min_height': range(15, 35, 10),
-            'canny_low_threshold': range(5, 25, 10),
-            'canny_high_threshold': range(30, 60, 15),
-            'roi_height_fraction': [0.50, 0.55, 0.60, 0.65, 0.70],  # New parameter
+            'hough_threshold': range(30, 140, 10),  # 30,40,50,60,70,80,90,100,110,120,130 = 11 values
+            'hough_min_line_length': range(8, 40, 4),  # 8,12,16,20,24,28,32,36 = 8 values
+            'tick_min_height': range(10, 40, 5),  # 10,15,20,25,30,35 = 6 values
+            'canny_low_threshold': range(5, 30, 5),  # 5,10,15,20,25 = 5 values
+            'canny_high_threshold': range(25, 70, 10),  # 25,35,45,55,65 = 5 values
+            'roi_height_fraction': [0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75],  # 7 values
         }
+        # Total combinations: 11 × 8 × 6 × 5 × 5 × 7 = 9,240 combinations
         
         best_score = float('inf')
         best_params = {}
@@ -242,37 +243,61 @@ if __name__ == "__main__":
         print(f"ERROR: Test images directory not found: {test_images_path}")
         sys.exit(1)
         
-    print("🔍 Running direct grid search for ruler detection parameter optimization...")
+    print("Running direct grid search for ruler detection parameter optimization...")
     print(f"Test images directory: {test_images_path}")
     
-    # Smaller grid for direct execution
+    # Comprehensive grid for direct execution - targeting ~10,000+ combinations
     param_grid = {
-        'hough_threshold': range(40, 100, 20),
-        'hough_min_line_length': range(10, 30, 10),
-        'tick_min_height': range(15, 30, 5),
-        'canny_low_threshold': range(5, 20, 5),
-        'canny_high_threshold': range(30, 50, 10),
-        'roi_height_fraction': [0.55, 0.60, 0.65],
+        'hough_threshold': range(30, 140, 10),  # 11 values: 30,40,50,60,70,80,90,100,110,120,130
+        'hough_min_line_length': range(8, 40, 4),  # 8 values: 8,12,16,20,24,28,32,36
+        'tick_min_height': range(10, 40, 5),  # 6 values: 10,15,20,25,30,35
+        'canny_low_threshold': range(5, 30, 5),  # 5 values: 5,10,15,20,25
+        'canny_high_threshold': range(25, 70, 10),  # 5 values: 25,35,45,55,65
+        'roi_height_fraction': [0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75],  # 7 values
     }
+    # Total combinations: 11 × 8 × 6 × 5 × 5 × 7 = 9,240 combinations
 
     best_score = float('inf')
     best_params = {}
+    best_results = {}
     
     all_param_combinations = list(itertools.product(*param_grid.values()))
     total_combinations = len(all_param_combinations)
 
     print(f"Testing {total_combinations:,} parameter combinations...")
+    print("Parameter ranges:")
+    for param, values in param_grid.items():
+        if isinstance(values, range):
+            print(f"  {param}: {values.start} to {values.stop-1} (step {values.step}) - {len(list(values))} values")
+        else:
+            print(f"  {param}: {values} - {len(values)} values")
+    print(f"Expected combinations: {11 * 8 * 6 * 5 * 5 * 7:,}")
     print("Expected measurements loaded from test_config.py")
 
     original_get_params = sys.modules['ruler_detector_iraq_museum'].get_detection_parameters
     start_time = time.time()
 
+    # Progress tracking variables
+    last_best_update = 0
+    successful_combinations = 0
+
     for i, combination in enumerate(all_param_combinations):
         current_params = dict(zip(param_grid.keys(), combination))
         
-        if i % 50 == 0:
+        # More frequent progress updates for large grid
+        if i % 100 == 0 or i < 20:
             elapsed = time.time() - start_time
-            print(f"\nProgress: {i}/{total_combinations} ({i/total_combinations*100:.1f}%) - {elapsed/60:.1f}min elapsed")
+            remaining_combinations = total_combinations - i
+            if i > 0:
+                avg_time_per_combination = elapsed / i
+                estimated_remaining_time = avg_time_per_combination * remaining_combinations
+                success_rate = (successful_combinations / i) * 100 if i > 0 else 0
+                print(f"\nProgress: {i:,}/{total_combinations:,} ({i/total_combinations*100:.2f}%)")
+                print(f"Elapsed: {elapsed/60:.1f}min - ETA: {estimated_remaining_time/60:.1f}min")
+                print(f"Success rate: {success_rate:.1f}% - Best error: {best_score:.2f}px")
+                print(f"Combinations since last improvement: {i - last_best_update}")
+            else:
+                print(f"\nStarting combination {i+1:,}/{total_combinations:,}")
             print(f"Current params: {current_params}")
         
         def mock_get_detection_parameters(museum_selection="Iraq Museum"):
@@ -287,45 +312,115 @@ if __name__ == "__main__":
 
         total_error = 0
         all_images_passed = True
+        failed_images = []
+        current_results = {}
         
         for image_name, expected_data in EXPECTED_MEASUREMENTS.items():
             image_path = os.path.join(test_images_path, image_name)
             
             if not os.path.exists(image_path):
+                print(f"  WARNING: Image not found: {image_name}")
                 continue
 
             try:
                 detected_distance = detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum (Sippar Library)")
+                current_results[image_name] = detected_distance
                 
-                if detected_distance is None or not (expected_data['min'] <= detected_distance <= expected_data['max']):
+                if detected_distance is None:
                     all_images_passed = False
+                    failed_images.append(f"{image_name} (no detection)")
+                    total_error = float('inf')
+                    break
+                elif not (expected_data['min'] <= detected_distance <= expected_data['max']):
+                    all_images_passed = False
+                    failed_images.append(f"{image_name} ({detected_distance}px outside range {expected_data['min']}-{expected_data['max']})")
                     total_error = float('inf')
                     break
                 
                 total_error += abs(detected_distance - expected_data['expected'])
+                
             except Exception as e:
                 all_images_passed = False
+                failed_images.append(f"{image_name} (error: {str(e)[:30]})")
                 total_error = float('inf')
                 break
         
-        if all_images_passed and total_error < best_score:
-            best_score = total_error
-            best_params = current_params
-            print(f"  ★ New best! Error: {best_score:.2f} px")
+        if all_images_passed:
+            successful_combinations += 1
+            if total_error < best_score:
+                best_score = total_error
+                best_params = current_params
+                best_results = current_results.copy()
+                last_best_update = i
+                print(f"  *** NEW BEST! Error: {best_score:.2f} px (combination {i+1:,})")
+                print(f"      Parameters: {current_params}")
+                
+                # Show current best results
+                print(f"      Results:")
+                for img_name, detected in current_results.items():
+                    expected = EXPECTED_MEASUREMENTS[img_name]['expected']
+                    error = abs(detected - expected)
+                    print(f"        {img_name}: {detected}px (expected {expected}px, error {error:.1f}px)")
+            elif i < 20 or (i % 500 == 0):
+                print(f"  SUCCESS: Error {total_error:.2f} px")
+        elif i < 20 or i % 500 == 0:
+            print(f"  Failed on: {failed_images[:2]}{'...' if len(failed_images) > 2 else ''}")
 
     # Restore the original function
     sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = original_get_params
 
     elapsed_time = time.time() - start_time
     print(f"\n{'='*80}")
-    print("🏆 OPTIMIZATION COMPLETE")
+    print("OPTIMIZATION COMPLETE")
     print(f"{'='*80}")
-    print(f"Total time: {elapsed_time/60:.1f} minutes")
+    print(f"Total time: {elapsed_time/60:.1f} minutes ({elapsed_time/3600:.1f} hours)")
+    print(f"Average time per combination: {elapsed_time/total_combinations:.3f} seconds")
+    print(f"Successful combinations: {successful_combinations:,}/{total_combinations:,} ({successful_combinations/total_combinations*100:.1f}%)")
     
     if best_params:
-        print(f"\n🎯 OPTIMAL PARAMETERS:")
+        print(f"\nOPTIMAL PARAMETERS FOUND:")
+        print(f"{'='*50}")
         for param, value in best_params.items():
             print(f"  {param}: {value}")
         print(f"\nMinimum total error: {best_score:.2f} px")
+        print(f"Found at combination: {last_best_update + 1:,}")
+        
+        # Test the best parameters on all images
+        print(f"\nDETAILED RESULTS WITH OPTIMAL PARAMETERS:")
+        print(f"{'='*60}")
+        
+        def final_mock_get_detection_parameters(museum_selection="Iraq Museum"):
+            if museum_selection == "Iraq Museum (Sippar Library)":
+                new_params = original_get_params("Iraq Museum (Sippar Library)").copy()
+                params_to_update = {k: v for k, v in best_params.items() if k != 'roi_height_fraction'}
+                new_params.update(params_to_update)
+                return new_params
+            return original_get_params(museum_selection)
+        
+        sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = final_mock_get_detection_parameters
+        
+        total_final_error = 0
+        for image_name, expected_data in EXPECTED_MEASUREMENTS.items():
+            image_path = os.path.join(test_images_path, image_name)
+            if os.path.exists(image_path):
+                detected_distance = detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum (Sippar Library)")
+                error = abs(detected_distance - expected_data['expected'])
+                total_final_error += error
+                status = "PASS" if expected_data['min'] <= detected_distance <= expected_data['max'] else "FAIL"
+                print(f"{image_name} [{status}]:")
+                print(f"  Expected: {expected_data['expected']} px (range: {expected_data['min']}-{expected_data['max']})")
+                print(f"  Detected: {detected_distance} px")
+                print(f"  Error: {error:.2f} px")
+                print()
+        
+        print(f"Total final error: {total_final_error:.2f} px")
+        print(f"Average error per image: {total_final_error/len(EXPECTED_MEASUREMENTS):.2f} px")
+        
+        sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = original_get_params
+        
     else:
-        print("❌ No successful parameter combination found.")
+        print("No successful parameter combination found.")
+        print("Consider:")
+        print("  - Expanding parameter ranges further")
+        print("  - Checking image quality and detection algorithm")
+        print("  - Relaxing acceptance criteria")
