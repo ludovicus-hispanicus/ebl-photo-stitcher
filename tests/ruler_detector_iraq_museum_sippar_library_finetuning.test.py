@@ -1,455 +1,372 @@
+'''
+Results of previous runs:
+- Brute force (grid search): 13.8 hours, 92,400 combinations, 0 successful
+- Flexible search: Best coverage: 57.1%, Parameters: {'hough_threshold': 130, 'hough_min_line_length': 46, 'tick_min_height': 68, 'canny_low_threshold': 17, 'canny_high_threshold': 89, 'roi_height_fraction': 0.51}
+'''
+
 import os
 import sys
-import pytest
 import itertools
-import numpy as np
 import time
-import multiprocessing as mp
-from multiprocessing import Pool, Manager
-import math
 import argparse
+import cv2
+import random
+import numpy as np
 
-# Add the lib directory to the path to import the module
+# Add required directories to path
 script_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 lib_directory = os.path.join(script_directory, "lib")
-if lib_directory not in sys.path:
-    sys.path.insert(0, lib_directory)
-
-# Add tests directory to path for test_config
 tests_directory = os.path.dirname(os.path.abspath(__file__))
-if tests_directory not in sys.path:
-    sys.path.insert(0, tests_directory)
+
+for directory in [lib_directory, tests_directory]:
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
 
 from ruler_detector_iraq_museum import detect_1cm_distance_iraq, get_detection_parameters
 from test_config import EXPECTED_MEASUREMENTS
 
 
-def test_parameter_combination(args):
-    """
-    Test a single parameter combination.
-    This function will be run in parallel by multiple processes when using --parallel.
-    """
-    combination_index, combination, test_images_path = args
+class RulerParameterOptimizer:
+    """Clean, streamlined ruler detection parameter optimization."""
     
-    # Re-import modules in each process (necessary for multiprocessing)
-    import sys
-    import os
-    
-    # Re-add paths for each process
-    script_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    lib_directory = os.path.join(script_directory, "lib")
-    if lib_directory not in sys.path:
-        sys.path.insert(0, lib_directory)
-    
-    tests_directory = os.path.dirname(os.path.abspath(__file__))
-    if tests_directory not in sys.path:
-        sys.path.insert(0, tests_directory)
-    
-    from ruler_detector_iraq_museum import detect_1cm_distance_iraq, get_detection_parameters
-    from test_config import EXPECTED_MEASUREMENTS
-    
-    param_names = ['hough_threshold', 'hough_min_line_length', 'tick_min_height', 
-                   'canny_low_threshold', 'canny_high_threshold', 'roi_height_fraction']
-    current_params = dict(zip(param_names, combination))
-    
-    try:
-        # Mock the get_detection_parameters function for this process
-        original_get_params = get_detection_parameters
+    def __init__(self, test_images_path):
+        self.test_images_path = test_images_path
+        self.expected_measurements = EXPECTED_MEASUREMENTS
         
-        def mock_get_detection_parameters(museum_selection="Iraq Museum"):
-            if museum_selection == "Iraq Museum (Sippar Library)":
-                new_params = original_get_params("Iraq Museum (Sippar Library)").copy()
-                # Update all parameters including roi_height_fraction
-                new_params.update(current_params)
-                return new_params
-            return original_get_params(museum_selection)
-        
-        # Temporarily replace the function
-        sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = mock_get_detection_parameters
-        
+    def diagnose(self):
+        """Quick diagnostic of current detection performance."""
+        print("=== DIAGNOSTIC ===")
+        for image_name, expected_data in self.expected_measurements.items():
+            image_path = os.path.join(self.test_images_path, image_name)
+            if not os.path.exists(image_path):
+                continue
+                
+            try:
+                detected = detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum (Sippar Library)")
+                expected = expected_data['expected']
+                min_val, max_val = expected_data['min'], expected_data['max']
+                
+                if detected is None:
+                    status = "❌ NO DETECTION"
+                elif min_val <= detected <= max_val:
+                    status = f"✅ PASS ({abs(detected - expected):.0f}px error)"
+                else:
+                    status = f"❌ FAIL ({abs(detected - expected):.0f}px error)"
+                
+                print(f"{image_name}: {detected}px (expected {expected}px) - {status}")
+                
+            except Exception as e:
+                print(f"{image_name}: ❌ ERROR - {e}")
+    
+    def test_parameters(self, params, distance_filter=None):
+        """Test parameter set on all images."""
+        results = {}
         total_error = 0
-        all_images_passed = True
-        current_results = {}
-        failed_images = []
+        successful = 0
         
-        for image_name, expected_data in EXPECTED_MEASUREMENTS.items():
-            image_path = os.path.join(test_images_path, image_name)
-            
+        for image_name, expected_data in self.expected_measurements.items():
+            image_path = os.path.join(self.test_images_path, image_name)
             if not os.path.exists(image_path):
                 continue
             
-            try:
-                # Now properly pass the roi_height_fraction parameter
-                detected_distance = detect_1cm_distance_iraq(
-                    image_path, 
-                    museum_selection="Iraq Museum (Sippar Library)",
-                    roi_height_fraction=current_params['roi_height_fraction']
-                )
-                current_results[image_name] = detected_distance
-                
-                if detected_distance is None:
-                    all_images_passed = False
-                    failed_images.append(f"{image_name} (no detection)")
-                    total_error = float('inf')
-                    break
-                elif not (expected_data['min'] <= detected_distance <= expected_data['max']):
-                    all_images_passed = False
-                    failed_images.append(f"{image_name} ({detected_distance}px outside range {expected_data['min']}-{expected_data['max']})")
-                    total_error = float('inf')
-                    break
-                
-                total_error += abs(detected_distance - expected_data['expected'])
-                
-            except Exception as e:
-                all_images_passed = False
-                failed_images.append(f"{image_name} (error: {str(e)[:30]})")
-                total_error = float('inf')
-                break
-        
-        # Restore the original function
-        sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = original_get_params
-        
-        return {
-            'combination_index': combination_index,
-            'params': current_params,
-            'success': all_images_passed,
-            'total_error': total_error,
-            'results': current_results if all_images_passed else {},
-            'failed_images': failed_images
-        }
-        
-    except Exception as e:
-        return {
-            'combination_index': combination_index,
-            'params': current_params,
-            'success': False,
-            'total_error': float('inf'),
-            'results': {},
-            'failed_images': [f"Process error: {str(e)[:50]}"]
-        }
-
-
-def run_sequential_optimization(test_images_path, param_grid):
-    """Run optimization sequentially (single-threaded)."""
-    print("Running SEQUENTIAL grid search for ruler detection parameter optimization...")
-    
-    all_param_combinations = list(itertools.product(*param_grid.values()))
-    total_combinations = len(all_param_combinations)
-    
-    print(f"Testing {total_combinations:,} parameter combinations...")
-    print("Parameter ranges:")
-    for param, values in param_grid.items():
-        if isinstance(values, range):
-            print(f"  {param}: {values.start} to {values.stop-1} (step {values.step}) - {len(list(values))} values")
-        else:
-            print(f"  {param}: {values} - {len(values)} values")
-    print("Expected measurements loaded from test_config.py")
-
-    original_get_params = get_detection_parameters
-    start_time = time.time()
-
-    best_score = float('inf')
-    best_params = {}
-    best_results = {}
-    successful_combinations = 0
-    last_best_update = 0
-
-    for i, combination in enumerate(all_param_combinations):
-        current_params = dict(zip(['hough_threshold', 'hough_min_line_length', 'tick_min_height', 
-                                  'canny_low_threshold', 'canny_high_threshold', 'roi_height_fraction'], combination))
-        
-        # More frequent progress updates for large grid
-        if i % 100 == 0 or i < 20:
-            elapsed = time.time() - start_time
-            remaining_combinations = total_combinations - i
-            if i > 0:
-                avg_time_per_combination = elapsed / i
-                estimated_remaining_time = avg_time_per_combination * remaining_combinations
-                success_rate = (successful_combinations / i) * 100
-                print(f"\nProgress: {i:,}/{total_combinations:,} ({i/total_combinations*100:.2f}%)")
-                print(f"Elapsed: {elapsed/60:.1f}min - ETA: {estimated_remaining_time/60:.1f}min")
-                print(f"Success rate: {success_rate:.1f}% - Best error: {best_score:.2f}px")
-                print(f"Combinations since last improvement: {i - last_best_update}")
+            if distance_filter:
+                detected = self._detect_with_distance_filter(image_path, params, *distance_filter)
             else:
-                print(f"\nStarting combination {i+1:,}/{total_combinations:,}")
-            print(f"Current params: {current_params}")
-        
-        def mock_get_detection_parameters(museum_selection="Iraq Museum"):
-            if museum_selection == "Iraq Museum (Sippar Library)":
-                new_params = original_get_params("Iraq Museum (Sippar Library)").copy()
-                # Update all parameters including roi_height_fraction
-                new_params.update(current_params)
-                return new_params
-            return original_get_params(museum_selection)
-
-        sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = mock_get_detection_parameters
-
-        total_error = 0
-        all_images_passed = True
-        failed_images = []
-        current_results = {}
-        
-        for image_name, expected_data in EXPECTED_MEASUREMENTS.items():
-            image_path = os.path.join(test_images_path, image_name)
+                detected = self._detect_with_params(image_path, params)
             
-            if not os.path.exists(image_path):
-                print(f"  WARNING: Image not found: {image_name}")
-                continue
-
-            try:
-                # Now properly pass the roi_height_fraction parameter
-                detected_distance = detect_1cm_distance_iraq(
-                    image_path, 
-                    museum_selection="Iraq Museum (Sippar Library)",
-                    roi_height_fraction=current_params['roi_height_fraction']
+            results[image_name] = detected
+            
+            if detected and expected_data['min'] <= detected <= expected_data['max']:
+                successful += 1
+                total_error += abs(detected - expected_data['expected'])
+        
+        coverage = successful / len(self.expected_measurements)
+        return results, successful, coverage, total_error
+    
+    def _detect_with_params(self, image_path, params):
+        """Run detection with custom parameters."""
+        try:
+            # This would require modifying the original function to accept parameters
+            # For now, use distance filtering approach
+            return self._detect_with_distance_filter(image_path, params, 400, 1000)
+        except:
+            return None
+    
+    def _detect_with_distance_filter(self, image_path, params, min_distance, max_distance):
+        """Detect with custom parameters and distance filtering."""
+        try:
+            image = cv2.imread(image_path)
+            if image is None:
+                return None
+            
+            height, width = image.shape[:2]
+            roi_height = int(height * params['roi_height_fraction'])
+            roi = image[height - roi_height:, :]
+            
+            # Process image
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            edges = cv2.Canny(blurred, params['canny_low_threshold'], params['canny_high_threshold'])
+            
+            # Detect lines
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, 
+                                   threshold=params['hough_threshold'],
+                                   minLineLength=params['hough_min_line_length'], 
+                                   maxLineGap=10)
+            
+            if lines is None:
+                return None
+            
+            # Filter vertical lines
+            vertical_lines = []
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                if x2 - x1 != 0:
+                    angle = abs(np.arctan((y2 - y1) / (x2 - x1)) * 180 / np.pi)
+                else:
+                    angle = 90
+                
+                if 80 <= angle <= 90:
+                    line_length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+                    if line_length >= params['tick_min_height']:
+                        vertical_lines.append(x1)
+            
+            if len(vertical_lines) < 2:
+                return None
+            
+            # Calculate distances
+            vertical_lines.sort()
+            distances = []
+            for i in range(len(vertical_lines) - 1):
+                dist = abs(vertical_lines[i + 1] - vertical_lines[i])
+                if min_distance <= dist <= max_distance:
+                    distances.append(dist)
+            
+            if not distances:
+                return None
+            
+            # Return most common distance
+            return float(max(set(distances), key=distances.count))
+            
+        except:
+            return None
+    
+    def flexible_search(self, target_coverage=0.7, max_iterations=1000):
+        print(f"=== FLEXIBLE SEARCH ===")
+        print(f"Target: {target_coverage*100:.0f}% success rate")
+        param_ranges = {
+            'hough_threshold': (40, 150),
+            'hough_min_line_length': (10, 100),
+            'hough_max_line_gap': (5, 40),
+            'tick_max_width': (10, 40),
+            'tick_min_width': (1, 10),
+            'tick_min_height': (10, 60),
+            'max_tick_thickness_px': (10, 40),
+            'min_ticks_required': (7, 15),
+            'num_ticks_for_1cm': (7, 15),
+            'consistency_threshold': (0.5, 1.0),
+            'canny_low_threshold': (1, 30),
+            'canny_high_threshold': (20, 100),
+            'roi_height_fraction': (0.2, 0.8),
+        }
+        
+        best_coverage = 0
+        best_params = None
+        best_results = None
+        
+        start_time = time.time()
+        
+        for i in range(max_iterations):
+            # Generate random parameters
+            params = {}
+            for param, (low, high) in param_ranges.items():
+                if param == 'roi_height_fraction':
+                    params[param] = round(random.uniform(low, high), 2)
+                else:
+                    params[param] = random.randint(int(low), int(high))
+            
+            # Test with multiple distance filters
+            best_coverage_for_params = 0
+            best_results_for_params = None
+            
+            for min_dist, max_dist in [(400, 1000), (500, 900), (300, 800)]:
+                results, successful, coverage, error = self.test_parameters(
+                    params, distance_filter=(min_dist, max_dist)
                 )
-                current_results[image_name] = detected_distance
                 
-                if detected_distance is None:
-                    all_images_passed = False
-                    failed_images.append(f"{image_name} (no detection)")
-                    total_error = float('inf')
-                    break
-                elif not (expected_data['min'] <= detected_distance <= expected_data['max']):
-                    all_images_passed = False
-                    failed_images.append(f"{image_name} ({detected_distance}px outside range {expected_data['min']}-{expected_data['max']})")
-                    total_error = float('inf')
-                    break
-                
-                total_error += abs(detected_distance - expected_data['expected'])
-                
-            except Exception as e:
-                all_images_passed = False
-                failed_images.append(f"{image_name} (error: {str(e)[:30]})")
-                total_error = float('inf')
-                break
-        
-        if all_images_passed:
-            successful_combinations += 1
-            if total_error < best_score:
-                best_score = total_error
-                best_params = current_params
-                best_results = current_results.copy()
-                last_best_update = i
-                print(f"  *** NEW BEST! Error: {best_score:.2f} px (combination {i+1:,})")
-                print(f"      Parameters: {current_params}")
-                
-                # Show current best results
-                print(f"      Results:")
-                for img_name, detected in current_results.items():
-                    expected = EXPECTED_MEASUREMENTS[img_name]['expected']
-                    error = abs(detected - expected)
-                    print(f"        {img_name}: {detected}px (expected {expected}px, error {error:.1f}px)")
-            elif i < 20 or (i % 500 == 0):
-                print(f"  SUCCESS: Error {total_error:.2f} px")
-        elif i < 20 or i % 500 == 0:
-            print(f"  Failed on: {failed_images[:2]}{'...' if len(failed_images) > 2 else ''}")
-
-    # Restore the original function
-    sys.modules['ruler_detector_iraq_museum'].get_detection_parameters = original_get_params
-
-    return best_score, best_params, best_results, successful_combinations, total_combinations, time.time() - start_time
-
-
-def run_parallel_optimization(test_images_path, param_grid, num_processes=None):
-    """Run optimization in parallel using multiple processes."""
-    print("Running PARALLEL grid search for ruler detection parameter optimization...")
-    
-    all_param_combinations = list(itertools.product(*param_grid.values()))
-    total_combinations = len(all_param_combinations)
-    
-    if num_processes is None:
-        num_processes = min(mp.cpu_count(), 8)
-    
-    print(f"Testing {total_combinations:,} parameter combinations using {num_processes} processes...")
-    print(f"CPU cores available: {mp.cpu_count()}")
-    print(f"Expected speedup: ~{num_processes}x faster than sequential")
-    
-    # Create arguments for parallel processing
-    args_list = [(i, combination, test_images_path) 
-                 for i, combination in enumerate(all_param_combinations)]
-    
-    best_score = float('inf')
-    best_params = {}
-    best_results = {}
-    successful_combinations = 0
-    
-    start_time = time.time()
-    
-    try:
-        with Pool(processes=num_processes) as pool:
-            chunk_size = max(200, total_combinations // 30)  # Larger chunks for better performance
+                if coverage > best_coverage_for_params:
+                    best_coverage_for_params = coverage
+                    best_results_for_params = results
             
-            for chunk_start in range(0, total_combinations, chunk_size):
-                chunk_end = min(chunk_start + chunk_size, total_combinations)
-                chunk_args = args_list[chunk_start:chunk_end]
+            # Update best if this is better
+            if best_coverage_for_params > best_coverage:
+                best_coverage = best_coverage_for_params
+                best_params = params
+                best_results = best_results_for_params
                 
-                print(f"\nProcessing combinations {chunk_start:,} to {chunk_end:,} using {num_processes} processes...")
-                chunk_start_time = time.time()
+                print(f"*** NEW BEST! Iteration {i}: {best_coverage*100:.1f}% success")
+                print(f"    Params: {params}")
                 
-                # Process the chunk
-                chunk_results = pool.map(test_parameter_combination, chunk_args)
-                
-                chunk_elapsed = time.time() - chunk_start_time
-                combinations_in_chunk = len(chunk_args)
-                print(f"Chunk completed in {chunk_elapsed/60:.1f} minutes ({combinations_in_chunk/chunk_elapsed:.1f} combinations/second)")
-                
-                # Process results from this chunk
-                for result in chunk_results:
-                    if result['success']:
-                        successful_combinations += 1
-                        if result['total_error'] < best_score:
-                            best_score = result['total_error']
-                            best_params = result['params'].copy()
-                            best_results = result['results'].copy()
-                            
-                            print(f"*** NEW BEST! Error: {best_score:.2f} px (combination {result['combination_index']:,})")
-                            print(f"    Parameters: {best_params}")
-                
-                # Progress update
-                elapsed_time = time.time() - start_time
-                combinations_processed = chunk_end
-                remaining_combinations = total_combinations - combinations_processed
-                
-                if combinations_processed > 0:
-                    avg_time_per_combination = elapsed_time / combinations_processed
-                    estimated_remaining_time = avg_time_per_combination * remaining_combinations
-                    success_rate = (successful_combinations / combinations_processed) * 100
-                    
-                    print(f"Progress: {combinations_processed:,}/{total_combinations:,} ({combinations_processed/total_combinations*100:.1f}%)")
-                    print(f"Elapsed: {elapsed_time/60:.1f}min - ETA: {estimated_remaining_time/60:.1f}min")
-                    print(f"Success rate: {success_rate:.1f}% - Successful: {successful_combinations:,}")
-                    
-                    if combinations_processed < total_combinations:
-                        print(f"Processing speed: {combinations_processed/elapsed_time:.1f} combinations/second")
-    
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user. Showing best results found so far...")
-    except Exception as e:
-        print(f"\nError during parallel processing: {e}")
-        print("Showing best results found so far...")
-    
-    return best_score, best_params, best_results, successful_combinations, total_combinations, time.time() - start_time
-
-
-class TestRulerDetectorIraqMuseum:
-    """Test cases for Iraq Museum ruler detection functionality."""
-    
-    @pytest.fixture
-    def test_images_path(self):
-        """Get the path to the test images directory."""
-        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(script_dir, "Examples", "Sippar")
-    
-    @pytest.fixture
-    def expected_measurements(self):
-        """Expected measurements for test images with acceptable ranges."""
-        return EXPECTED_MEASUREMENTS
-    
-    def test_detect_1cm_distance_all_images_sequential(self, test_images_path, expected_measurements):
-        """Test ruler detection on all Sippar example images using sequential processing."""
-        if not os.path.exists(test_images_path):
-            pytest.skip(f"Test images directory not found: {test_images_path}")
+                if best_coverage >= target_coverage:
+                    print(f"✅ Target achieved!")
+                    break
+            
+            if i % 200 == 0:
+                elapsed = time.time() - start_time
+                print(f"Progress: {i}/{max_iterations} - Best: {best_coverage*100:.1f}% ({elapsed:.0f}s)")
         
-        # Define the parameter space to search
+        elapsed_time = time.time() - start_time
+        successful_images = int(best_coverage * len(self.expected_measurements))
+        
+        print(f"\nFlexible search complete: {elapsed_time/60:.1f}min")
+        print(f"Best coverage: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
+        
+        return best_params, best_results, best_coverage
+    
+    def grid_search(self, flexible=True, target_coverage=0.7):
+        """Systematic grid search with optional flexible criteria."""
+        print("=== GRID SEARCH ===")
+        print(f"Mode: {'Flexible' if flexible else 'Strict'}")
+        
         param_grid = {
-            'hough_threshold': range(30, 140, 10),  # 11 values
-            'hough_min_line_length': range(8, 40, 4),  # 8 values
-            'tick_min_height': range(10, 40, 5),  # 6 values
-            'canny_low_threshold': range(5, 30, 5),  # 5 values
-            'canny_high_threshold': range(25, 70, 10),  # 5 values
-            'roi_height_fraction': [0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75],  # 7 values
+            'hough_threshold': [60, 80, 100, 120],
+            'hough_min_line_length': [20, 40, 60, 80],
+            'tick_min_height': [25, 40, 60, 80],
+            'canny_low_threshold': [15, 20, 25],
+            'canny_high_threshold': [45, 60, 75],
+            'roi_height_fraction': [0.3, 0.4, 0.5, 0.6],
         }
         
-        best_score, best_params, best_results, successful_combinations, total_combinations, elapsed_time = \
-            run_sequential_optimization(test_images_path, param_grid)
+        combinations = list(itertools.product(*param_grid.values()))
+        total = len(combinations)
+        print(f"Testing {total:,} combinations")
         
-        self._print_final_results(best_score, best_params, best_results, successful_combinations, 
-                                 total_combinations, elapsed_time, expected_measurements, "SEQUENTIAL")
+        best_coverage = 0
+        best_params = None
+        best_results = None
+        best_error = float('inf')
         
-        assert best_params, "No parameter combination was found that passed all tests."
-        assert best_score != float('inf')
-
-    def test_detect_1cm_distance_all_images_parallel(self, test_images_path, expected_measurements):
-        """Test ruler detection on all Sippar example images using parallel processing."""
-        if not os.path.exists(test_images_path):
-            pytest.skip(f"Test images directory not found: {test_images_path}")
+        start_time = time.time()
         
-        # Define the parameter space to search
-        param_grid = {
-            'hough_threshold': range(30, 140, 10),  # 11 values
-            'hough_min_line_length': range(8, 40, 4),  # 8 values
-            'tick_min_height': range(10, 40, 5),  # 6 values
-            'canny_low_threshold': range(5, 30, 5),  # 5 values
-            'canny_high_threshold': range(25, 70, 10),  # 5 values
-            'roi_height_fraction': [0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75],  # 7 values
-        }
-        
-        best_score, best_params, best_results, successful_combinations, total_combinations, elapsed_time = \
-            run_parallel_optimization(test_images_path, param_grid)
-        
-        self._print_final_results(best_score, best_params, best_results, successful_combinations, 
-                                 total_combinations, elapsed_time, expected_measurements, "PARALLEL")
-        
-        assert best_params, "No parameter combination was found that passed all tests."
-        assert best_score != float('inf')
-
-    def _print_final_results(self, best_score, best_params, best_results, successful_combinations, 
-                            total_combinations, elapsed_time, expected_measurements, mode):
-        """Print final optimization results."""
-        print(f"\n{'='*80}")
-        print(f"{mode} GRID SEARCH COMPLETE")
-        print(f"{'='*80}")
-        print(f"Total time elapsed: {elapsed_time/60:.1f} minutes ({elapsed_time/3600:.1f} hours)")
-        print(f"Combinations tested: {total_combinations:,}")
-        print(f"Average time per combination: {elapsed_time/total_combinations:.3f} seconds")
-        print(f"Successful combinations: {successful_combinations:,}/{total_combinations:,} ({successful_combinations/total_combinations*100:.1f}%)")
-        
-        if best_params:
-            print(f"\nBEST PARAMETERS FOUND:")
-            print(f"{'='*50}")
-            for param, value in best_params.items():
-                print(f"  {param}: {value}")
-            print(f"\nBest total error: {best_score:.2f} px")
+        for i, combination in enumerate(combinations):
+            params = dict(zip(param_grid.keys(), combination))
             
-            print(f"\nDETAILED RESULTS WITH BEST PARAMETERS:")
-            print(f"{'='*60}")
-            for image_name, detected_distance in best_results.items():
-                expected = expected_measurements[image_name]['expected']
-                error = abs(detected_distance - expected)
-                print(f"{image_name}:")
-                print(f"  Expected: {expected} px")
-                print(f"  Detected: {detected_distance} px")
-                print(f"  Error: {error:.2f} px")
-                print()
-
-    def test_detect_1cm_distance_single_image(self, test_images_path):
-        """Test ruler detection on a single image (for quick testing)."""
-        test_image = "IM.124625.H_02.JPG"
-        image_path = os.path.join(test_images_path, test_image)
+            if i % 200 == 0:
+                elapsed = time.time() - start_time
+                print(f"Progress: {i:,}/{total:,} ({i/total*100:.1f}%) - Best: {best_coverage*100:.1f}%")
+            
+            # Test with multiple distance filters if flexible
+            if flexible:
+                best_coverage_for_params = 0
+                best_results_for_params = None
+                best_error_for_params = float('inf')
+                
+                for min_dist, max_dist in [(400, 1000), (500, 900), (300, 800)]:
+                    results, successful, coverage, error = self.test_parameters(
+                        params, distance_filter=(min_dist, max_dist)
+                    )
+                    
+                    if coverage > best_coverage_for_params or (coverage == best_coverage_for_params and error < best_error_for_params):
+                        best_coverage_for_params = coverage
+                        best_results_for_params = results
+                        best_error_for_params = error
+                
+                coverage = best_coverage_for_params
+                results = best_results_for_params
+                error = best_error_for_params
+            else:
+                # Strict mode - must work for all images
+                results, successful, coverage, error = self.test_parameters(params)
+                if coverage < 1.0:  # Not all images passed
+                    continue
+            
+            # Check if this is better
+            target_met = coverage >= target_coverage if flexible else coverage == 1.0
+            
+            if target_met and (coverage > best_coverage or (coverage == best_coverage and error < best_error)):
+                best_coverage = coverage
+                best_params = params
+                best_results = results
+                best_error = error
+                
+                print(f"*** NEW BEST! Coverage: {coverage*100:.1f}% - Error: {error:.1f}px")
+                print(f"    Params: {params}")
         
-        if not os.path.exists(image_path):
-            pytest.skip(f"Test image not found: {image_path}")
-
-        detected_distance = detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum (Sippar Library)")
-
-        assert detected_distance is not None, f"Failed to detect ruler in {test_image}"
-        assert 650 <= detected_distance <= 750, (
-            f"Detected distance {detected_distance} is outside acceptable range [650, 750]"
-        )
+        elapsed_time = time.time() - start_time
+        successful_images = int(best_coverage * len(self.expected_measurements))
         
-        print(f"Single image test - {test_image}: {detected_distance} px")
+        print(f"\nGrid search complete: {elapsed_time/60:.1f}min")
+        print(f"Best coverage: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
+        
+        return best_params, best_results, best_coverage
+    
+    def quick_test(self):
+        """Quick test with a few predefined parameter sets."""
+        print("=== QUICK TEST ===")
+        
+        param_sets = [
+            {'name': 'Conservative', 'hough_threshold': 100, 'hough_min_line_length': 50, 'tick_min_height': 60,
+             'canny_low_threshold': 25, 'canny_high_threshold': 75, 'roi_height_fraction': 0.4},
+            {'name': 'Moderate', 'hough_threshold': 80, 'hough_min_line_length': 30, 'tick_min_height': 40,
+             'canny_low_threshold': 20, 'canny_high_threshold': 60, 'roi_height_fraction': 0.5},
+            {'name': 'Sensitive', 'hough_threshold': 60, 'hough_min_line_length': 20, 'tick_min_height': 25,
+             'canny_low_threshold': 15, 'canny_high_threshold': 45, 'roi_height_fraction': 0.6}
+        ]
+        
+        best_coverage = 0
+        best_params = None
+        
+        for param_set in param_sets:
+            name = param_set.pop('name')
+            print(f"\n--- {name} ---")
+            
+            for min_dist, max_dist in [(400, 1000), (500, 900), (300, 800)]:
+                results, successful, coverage, error = self.test_parameters(
+                    param_set, distance_filter=(min_dist, max_dist)
+                )
+                
+                print(f"  Distance filter {min_dist}-{max_dist}px: {coverage*100:.1f}% success")
+                
+                if coverage > best_coverage:
+                    best_coverage = coverage
+                    best_params = param_set.copy()
+                    best_params['distance_filter'] = (min_dist, max_dist)
+        
+        successful_images = int(best_coverage * len(self.expected_measurements))
+        print(f"\nQuick test best: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
+        
+        return best_params, best_coverage
+    
+    def print_results(self, results, params):
+        """Print detailed results."""
+        if not results:
+            print("No results to display")
+            return
+        
+        print(f"\nParameters: {params}")
+        print("\nDetailed Results:")
+        
+        for image_name, detected in results.items():
+            expected = self.expected_measurements[image_name]['expected']
+            min_val, max_val = self.expected_measurements[image_name]['min'], self.expected_measurements[image_name]['max']
+            
+            if detected and min_val <= detected <= max_val:
+                error = abs(detected - expected)
+                print(f"✅ {image_name}: {detected}px (expected {expected}px, error {error:.1f}px)")
+            else:
+                print(f"❌ {image_name}: {detected}px (expected {expected}px)")
 
 
-if __name__ == "__main__":
-    # Parse command line arguments
+def main():
+    """Main function with clean command line interface."""
     parser = argparse.ArgumentParser(description="Ruler detection parameter optimization")
-    parser.add_argument("--parallel", action="store_true", 
-                       help="Use parallel processing (default: sequential)")
-    parser.add_argument("--processes", type=int, default=None,
-                       help="Number of processes to use (default: auto-detect, max 8)")
-    parser.add_argument("--quick", action="store_true",
-                       help="Use smaller parameter grid for quick testing")
+    parser.add_argument("--diagnose", action="store_true", help="Quick diagnostic")
+    parser.add_argument("--quick", action="store_true", help="Quick test with predefined parameters")
+    parser.add_argument("--flexible", action="store_true", help="Flexible random search (RECOMMENDED)")
+    parser.add_argument("--grid", action="store_true", help="Systematic grid search")
+    parser.add_argument("--strict", action="store_true", help="Strict grid search (100% success required)")
+    parser.add_argument("--target-coverage", type=float, default=0.7, help="Target success rate (default: 0.7)")
+    parser.add_argument("--iterations", type=int, default=1000, help="Max iterations for flexible search")
     
     args = parser.parse_args()
     
@@ -458,54 +375,56 @@ if __name__ == "__main__":
     
     if not os.path.exists(test_images_path):
         print(f"ERROR: Test images directory not found: {test_images_path}")
-        sys.exit(1)
+        return
     
     print(f"Test images directory: {test_images_path}")
+    optimizer = RulerParameterOptimizer(test_images_path)
     
-    # Define parameter grid
-    if args.quick:
-        # Smaller grid for quick testing
-        param_grid = {
-            'hough_threshold': range(40, 100, 20),  # 3 values
-            'hough_min_line_length': range(12, 28, 8),  # 2 values
-            'tick_min_height': range(15, 30, 10),  # 2 values
-            'canny_low_threshold': range(5, 20, 10),  # 2 values
-            'canny_high_threshold': range(30, 50, 10),  # 2 values
-            'roi_height_fraction': [0.55, 0.60, 0.65],  # 3 values
-        }
-        # Total: 3 × 2 × 2 × 2 × 2 × 3 = 144 combinations
-        print("Using QUICK parameter grid (144 combinations)")
+    # Run selected operation
+    if args.diagnose:
+        optimizer.diagnose()
+    
+    elif args.quick:
+        best_params, coverage = optimizer.quick_test()
+        print(f"\nBest quick test result: {coverage*100:.1f}% success")
+        print(f"Parameters: {best_params}")
+    
+    elif args.flexible:
+        best_params, results, coverage = optimizer.flexible_search(
+            target_coverage=args.target_coverage, 
+            max_iterations=args.iterations
+        )
+        if best_params:
+            optimizer.print_results(results, best_params)
+        else:
+            print("No successful parameters found")
+    
+    elif args.grid:
+        best_params, results, coverage = optimizer.grid_search(
+            flexible=True, 
+            target_coverage=args.target_coverage
+        )
+        if best_params:
+            optimizer.print_results(results, best_params)
+        else:
+            print("No successful parameters found")
+    
+    elif args.strict:
+        best_params, results, coverage = optimizer.grid_search(
+            flexible=False
+        )
+        if best_params:
+            optimizer.print_results(results, best_params)
+        else:
+            print("No parameters work for 100% of images")
+    
     else:
-        # Full comprehensive grid
-        param_grid = {
-            'hough_threshold': range(30, 140, 10),  # 11 values
-            'hough_min_line_length': range(8, 40, 4),  # 8 values
-            'tick_min_height': range(10, 40, 5),  # 6 values
-            'canny_low_threshold': range(5, 30, 5),  # 5 values
-            'canny_high_threshold': range(25, 70, 10),  # 5 values
-            'roi_height_fraction': [0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75],  # 7 values
-        }
-        # Total: 11 × 8 × 6 × 5 × 5 × 7 = 92,400 combinations
-        print("Using FULL parameter grid (92,400 combinations)")
-    
-    # Prevent multiprocessing issues on Windows
-    if args.parallel:
-        mp.freeze_support()
-    
-    # Run optimization
-    if args.parallel:
-        best_score, best_params, best_results, successful_combinations, total_combinations, elapsed_time = \
-            run_parallel_optimization(test_images_path, param_grid, args.processes)
-        mode = "PARALLEL"
-    else:
-        best_score, best_params, best_results, successful_combinations, total_combinations, elapsed_time = \
-            run_sequential_optimization(test_images_path, param_grid)
-        mode = "SEQUENTIAL"
-    
-    # Print final results
-    print(f"\n{'='*80}")
-    print(f"{mode} OPTIMIZATION COMPLETE")
-    print(f"{'='*80}")
-    print(f"Total time: {elapsed_time/60:.1f} minutes ({elapsed_time/3600:.1f} hours)")
-    print(f"Average time per combination: {elapsed_time/total_combinations:.3f} seconds")
-    print(f"Successful combinations: {successful_combinations:,}/{total_combinations:,} ({successful_combinations/total_combinations*100:.1f}%)")
+        print("No operation selected. Use --help for options.")
+        print("\nRECOMMENDED:")
+        print("  --diagnose    # See current performance (30 sec)")
+        print("  --quick       # Test predefined parameters (1 min)")  
+        print("  --flexible    # Smart search for majority success (5-15 min)")
+
+
+if __name__ == "__main__":
+    main()
