@@ -1,6 +1,3 @@
-"""
-Core layout calculation logic for stitching tablet images.
-"""
 import cv2
 import numpy as np
 import os
@@ -31,8 +28,6 @@ def calculate_stitching_layout(
     final_margin_px=100, museum_selection="British Museum", 
     custom_layout=None, logo_standard_width_px=1800
 ):
-    """Calculate the layout for stitching images together."""
-    
     print(f"DEBUG: calculate_stitching_layout called with:")
     print(f"  object_images_dict keys: {list(object_images_dict.keys()) if object_images_dict else 'None'}")
     print(f"  ruler_image_path: {ruler_image_path}")
@@ -66,7 +61,6 @@ def calculate_stitching_layout(
 
     def get_sequence_primary_axis(view_key_for_seq):
         if "left" in view_key_for_seq.lower() or "right" in view_key_for_seq.lower():
-
             if "intermediate" in view_key_for_seq.lower() and ("top" in view_key_for_seq.lower() or "bottom" in view_key_for_seq.lower()):
                 return 1
             return 0
@@ -124,7 +118,6 @@ def calculate_stitching_layout(
     intermediate_dims = {}
     for key, img_data in object_images_dict.items():
         if "intermediate" in key and img_data is not None:
-
             h = get_image_dimension(img_data, 0, gap_px if isinstance(
                 img_data, list) and get_sequence_primary_axis(key) == 0 else 0)
             w = get_image_dimension(img_data, 1, gap_px if isinstance(
@@ -197,23 +190,18 @@ def calculate_stitching_layout(
     min_canvas_for_ruler = 0
     if rul_w > 0:
         if has_left and has_right:
-
             min_canvas_for_ruler = l_w + gap_px + rul_w + gap_px + r_w + 200
         elif has_left:
-
             min_canvas_for_ruler = l_w + gap_px + rul_w + 200
         elif has_right:
-
             min_canvas_for_ruler = 200 + rul_w + gap_px + r_w
         else:
-
             min_canvas_for_ruler = rul_w + 200
 
     canvas_w = max(base_canvas_w + 200, min_canvas_for_ruler)
 
     if has_left:
         if ruler_extra_width > 0:
-
             extra_space_each_side = ruler_extra_width // 2
             central_column_x = l_w + gap_px + extra_space_each_side
 
@@ -231,14 +219,12 @@ def calculate_stitching_layout(
             central_column_x = l_w + gap_px
     else:
         if ruler_extra_width > 0:
-
             tentative_central_x = (canvas_w - central_column_width) // 2
             ruler_left = tentative_central_x + (central_column_width - rul_w) // 2
             ruler_right = ruler_left + rul_w
 
             if ruler_left < 100:
                 central_column_x = 100 + (rul_w - central_column_width) // 2
-
                 new_ruler_right = central_column_x + (central_column_width + rul_w) // 2
                 canvas_w = max(canvas_w, new_ruler_right + 100)
             elif ruler_right > canvas_w - 100:
@@ -248,7 +234,6 @@ def calculate_stitching_layout(
             else:
                 central_column_x = tentative_central_x
         else:
-
             central_column_x = (canvas_w - central_column_width) // 2
 
     coords = {}
@@ -341,11 +326,9 @@ def calculate_stitching_layout(
             central_column_width = obv_w
         elif "intermediate" in key:
             img_h = intermediate_dims[key]["h"]
-
             int_y = obv_row_y + (obv_h - img_h) // 2
             coords[key] = (current_x, int_y)
         else:
-
             coords[key] = (current_x, obv_row_y)
             rotation_flags[key] = False
 
@@ -417,7 +400,6 @@ def calculate_stitching_layout(
 
     reverse_row_offset = (canvas_w - rev_row_width) // 2
     if has_reverse and has_obverse:
-
         reverse_pos = 0
         for idx, elem in enumerate(rev_row_elements):
             if elem["key"] == "reverse":
@@ -429,10 +411,8 @@ def calculate_stitching_layout(
             reverse_x_in_row += rev_row_elements[i]["width"] + gap_px
 
         reverse_center = reverse_x_in_row + rev_w // 2
-
         obverse_center = central_column_x + obv_w // 2
         reverse_center_offset = obverse_center - reverse_center
-
         reverse_row_offset += reverse_center_offset
 
     current_x = reverse_row_offset
@@ -443,18 +423,15 @@ def calculate_stitching_layout(
         if key == "reverse":
             coords["reverse"] = (current_x, rev_row_y)
         elif key == "left_rotated":
-
             rotated_left_y = rev_row_y + (rev_h - l_h) // 2
             coords["left_rotated"] = (current_x, rotated_left_y)
             rotation_flags["left_rotated"] = True
         elif key == "right_rotated":
-
             rotated_right_y = rev_row_y + (rev_h - r_h) // 2
             coords["right_rotated"] = (current_x, rotated_right_y)
             rotation_flags["right_rotated"] = True
         else:
             img_h = intermediate_dims[key]["h"]
-
             int_y = rev_row_y + (rev_h - img_h) // 2
             coords[key] = (current_x, int_y)
 
@@ -476,7 +453,6 @@ def calculate_stitching_layout(
 
     if object_images_dict.get("ruler") is not None and rul_h > 0:
         y_curr += ruler_padding_px - gap_px
-
         ruler_x = central_column_x + (central_column_width - rul_w) // 2
 
         if ruler_x < 0:
@@ -496,6 +472,21 @@ def calculate_stitching_layout(
         y_curr += rul_h
 
     canvas_h = y_curr + 100
+
+    max_right_edge = 0
+    for key, (x, y) in coords.items():
+        if key in object_images_dict:
+            img_data = object_images_dict[key]
+            if isinstance(img_data, np.ndarray) and img_data.size > 0:
+                img_width = img_data.shape[1]
+                max_right_edge = max(max_right_edge, x + img_width)
+        elif key in intermediate_dims:
+            img_width = intermediate_dims[key]["w"]
+            max_right_edge = max(max_right_edge, x + img_width)
+    
+    if max_right_edge > canvas_w - 100:
+        canvas_w = max_right_edge + 100
+        print(f"Canvas width expanded to {canvas_w} to accommodate all elements")
 
     modified_images_dict = create_rotated_images(object_images_dict)
 

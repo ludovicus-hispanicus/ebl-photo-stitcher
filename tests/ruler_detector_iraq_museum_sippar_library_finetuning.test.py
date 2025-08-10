@@ -1,19 +1,19 @@
 '''
-Results of previous runs:
-- Brute force (grid search): 13.8 hours, 92,400 combinations, 0 successful
-- Flexible search: Best coverage: 57.1%, Parameters: {'hough_threshold': 130, 'hough_min_line_length': 46, 'tick_min_height': 68, 'canny_low_threshold': 17, 'canny_high_threshold': 89, 'roi_height_fraction': 0.51}
+Search complete: 86.8min, 1901 iterations
+Best coverage: 7/7 (100.0%)
+Search rate: 0.4 iterations/second
+
+Parameters: {'num_ticks_for_1cm': 11, 'hough_threshold': 19, 'hough_min_line_length': 13, 'hough_max_line_gap': 50, 'tick_max_width': 11, 'tick_min_width': 2, 'tick_min_height': 51, 'max_tick_thickness_px': 39, 'min_ticks_required': 6, 'consistency_threshold': 0.87, 'canny_low_threshold': 22, 'canny_high_threshold': 122, 'roi_height_fraction': 0.48, 'text_match_threshold': 0.42}
 '''
 
 import os
 import sys
-import itertools
 import time
 import argparse
-import cv2
 import random
-import numpy as np
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
-# Add required directories to path
 script_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 lib_directory = os.path.join(script_directory, "lib")
 tests_directory = os.path.dirname(os.path.abspath(__file__))
@@ -22,19 +22,49 @@ for directory in [lib_directory, tests_directory]:
     if directory not in sys.path:
         sys.path.insert(0, directory)
 
-from ruler_detector_iraq_museum import detect_1cm_distance_iraq, get_detection_parameters
 from test_config import EXPECTED_MEASUREMENTS
+
+sys.path.insert(0, lib_directory)
+from ruler_detector_iraq_museum import detect_1cm_distance_iraq, get_detection_parameters
+
+
+def test_single_parameter_set(args):
+    params, test_images_path, expected_measurements, museum_selection = args
+    
+    results = {}
+    successful = 0
+    total_error = 0
+    
+    for image_name, expected_data in expected_measurements.items():
+        image_path = os.path.join(test_images_path, image_name)
+        if not os.path.exists(image_path):
+            continue
+        
+        try:
+            detected = detect_1cm_distance_iraq(image_path, 
+                                              museum_selection=museum_selection, 
+                                              params=params)
+        except Exception:
+            detected = None
+
+        results[image_name] = detected
+        
+        if detected and expected_data['min'] <= detected <= expected_data['max']:
+            successful += 1
+            total_error += abs(detected - expected_data['expected'])
+    
+    coverage = successful / len(expected_measurements) if expected_measurements else 0
+    return params, results, successful, coverage, total_error
 
 
 class RulerParameterOptimizer:
-    """Clean, streamlined ruler detection parameter optimization."""
-    
     def __init__(self, test_images_path):
         self.test_images_path = test_images_path
         self.expected_measurements = EXPECTED_MEASUREMENTS
+        self.museum_selection = "Iraq Museum (Sippar Library)"
+        self.cpu_count = mp.cpu_count()
         
     def diagnose(self):
-        """Quick diagnostic of current detection performance."""
         print("=== DIAGNOSTIC ===")
         for image_name, expected_data in self.expected_measurements.items():
             image_path = os.path.join(self.test_images_path, image_name)
@@ -42,7 +72,7 @@ class RulerParameterOptimizer:
                 continue
                 
             try:
-                detected = detect_1cm_distance_iraq(image_path, museum_selection="Iraq Museum (Sippar Library)")
+                detected = detect_1cm_distance_iraq(image_path, museum_selection=self.museum_selection)
                 expected = expected_data['expected']
                 min_val, max_val = expected_data['min'], expected_data['max']
                 
@@ -58,287 +88,138 @@ class RulerParameterOptimizer:
             except Exception as e:
                 print(f"{image_name}: ❌ ERROR - {e}")
     
-    def test_parameters(self, params, distance_filter=None):
-        """Test parameter set on all images."""
-        results = {}
-        total_error = 0
-        successful = 0
-        
-        for image_name, expected_data in self.expected_measurements.items():
-            image_path = os.path.join(self.test_images_path, image_name)
-            if not os.path.exists(image_path):
-                continue
-            
-            if distance_filter:
-                detected = self._detect_with_distance_filter(image_path, params, *distance_filter)
-            else:
-                detected = self._detect_with_params(image_path, params)
-            
-            results[image_name] = detected
-            
-            if detected and expected_data['min'] <= detected <= expected_data['max']:
-                successful += 1
-                total_error += abs(detected - expected_data['expected'])
-        
-        coverage = successful / len(self.expected_measurements)
-        return results, successful, coverage, total_error
-    
-    def _detect_with_params(self, image_path, params):
-        """Run detection with custom parameters."""
-        try:
-            # This would require modifying the original function to accept parameters
-            # For now, use distance filtering approach
-            return self._detect_with_distance_filter(image_path, params, 400, 1000)
-        except:
-            return None
-    
-    def _detect_with_distance_filter(self, image_path, params, min_distance, max_distance):
-        """Detect with custom parameters and distance filtering."""
-        try:
-            image = cv2.imread(image_path)
-            if image is None:
-                return None
-            
-            height, width = image.shape[:2]
-            roi_height = int(height * params['roi_height_fraction'])
-            roi = image[height - roi_height:, :]
-            
-            # Process image
-            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            edges = cv2.Canny(blurred, params['canny_low_threshold'], params['canny_high_threshold'])
-            
-            # Detect lines
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, 
-                                   threshold=params['hough_threshold'],
-                                   minLineLength=params['hough_min_line_length'], 
-                                   maxLineGap=10)
-            
-            if lines is None:
-                return None
-            
-            # Filter vertical lines
-            vertical_lines = []
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                if x2 - x1 != 0:
-                    angle = abs(np.arctan((y2 - y1) / (x2 - x1)) * 180 / np.pi)
-                else:
-                    angle = 90
-                
-                if 80 <= angle <= 90:
-                    line_length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-                    if line_length >= params['tick_min_height']:
-                        vertical_lines.append(x1)
-            
-            if len(vertical_lines) < 2:
-                return None
-            
-            # Calculate distances
-            vertical_lines.sort()
-            distances = []
-            for i in range(len(vertical_lines) - 1):
-                dist = abs(vertical_lines[i + 1] - vertical_lines[i])
-                if min_distance <= dist <= max_distance:
-                    distances.append(dist)
-            
-            if not distances:
-                return None
-            
-            # Return most common distance
-            return float(max(set(distances), key=distances.count))
-            
-        except:
-            return None
-    
-    def flexible_search(self, target_coverage=0.7, max_iterations=1000):
-        print(f"=== FLEXIBLE SEARCH ===")
-        print(f"Target: {target_coverage*100:.0f}% success rate")
+    def generate_parameter_sets(self, num_sets):
+        default_params = get_detection_parameters(self.museum_selection)
         param_ranges = {
-            'hough_threshold': (40, 150),
+            'hough_threshold': (10, 200),
             'hough_min_line_length': (10, 100),
-            'hough_max_line_gap': (5, 40),
+            'hough_max_line_gap': (5, 50),
             'tick_max_width': (10, 40),
-            'tick_min_width': (1, 10),
-            'tick_min_height': (10, 60),
-            'max_tick_thickness_px': (10, 40),
-            'min_ticks_required': (7, 15),
-            'num_ticks_for_1cm': (7, 15),
-            'consistency_threshold': (0.5, 1.0),
-            'canny_low_threshold': (1, 30),
-            'canny_high_threshold': (20, 100),
-            'roi_height_fraction': (0.2, 0.8),
+            'tick_min_width': (1, 15),
+            'tick_min_height': (10, 80),
+            'max_tick_thickness_px': (5, 40),
+            'min_ticks_required': (6, 11),
+            'consistency_threshold': (0.4, 1.0),
+            'canny_low_threshold': (10, 50),
+            'canny_high_threshold': (50, 150),
+            'roi_height_fraction': (0.3, 0.8),
+            'text_match_threshold': (0.3, 0.8)
         }
-        
-        best_coverage = 0
-        best_params = None
-        best_results = None
-        
-        start_time = time.time()
-        
-        for i in range(max_iterations):
-            # Generate random parameters
-            params = {}
+                
+        fixed_params = {
+            'num_ticks_for_1cm': 11
+        }
+        parameter_sets = []
+        for _ in range(num_sets):
+            params = fixed_params.copy()
             for param, (low, high) in param_ranges.items():
-                if param == 'roi_height_fraction':
+                if isinstance(default_params[param], float):
                     params[param] = round(random.uniform(low, high), 2)
                 else:
                     params[param] = random.randint(int(low), int(high))
-            
-            # Test with multiple distance filters
-            best_coverage_for_params = 0
-            best_results_for_params = None
-            
-            for min_dist, max_dist in [(400, 1000), (500, 900), (300, 800)]:
-                results, successful, coverage, error = self.test_parameters(
-                    params, distance_filter=(min_dist, max_dist)
-                )
-                
-                if coverage > best_coverage_for_params:
-                    best_coverage_for_params = coverage
-                    best_results_for_params = results
-            
-            # Update best if this is better
-            if best_coverage_for_params > best_coverage:
-                best_coverage = best_coverage_for_params
-                best_params = params
-                best_results = best_results_for_params
-                
-                print(f"*** NEW BEST! Iteration {i}: {best_coverage*100:.1f}% success")
-                print(f"    Params: {params}")
-                
-                if best_coverage >= target_coverage:
-                    print(f"✅ Target achieved!")
-                    break
-            
-            if i % 200 == 0:
-                elapsed = time.time() - start_time
-                print(f"Progress: {i}/{max_iterations} - Best: {best_coverage*100:.1f}% ({elapsed:.0f}s)")
+            parameter_sets.append(params)
         
-        elapsed_time = time.time() - start_time
-        successful_images = int(best_coverage * len(self.expected_measurements))
-        
-        print(f"\nFlexible search complete: {elapsed_time/60:.1f}min")
-        print(f"Best coverage: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
-        
-        return best_params, best_results, best_coverage
+        return parameter_sets
     
-    def grid_search(self, flexible=True, target_coverage=0.7):
-        """Systematic grid search with optional flexible criteria."""
-        print("=== GRID SEARCH ===")
-        print(f"Mode: {'Flexible' if flexible else 'Strict'}")
-        
-        param_grid = {
-            'hough_threshold': [60, 80, 100, 120],
-            'hough_min_line_length': [20, 40, 60, 80],
-            'tick_min_height': [25, 40, 60, 80],
-            'canny_low_threshold': [15, 20, 25],
-            'canny_high_threshold': [45, 60, 75],
-            'roi_height_fraction': [0.3, 0.4, 0.5, 0.6],
-        }
-        
-        combinations = list(itertools.product(*param_grid.values()))
-        total = len(combinations)
-        print(f"Testing {total:,} combinations")
+    def flexible_search(self, target_coverage=0.9, max_iterations=1000, use_multiprocessing=True):
+        search_type = "PARALLEL" if use_multiprocessing else "SEQUENTIAL"
+        print(f"=== {search_type} SEARCH ===")
+        if use_multiprocessing:
+            print(f"Using {self.cpu_count} CPU cores")
+        print(f"Target: {target_coverage*100:.0f}% success rate over {max_iterations} iterations")
         
         best_coverage = 0
         best_params = None
         best_results = None
-        best_error = float('inf')
-        
         start_time = time.time()
+        iterations_completed = 0
         
-        for i, combination in enumerate(combinations):
-            params = dict(zip(param_grid.keys(), combination))
+        if use_multiprocessing:
+            batch_size = self.cpu_count * 4
             
-            if i % 200 == 0:
-                elapsed = time.time() - start_time
-                print(f"Progress: {i:,}/{total:,} ({i/total*100:.1f}%) - Best: {best_coverage*100:.1f}%")
-            
-            # Test with multiple distance filters if flexible
-            if flexible:
-                best_coverage_for_params = 0
-                best_results_for_params = None
-                best_error_for_params = float('inf')
+            while iterations_completed < max_iterations:
+                current_batch_size = min(batch_size, max_iterations - iterations_completed)
+                parameter_sets = self.generate_parameter_sets(current_batch_size)
                 
-                for min_dist, max_dist in [(400, 1000), (500, 900), (300, 800)]:
-                    results, successful, coverage, error = self.test_parameters(
-                        params, distance_filter=(min_dist, max_dist)
-                    )
+                worker_args = [(params, self.test_images_path, self.expected_measurements, self.museum_selection) 
+                              for params in parameter_sets]
+                
+                with ProcessPoolExecutor(max_workers=self.cpu_count) as executor:
+                    future_to_params = {executor.submit(test_single_parameter_set, args): args[0] 
+                                      for args in worker_args}
                     
-                    if coverage > best_coverage_for_params or (coverage == best_coverage_for_params and error < best_error_for_params):
-                        best_coverage_for_params = coverage
-                        best_results_for_params = results
-                        best_error_for_params = error
+                    for future in as_completed(future_to_params):
+                        try:
+                            params, results, successful, coverage, total_error = future.result()
+                            iterations_completed += 1
+                            
+                            if coverage > best_coverage:
+                                best_coverage = coverage
+                                best_params = params
+                                best_results = results
+                                
+                                print(f"*** NEW BEST! Iteration {iterations_completed}: {best_coverage*100:.1f}% success")
+                                print(f"    Params: {params}")
+                                
+                                if best_coverage >= target_coverage:
+                                    print(f"✅ Target achieved!")
+                                    elapsed_time = time.time() - start_time
+                                    self._print_final_results(best_coverage, elapsed_time, iterations_completed)
+                                    return best_params, best_results, best_coverage
+                            
+                            if iterations_completed % 200 == 0:
+                                elapsed = time.time() - start_time
+                                rate = iterations_completed / elapsed if elapsed > 0 else 0
+                                print(f"Progress: {iterations_completed}/{max_iterations} - Best: {best_coverage*100:.1f}% ({rate:.1f} iter/sec)")
+                        
+                        except Exception as e:
+                            print(f"Error: {e}")
+                            iterations_completed += 1
+        else:
+            for i in range(max_iterations):
+                parameter_sets = self.generate_parameter_sets(1)
+                worker_args = (parameter_sets[0], self.test_images_path, self.expected_measurements, self.museum_selection)
                 
-                coverage = best_coverage_for_params
-                results = best_results_for_params
-                error = best_error_for_params
-            else:
-                # Strict mode - must work for all images
-                results, successful, coverage, error = self.test_parameters(params)
-                if coverage < 1.0:  # Not all images passed
-                    continue
-            
-            # Check if this is better
-            target_met = coverage >= target_coverage if flexible else coverage == 1.0
-            
-            if target_met and (coverage > best_coverage or (coverage == best_coverage and error < best_error)):
-                best_coverage = coverage
-                best_params = params
-                best_results = results
-                best_error = error
+                try:
+                    params, results, successful, coverage, total_error = test_single_parameter_set(worker_args)
+                    iterations_completed += 1
+                    
+                    if coverage > best_coverage:
+                        best_coverage = coverage
+                        best_params = params
+                        best_results = results
+                        
+                        print(f"*** NEW BEST! Iteration {iterations_completed}: {best_coverage*100:.1f}% success")
+                        print(f"    Params: {params}")
+                        
+                        if best_coverage >= target_coverage:
+                            print(f"✅ Target achieved!")
+                            break
+                    
+                    if iterations_completed % 200 == 0:
+                        elapsed = time.time() - start_time
+                        rate = iterations_completed / elapsed if elapsed > 0 else 0
+                        print(f"Progress: {iterations_completed}/{max_iterations} - Best: {best_coverage*100:.1f}% ({rate:.1f} iter/sec)")
                 
-                print(f"*** NEW BEST! Coverage: {coverage*100:.1f}% - Error: {error:.1f}px")
-                print(f"    Params: {params}")
+                except Exception as e:
+                    print(f"Error: {e}")
+                    iterations_completed += 1
         
         elapsed_time = time.time() - start_time
-        successful_images = int(best_coverage * len(self.expected_measurements))
-        
-        print(f"\nGrid search complete: {elapsed_time/60:.1f}min")
-        print(f"Best coverage: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
-        
+        self._print_final_results(best_coverage, elapsed_time, iterations_completed)
         return best_params, best_results, best_coverage
     
-    def quick_test(self):
-        """Quick test with a few predefined parameter sets."""
-        print("=== QUICK TEST ===")
-        
-        param_sets = [
-            {'name': 'Conservative', 'hough_threshold': 100, 'hough_min_line_length': 50, 'tick_min_height': 60,
-             'canny_low_threshold': 25, 'canny_high_threshold': 75, 'roi_height_fraction': 0.4},
-            {'name': 'Moderate', 'hough_threshold': 80, 'hough_min_line_length': 30, 'tick_min_height': 40,
-             'canny_low_threshold': 20, 'canny_high_threshold': 60, 'roi_height_fraction': 0.5},
-            {'name': 'Sensitive', 'hough_threshold': 60, 'hough_min_line_length': 20, 'tick_min_height': 25,
-             'canny_low_threshold': 15, 'canny_high_threshold': 45, 'roi_height_fraction': 0.6}
-        ]
-        
-        best_coverage = 0
-        best_params = None
-        
-        for param_set in param_sets:
-            name = param_set.pop('name')
-            print(f"\n--- {name} ---")
-            
-            for min_dist, max_dist in [(400, 1000), (500, 900), (300, 800)]:
-                results, successful, coverage, error = self.test_parameters(
-                    param_set, distance_filter=(min_dist, max_dist)
-                )
-                
-                print(f"  Distance filter {min_dist}-{max_dist}px: {coverage*100:.1f}% success")
-                
-                if coverage > best_coverage:
-                    best_coverage = coverage
-                    best_params = param_set.copy()
-                    best_params['distance_filter'] = (min_dist, max_dist)
-        
-        successful_images = int(best_coverage * len(self.expected_measurements))
-        print(f"\nQuick test best: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
-        
-        return best_params, best_coverage
+    def _print_final_results(self, best_coverage, elapsed_time, iterations_completed):
+        print(f"\nSearch complete: {elapsed_time/60:.1f}min, {iterations_completed} iterations")
+        if best_coverage > 0:
+            successful_images = int(best_coverage * len(self.expected_measurements))
+            print(f"Best coverage: {successful_images}/{len(self.expected_measurements)} ({best_coverage*100:.1f}%)")
+            rate = iterations_completed / elapsed_time if elapsed_time > 0 else 0
+            print(f"Search rate: {rate:.1f} iterations/second")
+        else:
+            print("No successful parameter combination found.")
     
     def print_results(self, results, params):
-        """Print detailed results."""
         if not results:
             print("No results to display")
             return
@@ -358,19 +239,15 @@ class RulerParameterOptimizer:
 
 
 def main():
-    """Main function with clean command line interface."""
     parser = argparse.ArgumentParser(description="Ruler detection parameter optimization")
     parser.add_argument("--diagnose", action="store_true", help="Quick diagnostic")
-    parser.add_argument("--quick", action="store_true", help="Quick test with predefined parameters")
-    parser.add_argument("--flexible", action="store_true", help="Flexible random search (RECOMMENDED)")
-    parser.add_argument("--grid", action="store_true", help="Systematic grid search")
-    parser.add_argument("--strict", action="store_true", help="Strict grid search (100% success required)")
-    parser.add_argument("--target-coverage", type=float, default=0.7, help="Target success rate (default: 0.7)")
-    parser.add_argument("--iterations", type=int, default=1000, help="Max iterations for flexible search")
+    parser.add_argument("--flexible", action="store_true", help="Search for best parameters")
+    parser.add_argument("--single-thread", action="store_true", help="Use single thread instead of multiprocessing")
+    parser.add_argument("--target-coverage", type=float, default=0.9, help="Target success rate (default: 0.9)")
+    parser.add_argument("--iterations", type=int, default=1000, help="Max iterations")
     
     args = parser.parse_args()
     
-    # Setup
     test_images_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Examples", "Sippar")
     
     if not os.path.exists(test_images_path):
@@ -379,51 +256,27 @@ def main():
     
     print(f"Test images directory: {test_images_path}")
     optimizer = RulerParameterOptimizer(test_images_path)
+    print(f"System has {optimizer.cpu_count} CPU cores available")
     
-    # Run selected operation
     if args.diagnose:
         optimizer.diagnose()
-    
-    elif args.quick:
-        best_params, coverage = optimizer.quick_test()
-        print(f"\nBest quick test result: {coverage*100:.1f}% success")
-        print(f"Parameters: {best_params}")
-    
     elif args.flexible:
+        use_mp = not args.single_thread
         best_params, results, coverage = optimizer.flexible_search(
             target_coverage=args.target_coverage, 
-            max_iterations=args.iterations
+            max_iterations=args.iterations,
+            use_multiprocessing=use_mp
         )
         if best_params:
             optimizer.print_results(results, best_params)
         else:
             print("No successful parameters found")
-    
-    elif args.grid:
-        best_params, results, coverage = optimizer.grid_search(
-            flexible=True, 
-            target_coverage=args.target_coverage
-        )
-        if best_params:
-            optimizer.print_results(results, best_params)
-        else:
-            print("No successful parameters found")
-    
-    elif args.strict:
-        best_params, results, coverage = optimizer.grid_search(
-            flexible=False
-        )
-        if best_params:
-            optimizer.print_results(results, best_params)
-        else:
-            print("No parameters work for 100% of images")
-    
     else:
         print("No operation selected. Use --help for options.")
         print("\nRECOMMENDED:")
-        print("  --diagnose    # See current performance (30 sec)")
-        print("  --quick       # Test predefined parameters (1 min)")  
-        print("  --flexible    # Smart search for majority success (5-15 min)")
+        print("  --diagnose              # See current performance (~30 sec)")
+        print("  --flexible              # Multi-threaded search (FASTEST)")
+        print("  --flexible --single-thread  # Single-threaded search")
 
 
 if __name__ == "__main__":
