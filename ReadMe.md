@@ -264,7 +264,7 @@ HDR processing is beneficial when you have:
 
 1. **File Naming Convention**: Name your bracketed exposure images using sequential numeric suffixes: `TABLET_NUMBER_EXPOSURE.extension`
 **Examples:**
-`BM.58103__1.jpg` (exposure 1), `BM.58103_2.jpg` (exposure 2), `BM.58103_3.jpg` (exposure 3)
+`BM.58103_1.jpg` (exposure 1), `BM.58103_2.jpg` (exposure 2), `BM.58103_3.jpg` (exposure 3)
 
 2. **Image Organization**: Place all bracketed exposure images in the same folder. The application will automatically group them by their base name (e.g., all `BM.58103_*` images will be grouped together). The images will be clustered into groups of three and stacked together.
 
