@@ -56,7 +56,7 @@ class UIComponents:
             textvariable=museum_var,
             width=20,
             values=["British Museum", "Iraq Museum", "Iraq Museum (Sippar Library)",
-                    "eBL Ruler (CBS)", "Non-eBL Ruler (VAM)"]
+                    "eBL Ruler (CBS)", "Non-eBL Ruler (VAM)", "Black background (Jena)"]
         )
         museum_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         museum_combo.bind("<<ComboboxSelected>>", on_museum_changed)
