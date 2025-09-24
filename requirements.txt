@@ -1,6 +1,6 @@
-python-tk@3.9
-inih
-exiv2
+# Note: python-tk (tkinter) usually comes with Python by default
+# inih and exiv2 are system libraries, may need separate installation
+
 piexif
 
 # Computer Vision and Image Processing
