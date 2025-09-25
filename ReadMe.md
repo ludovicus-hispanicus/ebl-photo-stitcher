@@ -264,7 +264,7 @@ HDR processing is beneficial when you have:
 
 1. **File Naming Convention**: Name your bracketed exposure images using sequential numeric suffixes: `TABLET_NUMBER_EXPOSURE.extension`
 **Examples:**
-`BM.58103_1.jpg` (exposure 1), `BM.58103_2.jpg` (exposure 2), `BM.58103_3.jpg` (exposure 3)
+`BM.58103__1.jpg` (exposure 1), `BM.58103_2.jpg` (exposure 2), `BM.58103_3.jpg` (exposure 3)
 
 2. **Image Organization**: Place all bracketed exposure images in the same folder. The application will automatically group them by their base name (e.g., all `BM.58103_*` images will be grouped together). The images will be clustered into groups of three and stacked together.
 
@@ -281,25 +281,11 @@ You can package this application into a standalone executable using PyInstaller:
 
 ```bash
 pyinstaller eBLImageProcessor.spec
-```
 
 ## U2NET Model Setup
-The application uses the U2NET model for AI-powered object extraction via the rembg library. To avoid downloading the model during runtime, which can be slow or fail if internet connectivity is limited.
+The application uses the U2NET model for AI-powered object extraction via the rembg library. To avoid downloading the model during runtime:
 
-1. First, download the **U2NET model file** (`u2net.onnx`) from the official [`rembg` repository](https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx)
-   
-2. After downloading, move the `u2net.onnx` file to the correct directory so the `rembg` library can find it without downloading it.
-   
-   **For Windows:**
-   
-   1. Press the `Windows Key` + `R` to open the Run dialog.
-   2. Type `%USERPROFILE%` and press **Enter**. This will open your user directory in File Explorer.
-   3. Make sure you can see hidden folders. In File Explorer, go to the **View** tab and check the box for Hidden items.
-   4. Create a new folder named `.u2net` if it doesn't already exist.
-   5. Move the downloaded `u2net.onnx` file into this new `.u2net` folder.
-   
-   **For Linux and macOS:** Open a terminal and run these commands:
-   
-   ```bash
-   mkdir -p ~/.u2net/
-   mv u2net.onnx ~/.u2net/
+1. Download the U2NET model (`u2net.onnx`) from the [rembg repository](https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx)
+2. Place it in the assets folder of your project
+3. When the application runs, it will automatically copy this model to the expected location in your user directory (`~/.u2net/u2net.onnx`)
+4. This prevents the application from attempting to download the model during processing, which can be slow or fail if internet connectivity is limited.

@@ -19,12 +19,27 @@ def select_ruler_template(museum_selection, art_fp, px_cm_val, ruler_template_1c
         if art_img_chk is not None and px_cm_val > 0:
             art_w_cm_val = art_img_chk.shape[1] / px_cm_val
             if art_w_cm_val > 0:
-                t1 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM["1cm"]
-                t2 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM["2cm"]
+                t1 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM_BRITISH_MUSEUM["1cm"]
+                t2 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM_BRITISH_MUSEUM["2cm"]
                 if art_w_cm_val < t1:
                     chosen_ruler_tpl = ruler_template_1cm_asset_path
                 elif art_w_cm_val < t2:
                     chosen_ruler_tpl = ruler_template_2cm_asset_path
+
+    elif museum_selection == "Black background (Jena)":
+        art_img_chk = cv2.imread(art_fp)
+        if art_img_chk is not None and px_cm_val > 0:
+            art_w_cm_val = art_img_chk.shape[1] / px_cm_val
+            if art_w_cm_val > 0:
+                t1 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM_JENA["1cm"]
+                t2 = resize_ruler.RULER_TARGET_PHYSICAL_WIDTHS_CM_JENA["2cm"]
+                base_dir = os.path.dirname(ruler_template_1cm_asset_path)
+                if art_w_cm_val < t1:
+                    chosen_ruler_tpl = os.path.join(base_dir, "Black_1cm_scale.tif")
+                elif art_w_cm_val < t2:
+                    chosen_ruler_tpl = os.path.join(base_dir, "Black_2cm_scale.tif")
+                else:
+                    chosen_ruler_tpl = os.path.join(base_dir, "Black_5cm_scale.tif")
 
     elif museum_selection == "Iraq Museum":
         chosen_ruler_tpl = os.path.join(

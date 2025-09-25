@@ -132,6 +132,15 @@ MUSEUM_CONFIGS = {
         "ruler_type": "svg",
         "ruler_template": "General_External_photo_ruler.svg",
         "ruler_size_cm": 3.248
+    },
+    "Black background (Jena)": {
+        "background_color": (0, 0, 0),
+        "ruler_type": "tif",
+        "ruler_templates": {
+            "1cm": "Black_1cm_scale.tif",
+            "2cm": "Black_2cm_scale.tif",
+            "5cm": "Black_5cm_scale.tif"
+        }
     }
 }
 

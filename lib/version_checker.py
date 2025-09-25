@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 import tkinter as tk
 from tkinter import ttk
 
-CURRENT_VERSION = "v1.0-rc.2"
+CURRENT_VERSION = "v1.0-rc.3"
 GITHUB_API_URL = "https://api.github.com/repos/ElectronicBabylonianLiterature/ebl-photo-stitcher/releases/latest"
 GITHUB_RELEASES_URL = "https://github.com/ElectronicBabylonianLiterature/ebl-photo-stitcher/releases/latest"
 

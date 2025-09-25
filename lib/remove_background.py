@@ -77,7 +77,7 @@ def detect_dominant_corner_background_color(
 
 def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 0)):
 
-    if museum_selection is None or museum_selection == "British Museum":
+    if museum_selection is None or museum_selection == "British Museum" or museum_selection == "Black background (Jena)":
         return (0, 0, 0)
     else:
 

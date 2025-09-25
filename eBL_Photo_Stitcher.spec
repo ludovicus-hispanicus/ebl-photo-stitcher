@@ -4,6 +4,17 @@ PyInstaller spec file for eBL Photo Stitcher.
 This builds a single executable with all required dependencies.
 """
 
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import get_hook_config
+
+# Collect pyexiv2 data and hidden imports
+try:
+    pyexiv2_datas = collect_data_files('pyexiv2')
+    pyexiv2_hiddenimports = []
+except ImportError:
+    pyexiv2_datas = []
+    pyexiv2_hiddenimports = []
+
 block_cipher = None
 
 a = Analysis(

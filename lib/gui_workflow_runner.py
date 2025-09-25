@@ -646,7 +646,7 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
     stitched_output_bg_color = MUSEUM_CONFIGS.get(
         museum_selection, {}).get("background_color", (0, 0, 0))
-    if museum_selection == "British Museum":
+    if museum_selection == "British Museum" or museum_selection == "Black background (Jena)":
         stitched_output_bg_color = output_bg_color
 
     process_tablet_subfolder(

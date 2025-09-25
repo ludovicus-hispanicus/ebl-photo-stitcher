@@ -10,10 +10,15 @@ except (ImportError, OSError) as e:
     SVG_SUPPORT = False
     print(f"Warning: cairosvg or its dependencies not found ({e}). SVG ruler support is disabled.")
 
-RULER_TARGET_PHYSICAL_WIDTHS_CM = {
+RULER_TARGET_PHYSICAL_WIDTHS_CM_BRITISH_MUSEUM = {
     "1cm": 1.752173913043478,
     "2cm": 2.802631578947368,
     "5cm": 5.955752212389381
+}
+RULER_TARGET_PHYSICAL_WIDTHS_CM_JENA = {
+    "1cm": 1,
+    "2cm": 2,
+    "5cm": 5
 }
 IMAGE_RESIZE_INTERPOLATION_METHOD = cv2.INTER_CUBIC
 
@@ -63,7 +68,8 @@ def resize_and_save_ruler_template(
     chosen_digital_ruler_template_path,
     output_base_name,
     output_directory_path,
-    custom_ruler_size_cm=None
+    custom_ruler_size_cm=None,
+    museum_selection=None
 ):
     """
     Resizes a digital ruler template to match the detected physical scale, 
@@ -75,10 +81,13 @@ def resize_and_save_ruler_template(
         output_base_name: Base name for the output file
         output_directory_path: Directory to save the scaled ruler
         custom_ruler_size_cm: Optional, custom size of the ruler in cm (for SVG rulers)
+        museum_selection: Museum selection to determine ruler sizing
 
     Returns:
         The path to the scaled ruler file that was created
     """
+    from stitch_config import MUSEUM_CONFIGS
+    
     if pixels_per_centimeter_scale <= 1:
         raise ValueError(
             f"Invalid pixels_per_centimeter: {pixels_per_centimeter_scale}")
@@ -92,17 +101,22 @@ def resize_and_save_ruler_template(
     if custom_ruler_size_cm is not None:
         target_physical_width_cm = custom_ruler_size_cm
     else:
-
-        template_filename_lower = os.path.basename(
-            chosen_digital_ruler_template_path).lower()
+        template_filename = os.path.basename(chosen_digital_ruler_template_path)
         target_physical_width_cm = None
-        for key_cm_str, width_val_cm in RULER_TARGET_PHYSICAL_WIDTHS_CM.items():
-            if key_cm_str in template_filename_lower:
+        
+        if museum_selection == "Black background (Jena)":
+            ruler_constants = RULER_TARGET_PHYSICAL_WIDTHS_CM_JENA
+        else:
+            ruler_constants = RULER_TARGET_PHYSICAL_WIDTHS_CM_BRITISH_MUSEUM
+            
+        for key_cm_str, width_val_cm in ruler_constants.items():
+            if key_cm_str in template_filename.lower():
                 target_physical_width_cm = width_val_cm
                 break
+                    
         if target_physical_width_cm is None:
             raise ValueError(
-                f"Could not determine target cm size from chosen digital template: {template_filename_lower}")
+                f"Could not determine target cm size from chosen digital template: {template_filename}")
 
     target_pixel_width = int(
         round(pixels_per_centimeter_scale * target_physical_width_cm))
