@@ -152,6 +152,11 @@ def calculate_stitching_layout(
         l_w, obv_w, r_w, rev_w, gap_px
     )
 
+    if rev_row_width > 0:
+        potential_canvas_widths.append(rev_row_width + 200)
+    if obv_row_width > 0:
+        potential_canvas_widths.append(obv_row_width + 200)
+
     for top_int in grouped_intermediates["obverse_top"]:
         potential_canvas_widths.append(top_int["dims"]["w"])
 
@@ -415,6 +420,13 @@ def calculate_stitching_layout(
         reverse_center_offset = obverse_center - reverse_center
         reverse_row_offset += reverse_center_offset
 
+    if reverse_row_offset < 100:
+        reverse_row_offset = 100
+    elif reverse_row_offset + rev_row_width > canvas_w - 100:
+        needed_width = reverse_row_offset + rev_row_width + 100
+        canvas_w = max(canvas_w, needed_width)
+        print(f"Canvas width expanded to {canvas_w} due to reverse row overflow")
+
     current_x = reverse_row_offset
     for element in rev_row_elements:
         key = element["key"]
@@ -474,19 +486,28 @@ def calculate_stitching_layout(
     canvas_h = y_curr + 100
 
     max_right_edge = 0
+    elements_to_adjust = []
     for key, (x, y) in coords.items():
         if key in object_images_dict:
             img_data = object_images_dict[key]
             if isinstance(img_data, np.ndarray) and img_data.size > 0:
                 img_width = img_data.shape[1]
-                max_right_edge = max(max_right_edge, x + img_width)
+                right_edge = x + img_width
+                max_right_edge = max(max_right_edge, right_edge)
+                if right_edge > canvas_w - 100:
+                    elements_to_adjust.append((key, right_edge))
         elif key in intermediate_dims:
             img_width = intermediate_dims[key]["w"]
-            max_right_edge = max(max_right_edge, x + img_width)
+            right_edge = x + img_width
+            max_right_edge = max(max_right_edge, right_edge)
+            if right_edge > canvas_w - 100:
+                elements_to_adjust.append((key, right_edge))
     
     if max_right_edge > canvas_w - 100:
+        old_canvas_w = canvas_w
         canvas_w = max_right_edge + 100
-        print(f"Canvas width expanded to {canvas_w} to accommodate all elements")
+        print(f"WARNING: Canvas width expanded from {old_canvas_w} to {canvas_w}")
+        print(f"Elements extending beyond original canvas: {[key for key, _ in elements_to_adjust]}")
 
     modified_images_dict = create_rotated_images(object_images_dict)
 
