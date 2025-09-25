@@ -152,12 +152,6 @@ def calculate_stitching_layout(
         l_w, obv_w, r_w, rev_w, gap_px
     )
 
-    # Add the actual row widths to potential canvas widths
-    if obv_row_width > 0:
-        potential_canvas_widths.append(obv_row_width)
-    if rev_row_width > 0:
-        potential_canvas_widths.append(rev_row_width)
-
     for top_int in grouped_intermediates["obverse_top"]:
         potential_canvas_widths.append(top_int["dims"]["w"])
 
