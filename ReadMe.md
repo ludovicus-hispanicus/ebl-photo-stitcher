@@ -281,6 +281,7 @@ You can package this application into a standalone executable using PyInstaller:
 
 ```bash
 pyinstaller eBLImageProcessor.spec
+```
 
 ## U2NET Model Setup
 The application uses the U2NET model for AI-powered object extraction via the rembg library. To avoid downloading the model during runtime:
