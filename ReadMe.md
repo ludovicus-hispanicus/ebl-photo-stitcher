@@ -283,6 +283,19 @@ You can package this application into a standalone executable using PyInstaller:
 pyinstaller eBLImageProcessor.spec
 ```
 
+For compilation with Mac: create a virtual environment using venv, install dependencies from `requirements.txt`, and executed `pyinstaller eBL_Photo_Stitcher_MacOS.spec`. There were issues `with requirements.txt`. The `git diff` is as follows:
+
+```
+-python-tk@3.9
+-inih
++# python-tk@3.9
++# inih
+ exiv2
+ piexif
+ ```
+
+`python-tk@3.9` and `inih` may have to be installed via `brew`. The program could be compiled on an Intel Mac, but not on a MacBook M1.
+
 ## U2NET Model Setup
 The application uses the U2NET model for AI-powered object extraction via the rembg library. To avoid downloading the model during runtime:
 
