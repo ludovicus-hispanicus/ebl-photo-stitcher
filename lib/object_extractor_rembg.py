@@ -256,12 +256,23 @@ def extract_and_save_center_object(
         f"  Extracting center object from: {os.path.basename(input_image_filepath)} using rembg")
     start_time = time.time()
 
+    if not isinstance(output_image_background_color, (tuple, list)):
+        print(f"    Warning: output_image_background_color is not a tuple/list: {type(output_image_background_color)}, using default (0,0,0)")
+        output_image_background_color = (0, 0, 0)
+
     if not _ensure_local_model():
         raise RuntimeError(
             "U2NET model is required but could not be downloaded or found.")
 
     try:
-        input_img = Image.open(input_image_filepath)
+        if input_image_filepath.lower().endswith(('.tif', '.tiff')):
+            img_bgr = cv2.imread(input_image_filepath, cv2.IMREAD_COLOR)
+            if img_bgr is None:
+                raise ValueError(f"OpenCV could not load TIFF file: {input_image_filepath}")
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            input_img = Image.fromarray(img_rgb)
+        else:
+            input_img = Image.open(input_image_filepath)
     except Exception as e:
         raise FileNotFoundError(
             f"Could not load image for object extraction: {input_image_filepath} - {e}")
@@ -343,9 +354,12 @@ def extract_and_save_center_object(
 
     cropped_img = filtered_output.crop(bbox)
 
-    bg_color_rgb = (output_image_background_color[2],
-                    output_image_background_color[1],
-                    output_image_background_color[0])
+    if not isinstance(output_image_background_color, (tuple, list)) or len(output_image_background_color) != 3:
+        output_image_background_color = (0, 0, 0)
+    
+    bg_color_rgb = (int(output_image_background_color[2]),
+                    int(output_image_background_color[1]),
+                    int(output_image_background_color[0]))
 
     bg_img = Image.new('RGB', cropped_img.size, bg_color_rgb)
 
@@ -355,8 +369,16 @@ def extract_and_save_center_object(
     output_image_filepath = f"{base_filepath}{output_filename_suffix}"
 
     try:
-
-        bg_img.save(output_image_filepath)
+        file_ext = os.path.splitext(output_image_filepath)[1].lower()
+        if file_ext in ['.tif', '.tiff']:
+            bg_img.save(output_image_filepath, format='TIFF')
+        elif file_ext in ['.jpg', '.jpeg']:
+            bg_img.save(output_image_filepath, format='JPEG')
+        elif file_ext == '.png':
+            bg_img.save(output_image_filepath, format='PNG')
+        else:
+            bg_img.save(output_image_filepath)
+            
         elapsed = time.time() - start_time
         print(
             f"    Successfully saved extracted artifact: {output_image_filepath} (took {elapsed:.2f}s)")

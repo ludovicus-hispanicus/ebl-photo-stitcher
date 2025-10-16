@@ -35,6 +35,7 @@ This project has been developed to streamline the image processing pipeline, ins
     * Supports ruler placement at top, bottom, left, or right of the image.
     * Special Iraq Museum ruler detection with dedicated algorithm.
     * Fallback to database measurements for British Museum Sippar Collection.
+    * **Manual Ruler Measurement:** Interactive GUI fallback that allows users to manually draw a line representing 1 cm on the photograph when automatic detection fails.
 * **Object Extraction:**
     * Uses state-of-the-art `rembg` library with U2NET model for precise object extraction.
     * Automatically selects the object closest to the image center among the largest detected objects.
@@ -66,6 +67,7 @@ The project is modular, with specific tasks handled by different Python scripts:
 * `lib/raw_processor.py`: Handles RAW (e.g., CR2) image conversion and initial processing, including Lensfunpy integration.
 * `lib/ruler_detector.py`: Detects the scale (pixels/cm) from an image containing a physical ruler.
 * `lib/ruler_detector_iraq_museum.py`: Special detector for Iraq Museum ruler format.
+* `lib/manual_ruler_gui.py`: Interactive GUI for manual ruler measurement when automatic detection fails.
 * `lib/object_extractor_rembg.py`: AI-powered object extraction using rembg and U2NET model.
 * `lib/object_extractor.py`: Legacy object extraction module (still used for ruler extraction).
 * `lib/remove_background.py`: Core logic for creating masks and selecting contours (artifact, ruler).
@@ -173,6 +175,27 @@ For the British Museum's Sippar Collection, you can optionally use pre-recorded 
    - Physical dimensions are used to calculate the scale without ruler detection
    - This can be useful when ruler detection is challenging or the ruler isn't clearly visible
 
+### Manual Ruler Measurement (Fallback)
+
+If automatic ruler detection fails for all presets, the application will automatically open an interactive GUI window where you can manually measure the ruler:
+
+1. **How it Works**: 
+   - A window displays the photograph with the ruler
+   - Click and drag to draw a line representing exactly 1 cm on the ruler
+   - The application automatically detects if your line is horizontal or vertical
+   - Click "Confirm" to accept the measurement, or "Clear Line" to start over
+
+2. **Manual Mode Option**: 
+   - Check "Manual drawing of ruler" in the Options section to force manual measurement mode
+   - When enabled, the manual GUI will appear for every image set, bypassing automatic detection
+   - This overrides all other measurement methods (automatic detection, database measurements, Excel measurements)
+
+3. **Tips for Manual Measurement**:
+   - Draw the line as accurately as possible along a clear 1 cm marking
+   - Use the full length of a 1 cm segment for better accuracy
+   - The line length is displayed in real-time as you draw
+   - Images are automatically scaled to fit your screen while maintaining accurate measurements
+
 ### Best Practices for Optimal Ruler Detection
 
 For reliable scale detection:
@@ -183,10 +206,10 @@ For reliable scale detection:
 4. **Image Quality**: Ensure the ruler is in focus and takes up a reasonable portion of the image edge.
 5. **Ruler View Image**: For best results, make sure the ruler is clearly visible in the designated image (typically `_02.tif` or `_03.tif`).
 
-If ruler detection fails, the application will report an error. You can:
-- Try a different ruler position
-- Improve the lighting or clarity of the ruler in your images
-- For British Museum Sippar Collection tablets, try using the database measurements option
+If automatic ruler detection fails, the application will:
+1. Try multiple detection presets automatically
+2. Fall back to manual ruler measurement GUI
+3. For British Museum Sippar Collection tablets, you can also try using the database measurements option
 
 ## Usage (Python)
 
@@ -231,7 +254,11 @@ For example, if your tablet has ID "IM.136546", the obverse image would be named
    - eBL Ruler (CBS): For tablets with eBL/CBS rulers
    - Non-eBL Ruler (VAM): For tablets with external/VAM rulers
 5. **Ruler Position:** Click on the abstract image representation to indicate where the physical ruler is located in your source images (used for scale detection). For Iraq Museum, the position is fixed at bottom-left.
-6. **Use measurements from database (Sippar Collection)**: When this option is checked and available, the application will use the known physical dimensions of a tablet from the program's database instead of relying on ruler detection. Only available for British Museum's Sippar Collection.
+6. **Options:**
+   - **Use measurements from database (Sippar Collection)**: When checked, the application will use the known physical dimensions of a tablet from the program's database instead of relying on ruler detection. Only available for British Museum's Sippar Collection.
+   - **Take measurements from first photograph only**: When checked, ruler detection runs only on the first image set, and the same scale is applied to all subsequent sets. Useful for batch processing with consistent photography setup.
+   - **Manual drawing of ruler**: When checked, forces the manual ruler measurement GUI to appear for every image set, bypassing automatic detection. Useful when automatic detection consistently fails or when you prefer manual control.
+   - **Enable HDR Processing**: Combines sets of 3 bracketed exposure images into HDR composites before processing.
 7. **Logo Options (Optional):** Check "Add Logo" and browse to your logo file if you want a logo on the final stitched image.
 8. Click **"Start Processing"**.
 

@@ -47,7 +47,8 @@ def run_complete_image_processing_workflow(
     measurements_dict=None,
     gradient_width_fraction=0.5,
     enable_hdr_processing=False,
-    use_first_photo_measurements=False
+    use_first_photo_measurements=False,
+    force_manual_ruler=False
 ):
     """Main workflow orchestration function."""
     
@@ -240,7 +241,8 @@ def run_complete_image_processing_workflow(
                 gradient_width_fraction, source_folder_path, photographer_name,
                 add_logo, logo_path, current_prog_base, prog_per_folder, progress_callback,
                 use_cached_measurements, cached_px_per_cm, cached_measurements_used,
-                cached_detected_bg_color, cached_output_bg_color
+                cached_detected_bg_color, cached_output_bg_color, app_root_window,
+                force_manual_ruler
             )
 
             if result['success']:
@@ -298,7 +300,8 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
                              source_folder_path, photographer_name, add_logo, logo_path,
                              current_prog_base, prog_per_folder, progress_callback,
                              use_cached_measurements=False, cached_px_per_cm=None, cached_measurements_used=None,
-                             cached_detected_bg_color=None, cached_output_bg_color=None
+                             cached_detected_bg_color=None, cached_output_bg_color=None,
+                             app_instance=None, force_manual_ruler=False
 ):
     """Process a single subfolder."""
 
@@ -329,10 +332,12 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
         measurements_used = cached_measurements_used
         cr2_conv_scale = 0
     else:
-        px_cm_val, measurements_used, cr2_conv_scale = determine_pixels_per_cm(
+        from workflow_scale_detection import determine_pixels_per_cm_with_fallback
+        px_cm_val, measurements_used, cr2_conv_scale, preset_used = determine_pixels_per_cm_with_fallback(
             subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
             raw_ext_config, museum_selection, ruler_position,
-            use_measurements_from_database, measurements_dict, background_color_tolerance
+            use_measurements_from_database, measurements_dict, background_color_tolerance,
+            app_instance, force_manual_ruler
         )
 
     result['cr2_conversions'] += cr2_conv_scale

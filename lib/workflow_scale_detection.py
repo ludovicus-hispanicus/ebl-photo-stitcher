@@ -14,6 +14,8 @@ def try_ruler_detection_with_fallback(primary_image_path, subfolder_path_item, r
     Returns:
         tuple: (px_cm_val, cr2_conv_count)
     """
+    
+    MIN_REASONABLE_PX_PER_CM = 100
 
     if museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)":
         def detector_func(img_path): return ruler_detector_iraq_museum.detect_1cm_distance_iraq(
@@ -42,12 +44,15 @@ def try_ruler_detection_with_fallback(primary_image_path, subfolder_path_item, r
 
     try:
         px_cm_val = detector_func(curr_scale_fp)
-        if px_cm_val is not None and px_cm_val > 0:
+        if px_cm_val is not None and px_cm_val >= MIN_REASONABLE_PX_PER_CM:
             print(
                 f"     {detector_name} ruler detector returned px/cm: {px_cm_val}")
             if is_temp_file and os.path.exists(curr_scale_fp):
                 os.remove(curr_scale_fp)
             return px_cm_val, cr2_conv_count
+        elif px_cm_val is not None and px_cm_val < MIN_REASONABLE_PX_PER_CM:
+            print(
+                f"   Primary image detection returned unreasonably low value: {px_cm_val} px/cm (minimum: {MIN_REASONABLE_PX_PER_CM})")
         else:
             print(
                 f"   Primary image detection failed or returned invalid value: {px_cm_val}")
@@ -107,12 +112,15 @@ def try_ruler_detection_with_fallback(primary_image_path, subfolder_path_item, r
             if fallback_is_temp and os.path.exists(fallback_curr_fp):
                 os.remove(fallback_curr_fp)
 
-            if px_cm_val is not None and px_cm_val > 0:
+            if px_cm_val is not None and px_cm_val >= MIN_REASONABLE_PX_PER_CM:
                 print(
                     f"   SUCCESS: Ruler detected in fallback image {os.path.basename(fallback_image)}")
                 print(
                     f"     {detector_name} ruler detector returned px/cm: {px_cm_val}")
                 return px_cm_val, cr2_conv_count
+            elif px_cm_val is not None and px_cm_val < MIN_REASONABLE_PX_PER_CM:
+                print(
+                    f"   Fallback detection returned unreasonably low value for {os.path.basename(fallback_image)}: {px_cm_val} px/cm (minimum: {MIN_REASONABLE_PX_PER_CM})")
             else:
                 print(
                     f"   Ruler detection failed for {os.path.basename(fallback_image)}")
@@ -202,10 +210,37 @@ def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_fo
 def determine_pixels_per_cm_with_fallback(subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
                                         raw_ext_config, museum_selection, ruler_position,
                                         use_measurements_from_database, measurements_dict,
-                                        background_color_tolerance=None, app_instance=None):
+                                        background_color_tolerance=None, app_instance=None,
+                                        force_manual_ruler=False):
     """
     Determine pixels per cm with automatic fallback to different ruler detection presets.
     """
+
+    if force_manual_ruler:
+        print(f"  Manual ruler drawing mode enabled - skipping automatic detection")
+        from manual_ruler_gui import get_manual_ruler_measurement
+        
+        image_path = ruler_for_scale_fp
+        if image_path.lower().endswith(raw_ext_config):
+            from workflow_imports import convert_raw_image_to_tiff
+            tmp_fp = os.path.join(
+                subfolder_path_item,
+                f"{os.path.splitext(os.path.basename(image_path))[0]}_manual_ruler.tif"
+            )
+            convert_raw_image_to_tiff(image_path, tmp_fp)
+            image_path = tmp_fp
+        
+        px_cm_val = get_manual_ruler_measurement(image_path)
+        
+        if image_path != ruler_for_scale_fp and os.path.exists(image_path):
+            os.remove(image_path)
+        
+        if px_cm_val is not None:
+            print(f"  ✓ Manual ruler measurement: {px_cm_val:.2f} px/cm")
+            return px_cm_val, False, 0, "Manual measurement"
+        else:
+            print(f"  ✗ Manual ruler measurement cancelled")
+            return None, False, 0, "Manual measurement cancelled"
 
     from ruler_presets import (
         get_default_ruler_settings,
@@ -279,7 +314,31 @@ def determine_pixels_per_cm_with_fallback(subfolder_path_item, subfolder_name_it
             print(f"  ✗ Error with {preset_name}: {e}")
 
     print(f"  ✗ All ruler detection presets failed for {subfolder_name_item}")
-    return None, False, 0, "All presets failed"
+    print(f"  Falling back to manual ruler measurement...")
+    
+    from manual_ruler_gui import get_manual_ruler_measurement
+    
+    image_path = ruler_for_scale_fp
+    if image_path.lower().endswith(raw_ext_config):
+        from workflow_imports import convert_raw_image_to_tiff
+        tmp_fp = os.path.join(
+            subfolder_path_item,
+            f"{os.path.splitext(os.path.basename(image_path))[0]}_manual_ruler.tif"
+        )
+        convert_raw_image_to_tiff(image_path, tmp_fp)
+        image_path = tmp_fp
+    
+    px_cm_val = get_manual_ruler_measurement(image_path)
+    
+    if image_path != ruler_for_scale_fp and os.path.exists(image_path):
+        os.remove(image_path)
+    
+    if px_cm_val is not None:
+        print(f"  ✓ Manual ruler measurement: {px_cm_val:.2f} px/cm")
+        return px_cm_val, False, 0, "Manual measurement (fallback)"
+    else:
+        print(f"  ✗ Manual ruler measurement cancelled")
+        return None, False, 0, "All presets failed"
 
 def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
                             raw_ext_config, museum_selection, ruler_position,
@@ -289,22 +348,26 @@ def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_
     px_cm_val = None
     measurements_used = False
     cr2_conv_count = 0
+    
+    MIN_REASONABLE_PX_PER_CM = 100
+    MAX_REASONABLE_PX_PER_CM = 1500
 
-    # First try measurements if requested
     if use_measurements_from_database and measurements_dict:
         px_cm_val, measurements_used = get_scale_from_measurements(
             subfolder_path_item, measurements_dict, ruler_for_scale_fp, background_color_tolerance)
 
-    # If no measurement found or not using measurements, try ruler detection
     if px_cm_val is None:
         try:
             px_cm_val, cr2_conv_count = detect_scale_from_ruler(
                 ruler_for_scale_fp, subfolder_path_item, raw_ext_config,
                 museum_selection, ruler_position)
             
-            # NEW: Check if detected size is unreasonably high (over 1000 px/cm)
-            if px_cm_val is not None and px_cm_val > 1000:
-                print(f"   WARNING: Detected px/cm value ({px_cm_val:.2f}) seems too high (>1000), trying measurement fallback...")
+            if px_cm_val is not None and px_cm_val < MIN_REASONABLE_PX_PER_CM:
+                print(f"   WARNING: Detected px/cm value ({px_cm_val:.2f}) is too low (<{MIN_REASONABLE_PX_PER_CM}), rejecting...")
+                px_cm_val = None
+            
+            if px_cm_val is not None and px_cm_val > MAX_REASONABLE_PX_PER_CM:
+                print(f"   WARNING: Detected px/cm value ({px_cm_val:.2f}) is too high (>{MAX_REASONABLE_PX_PER_CM}), trying measurement fallback...")
                 
                 # Try to get measurement from database as fallback
                 if measurements_dict:
