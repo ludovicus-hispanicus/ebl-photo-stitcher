@@ -265,12 +265,14 @@ def extract_and_save_center_object(
             "U2NET model is required but could not be downloaded or found.")
 
     try:
-        input_img = Image.open(input_image_filepath)
-        
-        if input_img.format == 'TIFF':
-            input_img = input_img.convert('RGB')
-            img_data = input_img.tobytes()
-            input_img = Image.frombytes('RGB', input_img.size, img_data)
+        if input_image_filepath.lower().endswith(('.tif', '.tiff')):
+            img_bgr = cv2.imread(input_image_filepath, cv2.IMREAD_COLOR)
+            if img_bgr is None:
+                raise ValueError(f"OpenCV could not load TIFF file: {input_image_filepath}")
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            input_img = Image.fromarray(img_rgb)
+        else:
+            input_img = Image.open(input_image_filepath)
     except Exception as e:
         raise FileNotFoundError(
             f"Could not load image for object extraction: {input_image_filepath} - {e}")
