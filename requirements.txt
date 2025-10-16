@@ -9,7 +9,14 @@ numpy>=1.19.0
 imageio>=2.9.0
 rawpy>=0.16.0
 pyexiv2>=2.8.0
+
+# SVG Processing (requires GTK3 runtime on Windows)
 cairosvg>=2.5.2
+cairocffi>=1.2.0
+tinycss2>=1.1.0
+cssselect2>=0.4.0
+defusedxml>=0.7.0
+webencodings>=0.5.0
 
 # Background Removal (rembg functionality)
 rembg>=2.0.0
