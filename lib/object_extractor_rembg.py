@@ -266,6 +266,10 @@ def extract_and_save_center_object(
 
     try:
         input_img = Image.open(input_image_filepath)
+        
+        if input_img.format == 'TIFF':
+            img_array = np.array(input_img)
+            input_img = Image.fromarray(img_array)
     except Exception as e:
         raise FileNotFoundError(
             f"Could not load image for object extraction: {input_image_filepath} - {e}")
