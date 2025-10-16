@@ -109,6 +109,7 @@ class ImageProcessorApp:
         self.use_measurements_var = tk.BooleanVar(value=False)
         self.enable_hdr_processing = tk.BooleanVar(value=False)
         self.use_first_photo_measurements_var = tk.BooleanVar(value=False)
+        self.manual_ruler_var = tk.BooleanVar(value=False)
         self.gradient_width_fraction = 0.5
 
         self.measurements_loaded = False
@@ -181,10 +182,10 @@ class ImageProcessorApp:
             self.main_tab, self.museum_var, self.ruler_position_var,
             self.on_museum_changed, self.on_ruler_canvas_click)
 
-        self.options_frame, self.measurements_checkbox, self.hdr_checkbox, self.first_photo_measurements_checkbox = UIComponents.create_main_options_ui(
+        self.options_frame, self.measurements_checkbox, self.hdr_checkbox, self.first_photo_measurements_checkbox, self.manual_ruler_checkbox = UIComponents.create_main_options_ui(
             self.main_tab, self.use_measurements_var, self.measurements_loaded,
             self.enable_hdr_processing, self.use_first_photo_measurements_var,
-            script_directory, self.debug_measurements_loading)
+            self.manual_ruler_var, script_directory, self.debug_measurements_loading)
 
         self.prb = UIComponents.create_process_button_ui(
             self.main_tab, self.start_processing_thread)
@@ -269,8 +270,9 @@ class ImageProcessorApp:
             'museum': self.museum_var.get(),
             'use_measurements': self.use_measurements_var.get(),
             'enable_hdr_processing': self.enable_hdr_processing.get(),
-            'advanced_settings': advanced_settings,  # Save advanced settings including rotation
-            'ruler_settings': ruler_settings  # Save ruler settings including custom measurements
+            'manual_ruler': self.manual_ruler_var.get(),
+            'advanced_settings': advanced_settings,
+            'ruler_settings': ruler_settings
         }
         try:
             with open(self.config_file_path, 'w') as f:
@@ -296,6 +298,7 @@ class ImageProcessorApp:
             self.museum_var.set(config_data.get('museum', 'British Museum'))
             self.use_measurements_var.set(config_data.get('use_measurements', False))
             self.enable_hdr_processing.set(config_data.get('enable_hdr_processing', False))
+            self.manual_ruler_var.set(config_data.get('manual_ruler', False))
 
             if hasattr(self, 'advanced_tab') and 'advanced_settings' in config_data:
                 try:
@@ -382,7 +385,8 @@ class ImageProcessorApp:
             'measurements_dict': final_measurements_dict,
             'gradient_width_fraction': advanced_settings['gradient_width_fraction'],
             'enable_hdr_processing': self.enable_hdr_processing.get(),
-            'use_first_photo_measurements': self.use_first_photo_measurements_var.get()
+            'use_first_photo_measurements': self.use_first_photo_measurements_var.get(),
+            'force_manual_ruler': self.manual_ruler_var.get()
         }
 
         self.configure_museum_settings(self.museum_var.get())

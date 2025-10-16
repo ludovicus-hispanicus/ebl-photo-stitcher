@@ -202,10 +202,37 @@ def get_scale_from_measurements(subfolder_path_item, measurements_dict, ruler_fo
 def determine_pixels_per_cm_with_fallback(subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
                                         raw_ext_config, museum_selection, ruler_position,
                                         use_measurements_from_database, measurements_dict,
-                                        background_color_tolerance=None, app_instance=None):
+                                        background_color_tolerance=None, app_instance=None,
+                                        force_manual_ruler=False):
     """
     Determine pixels per cm with automatic fallback to different ruler detection presets.
     """
+
+    if force_manual_ruler:
+        print(f"  Manual ruler drawing mode enabled - skipping automatic detection")
+        from manual_ruler_gui import get_manual_ruler_measurement
+        
+        image_path = ruler_for_scale_fp
+        if image_path.lower().endswith(raw_ext_config):
+            from workflow_imports import convert_raw_image_to_tiff
+            tmp_fp = os.path.join(
+                subfolder_path_item,
+                f"{os.path.splitext(os.path.basename(image_path))[0]}_manual_ruler.tif"
+            )
+            convert_raw_image_to_tiff(image_path, tmp_fp)
+            image_path = tmp_fp
+        
+        px_cm_val = get_manual_ruler_measurement(image_path)
+        
+        if image_path != ruler_for_scale_fp and os.path.exists(image_path):
+            os.remove(image_path)
+        
+        if px_cm_val is not None:
+            print(f"  ✓ Manual ruler measurement: {px_cm_val:.2f} px/cm")
+            return px_cm_val, False, 0, "Manual measurement"
+        else:
+            print(f"  ✗ Manual ruler measurement cancelled")
+            return None, False, 0, "Manual measurement cancelled"
 
     from ruler_presets import (
         get_default_ruler_settings,
@@ -279,7 +306,31 @@ def determine_pixels_per_cm_with_fallback(subfolder_path_item, subfolder_name_it
             print(f"  ✗ Error with {preset_name}: {e}")
 
     print(f"  ✗ All ruler detection presets failed for {subfolder_name_item}")
-    return None, False, 0, "All presets failed"
+    print(f"  Falling back to manual ruler measurement...")
+    
+    from manual_ruler_gui import get_manual_ruler_measurement
+    
+    image_path = ruler_for_scale_fp
+    if image_path.lower().endswith(raw_ext_config):
+        from workflow_imports import convert_raw_image_to_tiff
+        tmp_fp = os.path.join(
+            subfolder_path_item,
+            f"{os.path.splitext(os.path.basename(image_path))[0]}_manual_ruler.tif"
+        )
+        convert_raw_image_to_tiff(image_path, tmp_fp)
+        image_path = tmp_fp
+    
+    px_cm_val = get_manual_ruler_measurement(image_path)
+    
+    if image_path != ruler_for_scale_fp and os.path.exists(image_path):
+        os.remove(image_path)
+    
+    if px_cm_val is not None:
+        print(f"  ✓ Manual ruler measurement: {px_cm_val:.2f} px/cm")
+        return px_cm_val, False, 0, "Manual measurement (fallback)"
+    else:
+        print(f"  ✗ Manual ruler measurement cancelled")
+        return None, False, 0, "All presets failed"
 
 def determine_pixels_per_cm(subfolder_path_item, subfolder_name_item, ruler_for_scale_fp,
                             raw_ext_config, museum_selection, ruler_position,

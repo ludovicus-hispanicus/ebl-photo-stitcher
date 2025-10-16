@@ -89,8 +89,8 @@ class UIComponents:
     @staticmethod
     def create_main_options_ui(parent, use_measurements_var, measurements_loaded,
                           enable_hdr_var, use_first_photo_measurements_var, 
-                          script_directory, debug_callback):
-        """Create main options UI (measurements, first photo measurements, and HDR)."""
+                          manual_ruler_var, script_directory, debug_callback):
+        """Create main options UI (measurements, first photo measurements, manual ruler, and HDR)."""
 
         options_frame = ttk.LabelFrame(parent, text="Options")
         options_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
@@ -134,7 +134,22 @@ class UIComponents:
             font=("", 8),
             foreground="gray"
         )
-        first_photo_description.pack(anchor=tk.W, padx=50, pady=(0, 0))
+        first_photo_description.pack(anchor=tk.W, padx=50, pady=(0, 5))
+
+        manual_ruler_checkbox = ttk.Checkbutton(
+            options_frame,
+            text="Manual drawing of ruler",
+            variable=manual_ruler_var
+        )
+        manual_ruler_checkbox.pack(anchor=tk.W, padx=10, pady=(0, 0))
+
+        manual_ruler_description = ttk.Label(
+            options_frame,
+            text="Draw a line representing 1 cm on the ruler (overrides automatic detection)",
+            font=("", 8),
+            foreground="gray"
+        )
+        manual_ruler_description.pack(anchor=tk.W, padx=30, pady=(0, 5))
 
         hdr_checkbox = ttk.Checkbutton(
             options_frame,
@@ -151,7 +166,7 @@ class UIComponents:
         )
         hdr_description.pack(anchor=tk.W, padx=30, pady=(0, 0))
 
-        return options_frame, measurements_checkbox, hdr_checkbox, first_photo_measurements_checkbox
+        return options_frame, measurements_checkbox, hdr_checkbox, first_photo_measurements_checkbox, manual_ruler_checkbox
 
     @staticmethod
     def create_process_button_ui(parent, start_processing_callback):
