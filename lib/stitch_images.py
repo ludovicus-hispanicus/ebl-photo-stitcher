@@ -222,11 +222,14 @@ def process_tablet_subfolder(
     return tiff_path, jpg_path
 
 
-def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coords, bg_color, custom_layout=None, blend_overlap_px=DEFAULT_BLEND_OVERLAP_PX):
+def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coords, bg_color, custom_layout=None, blend_overlap_px=DEFAULT_BLEND_OVERLAP_PX, image_paths=None):
     """
     Create a blank canvas and place all images according to the calculated layout.
     Handles single images and sequences of intermediate images with gradient blending.
     Then crop to content bounds.
+
+    If image_paths is provided, images are loaded lazily from disk instead of from images_dict,
+    reducing peak memory usage.
     """
 
     canvas = np.full((canvas_height, canvas_width, 3), bg_color, dtype=np.uint8)
@@ -234,7 +237,11 @@ def create_stitched_canvas(canvas_width, canvas_height, images_dict, layout_coor
     processed_view_segments = {}
 
     for view_key, coords_tuple in layout_coords.items():
+        # Lazy loading: load from disk if path available, otherwise use pre-loaded dict
         image_data = images_dict.get(view_key)
+        if image_data is None and image_paths and view_key in image_paths:
+            from stitch_file_utils import load_single_image
+            image_data = load_single_image(image_paths[view_key])
         if image_data is None:
             continue
 

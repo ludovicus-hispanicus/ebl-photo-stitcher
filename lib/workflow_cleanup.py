@@ -76,6 +76,32 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
     print(f"--- Cleanup complete: {total_removed} files/folders removed ---")
 
 
+def normalize_subfolder_names(processed_subfolders):
+    """
+    Normalize subfolder names by replacing spaces with dots.
+    E.g., 'Si 10' -> 'Si.10'
+    """
+    import re
+    renamed_count = 0
+
+    for subfolder_path in processed_subfolders:
+        folder_name = os.path.basename(subfolder_path)
+        # Replace spaces between a prefix and number with a dot
+        normalized = re.sub(r'(\w+)\s+(\d+)', r'\1.\2', folder_name)
+
+        if normalized != folder_name:
+            new_path = os.path.join(os.path.dirname(subfolder_path), normalized)
+            if not os.path.exists(new_path):
+                try:
+                    os.rename(subfolder_path, new_path)
+                    renamed_count += 1
+                except OSError as e:
+                    print(f"  Warning: Could not rename folder '{folder_name}' to '{normalized}': {e}")
+
+    if renamed_count > 0:
+        print(f"  Normalized {renamed_count} folder name(s) (spaces -> dots)")
+
+
 def cleanup_temp_files(*file_paths):
     """
     Clean up temporary files if they exist.

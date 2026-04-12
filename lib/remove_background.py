@@ -76,6 +76,15 @@ def detect_dominant_corner_background_color(
 
 
 def get_museum_background_color(museum_selection=None, detected_bg_color=(0, 0, 0)):
+    # Prefer the active project's configured background color if available
+    try:
+        import project_manager
+        active = project_manager.get_active_project()
+        if active is not None and active.get("name") == museum_selection:
+            bg = project_manager.get_project_background_color(active)
+            return bg
+    except Exception:
+        pass
 
     if museum_selection is None or museum_selection == "British Museum" or museum_selection == "Black background (Jena)":
         return (0, 0, 0)

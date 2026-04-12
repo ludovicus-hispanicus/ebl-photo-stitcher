@@ -4,9 +4,35 @@ import os
 import sys
 import shutil
 import time
-from rembg import remove
+from rembg import remove, new_session
 from PIL import Image, ImageOps
 from object_extractor import DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE
+
+# Global session for rembg - reused across calls, initialized once with GPU if available
+_rembg_session = None
+
+
+def _get_rembg_session():
+    """Get or create the rembg session, using GPU if available."""
+    global _rembg_session
+    if _rembg_session is not None:
+        return _rembg_session
+
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+
+        if 'CUDAExecutionProvider' in providers:
+            print("  rembg: Using GPU (CUDA) for background removal")
+            _rembg_session = new_session("u2net", providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+        else:
+            print("  rembg: Using CPU for background removal (install onnxruntime-gpu for GPU support)")
+            _rembg_session = new_session("u2net", providers=['CPUExecutionProvider'])
+    except Exception as e:
+        print(f"  rembg: Could not create optimized session ({e}), using default")
+        _rembg_session = new_session("u2net")
+
+    return _rembg_session
 
 
 def _download_with_progress(url, destination, max_retries=3):
@@ -277,7 +303,8 @@ def extract_and_save_center_object(
         raise FileNotFoundError(
             f"Could not load image for object extraction: {input_image_filepath} - {e}")
 
-    output_img = remove(input_img)
+    session = _get_rembg_session()
+    output_img = remove(input_img, session=session)
 
     alpha = np.array(output_img.getchannel('A'))
     custom_alpha_tolerance = DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE * 2
@@ -383,9 +410,14 @@ def extract_and_save_center_object(
         print(
             f"    Successfully saved extracted artifact: {output_image_filepath} (took {elapsed:.2f}s)")
 
+        # Free large arrays to reduce memory pressure
+        del output_img, input_img, alpha, binary_mask
+        import gc
+        gc.collect()
+
         dummy_contour = np.array(
             [[[0, 0]], [[0, 1]], [[1, 1]], [[1, 0]]], dtype=np.int32)
-        
+
         return output_image_filepath, dummy_contour
     except Exception as e:
         raise IOError(

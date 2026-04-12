@@ -27,39 +27,36 @@ def calculate_deviation_percentage(reference_value: float, calculated_value: flo
 
 def load_sippar_reference_data() -> Dict[str, Dict]:
     """
-    Load reference measurements from assets/sippar.json.
+    Load BM reference measurements from assets/bm_measurements.json.
+    (Historical name kept for backward compatibility.)
 
     Returns:
         Dictionary mapping object IDs to their reference measurements
     """
     try:
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        sippar_path = os.path.join(script_dir, "assets", "sippar.json")
+        bm_path = os.path.join(script_dir, "assets", "bm_measurements.json")
 
-        if not os.path.exists(sippar_path):
-            print(f"Warning: sippar.json not found at {sippar_path}")
-            return {}
+        if not os.path.exists(bm_path):
+            # Try old name as fallback
+            bm_path = os.path.join(script_dir, "assets", "sippar.json")
+            if not os.path.exists(bm_path):
+                print(f"Warning: bm_measurements.json not found at {script_dir}/assets/")
+                return {}
 
-        with open(sippar_path, 'r', encoding='utf-8') as f:
-            sippar_list = json.load(f)
+        with open(bm_path, 'r', encoding='utf-8') as f:
+            bm_list = json.load(f)
 
-        sippar_dict = {}
-        items_processed = 0
-        items_with_id = 0
-
-        for item in sippar_list:
-            items_processed += 1
+        bm_dict = {}
+        for item in bm_list:
             if isinstance(item, dict) and "_id" in item:
-                items_with_id += 1
-                object_id = item["_id"]
-                sippar_dict[object_id] = item
+                bm_dict[item["_id"]] = item
 
-        print(f"Loaded {len(sippar_dict)} reference measurements from sippar.json")
-
-        return sippar_dict
+        print(f"Loaded {len(bm_dict)} reference measurements from {os.path.basename(bm_path)}")
+        return bm_dict
 
     except Exception as e:
-        print(f"Error loading sippar.json: {e}")
+        print(f"Error loading BM measurements: {e}")
         import traceback
         traceback.print_exc()
         return {}

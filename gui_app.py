@@ -11,7 +11,7 @@ if lib_directory not in sys.path:
     sys.path.insert(0, lib_directory)
 
 try:
-    from gui_utils import resource_path, get_persistent_config_dir_path, TextRedirector
+    from gui_utils import resource_path, get_persistent_config_dir_path, TextRedirector, LogPanel
     from gui_config_manager import (
         DEFAULT_PHOTOGRAPHER,
     )
@@ -34,8 +34,9 @@ try:
     )
     from put_images_in_subfolders import group_and_move_files_to_subfolders as organize_to_subfolders
     from measurements_utils import load_measurements_from_json
-    from gui_advanced import AdvancedTab, AdvancedRulerTab, AdvancedLogoTab
-
+    from gui_advanced import AdvancedTab, AdvancedRulerTab
+    from gui_config_tab import ProjectConfigTab
+    import project_manager
     from gui_components import UIComponents
     from gui_layout import LayoutManager
     update_version_button = LayoutManager.update_version_button
@@ -96,7 +97,7 @@ class ImageProcessorApp:
 
         self.root = root_window
         self.root.title(f"eBL Photo Stitcher {CURRENT_VERSION}")
-        self.root.geometry("600x950")
+        self.root.geometry("1100x800")
 
         self.config_file_path = os.path.join(
             get_persistent_config_dir_path(), "gui_config.json")
@@ -114,12 +115,12 @@ class ImageProcessorApp:
 
         self.measurements_loaded = False
         self.measurements_dict = {}
-        measurements_file = resource_path(
-            os.path.join(ASSETS_SUBFOLDER, "sippar.json"))
-        if os.path.exists(measurements_file):
-            self.measurements_dict = load_measurements_from_json(
-                measurements_file)
-            self.measurements_loaded = len(self.measurements_dict) > 0
+        # Set a default project name; will be overridden by saved config if present
+        projects = project_manager.list_projects()
+        if projects:
+            self.museum_var.set(projects[0]["name"])
+            project_manager.set_active_project(projects[0])
+        self._load_default_measurements()
 
         self.version_checker = VersionChecker(callback=self._on_version_check_complete)
         self.version_button = None
@@ -157,11 +158,16 @@ class ImageProcessorApp:
                        foreground=[('active', 'darkblue')])
 
     def _create_widgets(self):
-        """Create all UI widgets."""
+        """Create all UI widgets with a left/right PanedWindow layout."""
         mf = ttk.Frame(self.root, padding="10")
         mf.pack(expand=True, fill=tk.BOTH)
 
-        self.header_frame, self.notebook, buttons_frame = LayoutManager.create_tabs(mf)
+        # --- Top bar: version + help buttons ---
+        top_bar = ttk.Frame(mf)
+        top_bar.pack(fill=tk.X, pady=(0, 5))
+
+        buttons_frame = ttk.Frame(top_bar)
+        buttons_frame.pack(side=tk.RIGHT)
 
         self.version_button = LayoutManager.create_version_button(
             buttons_frame, self._on_version_button_click)
@@ -169,18 +175,30 @@ class ImageProcessorApp:
         self.help_btn = LayoutManager.create_help_link(
             buttons_frame, self.HELP_URL)
 
+        # --- PanedWindow: controls (left) | log panel (right) ---
+        self.paned = tk.PanedWindow(mf, orient=tk.HORIZONTAL, sashwidth=6,
+                                     sashrelief=tk.RAISED, bg="#cccccc")
+        self.paned.pack(fill=tk.BOTH, expand=True)
+
+        # Left pane: notebook with tabs
+        left_pane = ttk.Frame(self.paned)
+        self.paned.add(left_pane, minsize=400, stretch="never")
+
+        self.notebook = ttk.Notebook(left_pane)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+        # Keep reference for LayoutManager compatibility
+        self.header_frame = top_bar
+
         self.main_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.main_tab, text="Main")
 
         self.folder_frame, self.fe = UIComponents.create_folder_selection_ui(
             self.main_tab, self.input_folder_var, self.browse_folder)
 
-        self.metadata_frame, self.pe = UIComponents.create_photographer_ui(
-            self.main_tab, self.photographer_var)
-
-        self.ruler_frame, self.rc, self.canvas_params, self.museum_combo = UIComponents.create_ruler_pos_ui(
-            self.main_tab, self.museum_var, self.ruler_position_var,
-            self.on_museum_changed, self.on_ruler_canvas_click)
+        project_names = [p["name"] for p in project_manager.list_projects()]
+        self.ruler_frame, self.museum_combo = UIComponents.create_project_selector_ui(
+            self.main_tab, self.museum_var, self.on_museum_changed,
+            project_names=project_names)
 
         self.options_frame, self.measurements_checkbox, self.hdr_checkbox, self.first_photo_measurements_checkbox, self.manual_ruler_checkbox = UIComponents.create_main_options_ui(
             self.main_tab, self.use_measurements_var, self.measurements_loaded,
@@ -193,55 +211,88 @@ class ImageProcessorApp:
         self.progress_frame, self.progress_bar, self.progress_var = UIComponents.create_progress_bar_ui(
             self.main_tab)
 
-        self.log_frame = ttk.LabelFrame(
-            self.main_tab, text="Processing Log", padding="5")
-        self.log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        # Right pane: log panel
+        self.log_panel = LogPanel(self.paned)
+        self.paned.add(self.log_panel, minsize=300, stretch="always")
 
-        text_frame = ttk.Frame(self.log_frame)
-        text_frame.pack(fill=tk.BOTH, expand=True)
+        self.lt = self.log_panel.get_text_widget()
+        sys.stdout = TextRedirector(self.lt, log_panel=self.log_panel)
 
-        self.lt = tk.Text(text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
-                          bg="#f0f0f0", font=("Consolas", 9))
-
-        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.lt.yview)
-
-        self.lt.configure(yscrollcommand=scrollbar.set)
-
-        self.lt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        sys.stdout = TextRedirector(self.lt)
-
+        self.project_config_tab = ProjectConfigTab(
+            self.notebook, on_project_changed=self._on_project_edited)
         self.advanced_tab = AdvancedTab(self.notebook)
         self.advanced_ruler_tab = AdvancedRulerTab(self.notebook, self.root)
-        self.advanced_logo_tab = AdvancedLogoTab(self.notebook, self.root)
 
         settings = {
             'gradient_width_fraction': self.gradient_width_fraction,
             'background_color_tolerance': self.DEFAULT_BACKGROUND_DETECTION_COLOR_TOLERANCE,
-            'add_logo': False,
-            'logo_path': ''
         }
         self.advanced_tab.set_settings(settings)
 
-    def draw_ruler_selector(self):
-        """Draw the ruler selector canvas."""
-        LayoutManager.draw_ruler_selector(
-            self.rc, self.ruler_position_var.get(),
-            self.museum_var.get(), self.canvas_params)
+    def _load_default_measurements(self):
+        """Load the measurements file specified by the active project.
+        Supports both JSON and Excel (.xlsx/.xls) formats."""
+        project = project_manager.get_project_by_name(self.museum_var.get())
+        measurements_filename = (project or {}).get("measurements_file", "")
 
-    def on_ruler_canvas_click(self, event):
-        """Handle clicks on the ruler canvas."""
-        EventHandlers.handle_ruler_canvas_click(
-            event, self.canvas_params, self.ruler_position_var,
-            self.museum_var, self.draw_ruler_selector)
+        self.measurements_dict = {}
+        self.measurements_loaded = False
+
+        if measurements_filename:
+            measurements_file = project_manager.resolve_asset_path(measurements_filename)
+            if os.path.exists(measurements_file):
+                ext = os.path.splitext(measurements_file)[1].lower()
+                try:
+                    if ext in ('.xlsx', '.xls'):
+                        from measurements_utils import load_measurements_from_excel
+                        self.measurements_dict = load_measurements_from_excel(measurements_file)
+                    else:
+                        self.measurements_dict = load_measurements_from_json(measurements_file)
+                    self.measurements_loaded = len(self.measurements_dict) > 0
+                    if self.measurements_loaded:
+                        print(f"Loaded {len(self.measurements_dict)} measurements from {os.path.basename(measurements_file)}")
+                except Exception as e:
+                    print(f"Warning: Could not load measurements file {measurements_file}: {e}")
+
+        # Update the status label if it exists
+        if hasattr(self, 'measurements_checkbox'):
+            try:
+                if self.measurements_loaded:
+                    self.measurements_checkbox.config(
+                        text="\u2713 Project measurements will be used for scale",
+                        foreground="#4caf50",
+                    )
+                else:
+                    self.measurements_checkbox.config(
+                        text="(no measurements database \u2014 ruler detection will be used)",
+                        foreground="gray",
+                    )
+            except Exception:
+                pass
 
     def on_museum_changed(self, event):
-        """Handle museum selection changes."""
-        EventHandlers.handle_museum_change(
-            event, self.museum_var, self.ruler_position_var,
-            self.measurements_checkbox, self.measurements_loaded,
-            self.draw_ruler_selector, self.save_config)
+        """Handle project selection changes from the Main tab."""
+        selected_name = self.museum_var.get()
+        if hasattr(self, 'config_tab'):
+            self.config_tab.set_active_project_by_name(selected_name)
+        else:
+            project = project_manager.get_project_by_name(selected_name)
+            if project is not None:
+                project_manager.set_active_project(project)
+        self._load_default_measurements()
+        self.save_config()
+
+    def _on_project_edited(self, project):
+        """Callback fired when the Configuration tab switches or saves a project."""
+        names = [p["name"] for p in project_manager.list_projects()]
+        try:
+            self.museum_combo["values"] = names
+        except Exception:
+            pass
+        if self.museum_var.get() != project["name"]:
+            self.museum_var.set(project["name"])
+            self._load_default_measurements()
+            self.save_config()
 
     def browse_folder(self):
         """Browse for input folder."""
@@ -255,24 +306,22 @@ class ImageProcessorApp:
                 advanced_settings = self.advanced_tab.get_settings()
         except:
             pass
-        
+
         ruler_settings = {}
         try:
             if hasattr(self, 'advanced_ruler_tab'):
                 ruler_settings = self.advanced_ruler_tab.get_settings()
         except:
             pass
-            
+
         config_data = {
             'input_folder': self.input_folder_var.get(),
-            'ruler_position': self.ruler_position_var.get(),
-            'photographer': self.photographer_var.get(),
             'museum': self.museum_var.get(),
             'use_measurements': self.use_measurements_var.get(),
             'enable_hdr_processing': self.enable_hdr_processing.get(),
             'manual_ruler': self.manual_ruler_var.get(),
             'advanced_settings': advanced_settings,
-            'ruler_settings': ruler_settings
+            'ruler_settings': ruler_settings,
         }
         try:
             with open(self.config_file_path, 'w') as f:
@@ -293,9 +342,10 @@ class ImageProcessorApp:
 
         if config_data:
             self.input_folder_var.set(config_data.get('input_folder', ''))
-            self.ruler_position_var.set(config_data.get('ruler_position', 'top'))
-            self.photographer_var.set(config_data.get('photographer', DEFAULT_PHOTOGRAPHER))
-            self.museum_var.set(config_data.get('museum', 'British Museum'))
+            saved_museum = config_data.get('museum', '')
+            if project_manager.get_project_by_name(saved_museum):
+                self.museum_var.set(saved_museum)
+            # else keep the default already set in __init__
             self.use_measurements_var.set(config_data.get('use_measurements', False))
             self.enable_hdr_processing.set(config_data.get('enable_hdr_processing', False))
             self.manual_ruler_var.set(config_data.get('manual_ruler', False))
@@ -305,14 +355,10 @@ class ImageProcessorApp:
                     self.advanced_tab.set_settings(config_data['advanced_settings'])
                 except Exception as e:
                     print(f"Warning: Could not load advanced settings: {e}")
-            
+
             if hasattr(self, 'advanced_ruler_tab') and 'ruler_settings' in config_data:
                 try:
                     self.advanced_ruler_tab.set_settings(config_data['ruler_settings'])
-                    # Reload Excel file if it was previously loaded
-                    excel_file = config_data['ruler_settings'].get('custom_measurements_file', '')
-                    if excel_file and os.path.exists(excel_file):
-                        self.advanced_ruler_tab._load_excel_measurements(excel_file)
                 except Exception as e:
                     print(f"Warning: Could not load ruler settings: {e}")
 
@@ -338,30 +384,39 @@ class ImageProcessorApp:
     def start_processing_thread(self):
         """Start the processing thread with current settings."""
         advanced_settings = self.advanced_tab.get_settings()
-        logo_settings = self.advanced_logo_tab.get_settings()
-        ruler_settings = self.advanced_ruler_tab.get_settings()
-        
-        combined_settings = {**advanced_settings, **logo_settings, **ruler_settings}
 
-        # Prepare measurements - prioritize custom Excel measurements if available
+        # Pull logo settings from the active project
+        active_project = self.project_config_tab.get_active_project() or {}
+        logo_settings = {
+            'add_logo': bool(active_project.get('logo_enabled')),
+            'logo_path': active_project.get('logo_path', '') or '',
+        }
+        project_manager.set_active_project(active_project or None)
+
+        combined_settings = {**advanced_settings, **logo_settings}
+
+        # Use reference measurements automatically if the active project has any
         final_measurements_dict = self.measurements_dict.copy()
-        custom_measurements = ruler_settings.get('custom_measurements_dict', {})
-        has_excel_measurements = bool(custom_measurements)
-        if custom_measurements:
-            print(f"Using custom measurements from Excel file ({len(custom_measurements)} entries)")
-            # Import merge function and merge the measurements
-            from measurements_utils import merge_measurements_dicts
-            final_measurements_dict = merge_measurements_dicts(final_measurements_dict, custom_measurements)
+        use_measurements = bool(final_measurements_dict)
 
-        # Determine if measurements should be used - either from GUI checkbox or automatically if Excel measurements exist
-        use_measurements = self.use_measurements_var.get() or has_excel_measurements
-        if has_excel_measurements and not self.use_measurements_var.get():
-            print("Automatically enabling measurements processing for Excel measurements")
+        # Get photographer from project config
+        photographer = ''
+        if hasattr(self, 'config_tab') and hasattr(self.config_tab, 'photographer_var'):
+            photographer = self.config_tab.photographer_var.get()
+        if not photographer:
+            photographer = self.photographer_var.get() if hasattr(self, 'photographer_var') else ''
+
+        # Get ruler position from project config
+        ruler_position = 'top'
+        if hasattr(self, 'config_tab') and hasattr(self.config_tab, 'ruler_position_var'):
+            ruler_position = self.config_tab.ruler_position_var.get()
+        elif hasattr(self, 'ruler_position_var'):
+            ruler_position = self.ruler_position_var.get()
 
         workflow_args = [
             self.input_folder_var.get(),
-            self.ruler_position_var.get(),
-            self.photographer_var.get(),
+            ruler_position,
+            photographer,
             'rembg',
             logo_settings['add_logo'],
             logo_settings['logo_path'],

@@ -66,23 +66,44 @@ class EventHandlers:
     @staticmethod
     def handle_museum_change(event, museum_var, ruler_position_var, measurements_checkbox,
                              measurements_loaded, draw_ruler_callback, save_config_callback=None):
-        """Handle museum selection changes."""
+        """Handle museum/project selection changes."""
         museum_selection = museum_var.get()
-        print(f"Museum selected: {museum_selection}")
+        print(f"Project selected: {museum_selection}")
 
-        if museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)":
+        # Prefer active project's ruler position rule
+        position_locked = False
+        locked_position = None
+        try:
+            import project_manager
+            project = project_manager.get_project_by_name(museum_selection)
+            if project is not None:
+                position_locked = bool(project.get("ruler_position_locked"))
+                locked_position = project.get("fixed_ruler_position")
+        except Exception:
+            pass
+
+        if position_locked and locked_position:
+            ruler_position_var.set(locked_position)
+        elif museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)":
             ruler_position_var.set("bottom-left-fixed")
         else:
-
             if ruler_position_var.get() == "bottom-left-fixed":
                 ruler_position_var.set("top")
 
-        if museum_selection == "British Museum" and measurements_loaded:
-
-            measurements_checkbox.state(['!disabled'])
-        else:
-
-            measurements_checkbox.state(['disabled'])
+        # Update the measurements status label (no longer a checkbox)
+        try:
+            if measurements_loaded:
+                measurements_checkbox.config(
+                    text="\u2713 Project measurements will be used for scale",
+                    foreground="#4caf50",
+                )
+            else:
+                measurements_checkbox.config(
+                    text="(no measurements database \u2014 ruler detection will be used)",
+                    foreground="gray",
+                )
+        except Exception:
+            pass  # label may not yet exist
 
         draw_ruler_callback()
 
@@ -94,11 +115,10 @@ class EventHandlers:
         """Browse for input folder."""
         init_dir = input_folder_var.get()
         if not init_dir or not os.path.isdir(init_dir):
-            try:
-                script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-                init_dir = script_dir
-            except:
-                init_dir = os.path.expanduser("~")
+            # Default to Desktop, then home directory
+            home = os.path.expanduser("~")
+            desktop = os.path.join(home, "Desktop")
+            init_dir = desktop if os.path.isdir(desktop) else home
 
         folder_selected = filedialog.askdirectory(initialdir=init_dir)
         if folder_selected:
@@ -183,7 +203,7 @@ class EventHandlers:
         ).start()
 
     @staticmethod
-    def debug_measurements_loading(app_instance, assets_path, measurements_filename="sippar.json"):
+    def debug_measurements_loading(app_instance, assets_path, measurements_filename="bm_measurements.json"):
         """Debug function to test loading the measurements file."""
         from gui_utils import resource_path
         import json
@@ -230,7 +250,7 @@ class EventHandlers:
                     app_instance.measurements_checkbox.state(['!disabled'])
 
                     for child in app_instance.measurements_checkbox.master.winfo_children():
-                        if isinstance(child, ttk.Label) and "(sippar.json not found" in child.cget("text"):
+                        if isinstance(child, ttk.Label) and "measurements not found" in child.cget("text"):
                             child.destroy()
             except Exception as e:
                 print(f"Error reloading measurements: {e}")

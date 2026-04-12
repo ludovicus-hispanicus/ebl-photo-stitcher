@@ -77,7 +77,7 @@ def crop_canvas_to_content_with_margin(
     lower_intensity_bound = int(min_bg_intensity + 1)
     upper_intensity_bound = 255
 
-    if np.any(grayscale_img > (min_bg_intensity + 5)):
+    if int(np.max(grayscale_img)) > (min_bg_intensity + 5):
         try:
             foreground_mask_pixels = cv2.inRange(
                 grayscale_img, lower_intensity_bound, upper_intensity_bound)

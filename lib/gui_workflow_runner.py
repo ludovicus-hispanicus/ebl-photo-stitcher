@@ -1,4 +1,5 @@
 import os
+import gc
 import time
 import traceback
 import glob
@@ -16,8 +17,9 @@ from workflow_object_processing import (
 from workflow_ruler_generation import (
     select_ruler_template, generate_digital_ruler, prepare_other_views_list
 )
-from workflow_cleanup import cleanup_intermediate_files, cleanup_temp_files
+from workflow_cleanup import cleanup_intermediate_files, cleanup_temp_files, normalize_subfolder_names
 from workflow_file_processing import find_ruler_and_views
+from heic_converter import convert_heic_files_recursive
 from workflow_statistics import print_final_statistics
 from extract_measurements import add_measurement_record, clear_fallback_comparisons
 from extract_measurements_excel import finalize_measurements_with_comparison
@@ -48,7 +50,8 @@ def run_complete_image_processing_workflow(
     gradient_width_fraction=0.5,
     enable_hdr_processing=False,
     use_first_photo_measurements=False,
-    force_manual_ruler=False
+    force_manual_ruler=False,
+    selected_tablets=None
 ):
     """Main workflow orchestration function."""
     
@@ -159,17 +162,34 @@ def run_complete_image_processing_workflow(
     filtered_subfolders = []
     for subfolder_path in processed_subfolders:
         subfolder_name = os.path.basename(subfolder_path)
-        if subfolder_name.startswith('_Final_'):
-            print(f"   Skipping output folder: {subfolder_name}")
+        if subfolder_name.startswith('_'):
+            print(f"   Skipping system folder: {subfolder_name}")
             continue
+        # Filter by selected tablets if specified
+        if selected_tablets:
+            # Normalize both for comparison (spaces vs dots)
+            normalized_name = subfolder_name.replace(' ', '.')
+            matching = any(
+                t == subfolder_name or t == normalized_name
+                or t.replace(' ', '.') == normalized_name
+                for t in selected_tablets
+            )
+            if not matching:
+                continue
         filtered_subfolders.append(subfolder_path)
-    
+
     processed_subfolders = filtered_subfolders
 
     processed_subfolders.sort(key=lambda path: os.path.basename(path))
     
     num_folders = len(processed_subfolders)
     print(f"File organization complete. Targeting {num_folders} subfolder(s).")
+
+    # Convert any HEIC files disguised as JPEGs (common with iPhone photos)
+    heic_converted = convert_heic_files_recursive(source_folder_path)
+    if heic_converted > 0:
+        print(f"   Converted {heic_converted} HEIC file(s) to JPEG format.")
+
     progress_callback(10)
     print("-" * 50)
 
@@ -272,6 +292,9 @@ def run_complete_image_processing_workflow(
             failed_objects.append(subfolder_name_item)
             total_err += 1
 
+        # Free memory between subfolders
+        gc.collect()
+
     print_fallback_summary(successful_presets, failed_folders)
 
     print_final_statistics(start_time, total_ok, total_err,
@@ -280,6 +303,9 @@ def run_complete_image_processing_workflow(
     if total_ok > 0:
         cleanup_intermediate_files(
             processed_subfolders, object_artifact_suffix_config)
+
+        # Normalize subfolder names (e.g., "Si 10" -> "Si.10")
+        normalize_subfolder_names(processed_subfolders)
 
     try:
         finalize_measurements_with_comparison(source_folder_path, photographer_name)
@@ -649,9 +675,21 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
     progress += sub_steps["other_obj"] * prog_per_folder
 
-    stitched_output_bg_color = MUSEUM_CONFIGS.get(
-        museum_selection, {}).get("background_color", (0, 0, 0))
-    if museum_selection == "British Museum" or museum_selection == "Black background (Jena)":
+    # Resolve stitching background: prefer active project, fall back to legacy map
+    stitched_output_bg_color = None
+    try:
+        import project_manager as _pm
+        _active = _pm.get_active_project()
+        if _active is not None and _active.get("name") == museum_selection:
+            stitched_output_bg_color = _pm.get_project_background_color(_active)
+    except Exception:
+        pass
+    if stitched_output_bg_color is None:
+        stitched_output_bg_color = MUSEUM_CONFIGS.get(
+            museum_selection, {}).get("background_color", (0, 0, 0))
+    # For black-background projects, use the detected background so slight color
+    # variations in the photo don't clash with the fill.
+    if tuple(stitched_output_bg_color) == (0, 0, 0):
         stitched_output_bg_color = output_bg_color
 
     process_tablet_subfolder(

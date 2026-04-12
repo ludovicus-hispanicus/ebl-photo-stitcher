@@ -41,22 +41,59 @@ class UIComponents:
         return frame, entry
 
     @staticmethod
-    def create_ruler_pos_ui(parent, museum_var, ruler_position_var, on_museum_changed, on_ruler_canvas_click):
-        """Create ruler position UI component."""
-        frame = ttk.LabelFrame(parent, text="Ruler Options", padding="10")
+    def create_project_selector_ui(parent, museum_var, on_museum_changed, project_names=None):
+        """Create a simple project selector dropdown."""
+        frame = ttk.LabelFrame(parent, text="Project", padding="10")
+        frame.pack(fill=tk.X, pady=5)
+
+        museum_frame = ttk.Frame(frame)
+        museum_frame.pack(fill=tk.X)
+
+        ttk.Label(museum_frame, text="Project:").pack(side=tk.LEFT, padx=(0, 5))
+
+        if project_names is None:
+            project_names = []
+
+        museum_combo = ttk.Combobox(
+            museum_frame,
+            textvariable=museum_var,
+            width=28,
+            state="readonly",
+            values=project_names
+        )
+        museum_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        museum_combo.bind("<<ComboboxSelected>>", on_museum_changed)
+
+        return frame, museum_combo
+
+    @staticmethod
+    def create_ruler_pos_ui(parent, museum_var, ruler_position_var, on_museum_changed,
+                             on_ruler_canvas_click, project_names=None):
+        """Create project selector and ruler position UI.
+
+        project_names: list of project names to show in the dropdown. Falls back
+        to the legacy hardcoded museum list if not provided.
+        """
+        frame = ttk.LabelFrame(parent, text="Project", padding="10")
         frame.pack(fill=tk.X, pady=5)
 
         museum_frame = ttk.Frame(frame)
         museum_frame.pack(fill=tk.X, pady=(0, 5))
 
-        ttk.Label(museum_frame, text="Museum:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(museum_frame, text="Project:").pack(side=tk.LEFT, padx=(0, 5))
+
+        if project_names is None:
+            project_names = [
+                "British Museum", "Iraq Museum", "Iraq Museum (Sippar Library)",
+                "eBL Ruler (CBS)", "Non-eBL Ruler (VAM)", "Black background (Jena)"
+            ]
 
         museum_combo = ttk.Combobox(
             museum_frame,
             textvariable=museum_var,
-            width=20,
-            values=["British Museum", "Iraq Museum", "Iraq Museum (Sippar Library)",
-                    "eBL Ruler (CBS)", "Non-eBL Ruler (VAM)", "Black background (Jena)"]
+            width=28,
+            state="readonly",
+            values=project_names
         )
         museum_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         museum_combo.bind("<<ComboboxSelected>>", on_museum_changed)
@@ -95,31 +132,32 @@ class UIComponents:
         options_frame = ttk.LabelFrame(parent, text="Options")
         options_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
 
-        measurements_checkbox = ttk.Checkbutton(
+        # Measurements status label — reflects active project's measurements file
+        # (no checkbox: measurements are used automatically if present)
+        measurements_status_label = ttk.Label(
             options_frame,
-            text="Use measurements from database",
-            variable=use_measurements_var
-        )
-        measurements_checkbox.pack(anchor=tk.W, padx=10, pady=0)
-        
-        measurements_description = ttk.Label(
-            options_frame,
-            text="Use known tablet dimensions for scale instead of ruler marks",
-            font=("", 8),
+            text="",
+            font=("", 9),
             foreground="gray"
         )
-        measurements_description.pack(anchor=tk.W, padx=30, pady=(0, 5))
+        measurements_status_label.pack(anchor=tk.W, padx=10, pady=(4, 5))
 
-        if not measurements_loaded:
-            measurements_checkbox.config(state=tk.DISABLED)
-
-            debug_btn = ttk.Button(
-                options_frame,
-                text="Debug measurements loading",
-                command=debug_callback,
-                style="Small.TButton"
+        if measurements_loaded:
+            measurements_status_label.config(
+                text="\u2713 Project measurements will be used for scale",
+                foreground="#4caf50",
             )
-            debug_btn.pack(anchor=tk.W, padx=20, pady=(0, 0))
+        else:
+            measurements_status_label.config(
+                text="(no measurements database — ruler detection will be used)",
+                foreground="gray",
+            )
+
+        # Keep the variable alive for backward compatibility but it's auto-driven
+        use_measurements_var.set(bool(measurements_loaded))
+
+        # For backward compatibility, expose a "checkbox" reference pointing at the label
+        measurements_checkbox = measurements_status_label
 
         first_photo_measurements_checkbox = ttk.Checkbutton(
             options_frame,

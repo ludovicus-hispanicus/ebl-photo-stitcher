@@ -156,7 +156,18 @@ class LayoutManager:
         canvas.create_text(s / 2, s / 2, text="Object",
                            font=('Helvetica', 9, 'italic'), fill="gray")
 
-        is_iraq_museum = (museum_selection == "Iraq Museum") or museum_selection == "Iraq Museum (Sippar Library)"
+        # Detect "locked ruler position" projects (historically: Iraq Museum variants)
+        is_iraq_museum = False
+        try:
+            import project_manager
+            project = project_manager.get_project_by_name(museum_selection)
+            if project is not None and project.get("ruler_position_locked"):
+                is_iraq_museum = True
+        except Exception:
+            pass
+        if not is_iraq_museum:
+            is_iraq_museum = (museum_selection == "Iraq Museum"
+                              or museum_selection == "Iraq Museum (Sippar Library)")
 
         active_fill_color = "lightblue"
         selected_fill_color = "blue"

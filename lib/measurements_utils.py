@@ -53,16 +53,13 @@ def extract_tablet_id_from_path(folder_path):
 
     folder_name = os.path.basename(folder_path)
 
-    # First try to match CBS format (CBS.5256)
-    cbs_match = re.search(r'CBS\.(\d+)', folder_name, re.IGNORECASE)
-    if cbs_match:
-        return f"CBS.{cbs_match.group(1)}"
-    
-    # Then try to match BM format (BM.12345 or BM_12345 or BM 12345)
-    bm_match = re.search(r'BM[_\s\.]*(\d+)', folder_name, re.IGNORECASE)
-    if bm_match:
-        return f"BM.{bm_match.group(1)}"
-    
+    # Try to match common prefix + number formats (e.g., CBS.5256, BM 12345, Si 4, Si.4)
+    known_prefixes = ['CBS', 'BM', 'VAM', 'IM', 'Si', 'K', 'Sm', 'Rm']
+    for prefix in known_prefixes:
+        match = re.search(rf'{prefix}[_\s\.]*(\d+)', folder_name, re.IGNORECASE)
+        if match:
+            return f"{prefix}.{match.group(1)}"
+
     # Finally, just try to extract any number
     number_match = re.search(r'(\d+)', folder_name)
     if number_match:
@@ -93,22 +90,36 @@ def get_tablet_width_from_measurements(folder_path, measurements_dict):
             print(f"Found width measurement for ID {tablet_id}: {width_cm} cm")
             return width_cm
 
+    # Check for joined tablet entries (e.g., "Si.4 + Si.5" contains "Si.4")
+    for key in measurements_dict.keys():
+        if '+' in key:
+            # Split joined key and check each part
+            parts = [p.strip() for p in key.split('+')]
+            for part in parts:
+                # Also handle partial IDs like "Si.31/52" → matches "Si.31"
+                part_base = part.split('/')[0].strip()
+                if part == tablet_id or part_base == tablet_id:
+                    width_cm = measurements_dict[key].get("width")
+                    if width_cm is not None and isinstance(width_cm, (int, float)) and width_cm > 0:
+                        print(f"Found width measurement for ID {tablet_id} in joined entry {key}: {width_cm} cm")
+                        return width_cm
+
     # Extract just the numeric part for additional matching attempts
     numeric_part = re.search(r'(\d+)', tablet_id)
     if numeric_part:
         numeric_id = numeric_part.group(1)
-        
+
         potential_ids = [numeric_id]  # Start with just the numeric ID
-        
+
         pattern = rf'^([A-Z]+|[A-Z][a-z]+-[IV]+|[A-Z][a-z]+)[\.\s_]{re.escape(numeric_id)}$'
-        
+
         for key in measurements_dict.keys():
             if re.match(pattern, key):
                 potential_ids.append(key)
-        
-        common_prefixes = ['BM', 'CBS', 'VAM', 'IM', 'K', 'Sm', 'Rm']
+
+        common_prefixes = ['BM', 'CBS', 'VAM', 'IM', 'K', 'Sm', 'Rm', 'Si']
         separators = ['.', ' ', '_']
-        
+
         for prefix in common_prefixes:
             for sep in separators:
                 candidate_id = f"{prefix}{sep}{numeric_id}"

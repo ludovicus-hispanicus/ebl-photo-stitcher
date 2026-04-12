@@ -2,15 +2,57 @@ import os
 import cv2
 from workflow_imports import resize_ruler
 from resize_ruler import resize_and_save_ruler_template
+import project_manager
+
+
+def _select_ruler_from_project(project, art_fp, px_cm_val):
+    """Select a ruler file based on a project definition.
+
+    For single-mode projects, returns the configured ruler and its size.
+    For adaptive_set projects, picks 1/2/5cm based on tablet width.
+    """
+    mode = project.get("ruler_mode", "single")
+
+    if mode == "single":
+        ruler_path = project_manager.resolve_ruler_path(project)
+        size_cm = float(project.get("ruler_size_cm", 5.0))
+        return ruler_path, size_cm
+
+    # adaptive_set: choose based on tablet physical width
+    sizes = project.get("ruler_sizes_cm", {})
+    t1 = float(sizes.get("1cm", 1.75))
+    t2 = float(sizes.get("2cm", 2.80))
+
+    chosen_key = "5cm"
+    art_img_chk = cv2.imread(art_fp)
+    if art_img_chk is not None and px_cm_val > 0:
+        art_w_cm_val = art_img_chk.shape[1] / px_cm_val
+        if art_w_cm_val > 0:
+            if art_w_cm_val < t1:
+                chosen_key = "1cm"
+            elif art_w_cm_val < t2:
+                chosen_key = "2cm"
+
+    ruler_path = project_manager.resolve_ruler_path(project, chosen_key)
+    # For adaptive_set, let resize_and_save_ruler_template infer size from filename
+    # (matches legacy behaviour for BM/Jena). Return None for custom_ruler_size_cm.
+    return ruler_path, None
+
 
 def select_ruler_template(museum_selection, art_fp, px_cm_val, ruler_template_1cm_asset_path,
                           ruler_template_2cm_asset_path, ruler_template_5cm_asset_path):
     """
-    Select appropriate ruler template based on museum and artifact size.
+    Select appropriate ruler template based on the active project (preferred)
+    or legacy museum_selection string.
 
     Returns:
         tuple: (chosen_ruler_tpl, custom_ruler_size_cm)
     """
+    # Preferred path: read from the active project if set
+    active = project_manager.get_active_project()
+    if active is not None and active.get("name") == museum_selection:
+        return _select_ruler_from_project(active, art_fp, px_cm_val)
+
     chosen_ruler_tpl = ruler_template_5cm_asset_path
     custom_ruler_size_cm = None
 

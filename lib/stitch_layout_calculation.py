@@ -259,21 +259,46 @@ def calculate_stitching_layout(
     has_int_rev_l = int_rev_l_key in intermediate_dims
     has_int_rev_r = int_rev_r_key in intermediate_dims
 
-    obv_x = (canvas_w - obv_row_width) // 2
+    # === SPINE-FIRST LAYOUT ===
+    # Step 1: Determine the spine (vertebral column) width and center it.
+    # The spine consists of: obverse, bottom, reverse, top — centered on the canvas.
+    # Side views are attached afterwards without moving the spine.
+
+    spine_width = max(
+        obv_w if has_obverse else 0,
+        rev_w if has_reverse else 0,
+        b_w if object_images_dict.get("bottom") is not None and b_h > 0 else 0,
+        t_w if object_images_dict.get("top") is not None and t_h > 0 else 0
+    )
+
+    # Calculate total width needed for sides (to ensure canvas is wide enough)
+    left_side_width = 0
     if has_left:
-        obv_x += l_w + gap_px
-    if has_int_obv_l:
-        obv_x += intermediate_dims[int_obv_l_key]["w"] + gap_px
+        left_side_width += l_w + gap_px
+    for left_int in grouped_intermediates["obverse_left"]:
+        left_side_width += left_int["dims"]["w"] + gap_px
+    for left_int in grouped_intermediates["reverse_left"]:
+        left_side_width = max(left_side_width, left_int["dims"]["w"] + gap_px)
 
-    rev_x = (canvas_w - rev_row_width) // 2
-    if has_left:
-        rev_x += l_w + gap_px
-    if has_int_rev_l:
-        rev_x += intermediate_dims[int_rev_l_key]["w"] + gap_px
+    right_side_width = 0
+    if has_right:
+        right_side_width += r_w + gap_px
+    for right_int in grouped_intermediates["obverse_right"]:
+        right_side_width += right_int["dims"]["w"] + gap_px
+    for right_int in grouped_intermediates["reverse_right"]:
+        right_side_width = max(right_side_width, right_int["dims"]["w"] + gap_px)
 
-    central_column_x = obv_x
-    central_column_width = obv_w
+    # Ensure canvas is wide enough for spine + sides + margins
+    min_needed = 200 + left_side_width + spine_width + right_side_width
+    canvas_w = max(canvas_w, min_needed)
 
+    # Center the spine on the canvas
+    central_column_x = (canvas_w - spine_width) // 2
+    central_column_width = spine_width
+
+    # Step 2: Place views top-to-bottom along the spine, then attach sides
+
+    # --- Obverse top intermediates ---
     for top_int in grouped_intermediates["obverse_top"]:
         int_key = top_int["key"]
         int_data = top_int["dims"]
@@ -281,66 +306,61 @@ def calculate_stitching_layout(
         coords[int_key] = (int_x, y_curr)
         y_curr += int_data["h"] + gap_px
 
+    # --- Obverse row: spine view centered, sides attached ---
     obv_row_y = y_curr
 
-    obv_row_width = 0
-    obv_row_elements = []
-
-    if has_left:
-        obv_row_elements.append({"key": "left", "width": l_w})
-        obv_row_width += l_w + gap_px
-
-    left_intermediates = grouped_intermediates["obverse_left"]
-    left_intermediates.sort(key=lambda x: x["number"], reverse=True)
-
-    for left_int in left_intermediates:
-        int_key = left_int["key"]
-        int_w = left_int["dims"]["w"]
-        obv_row_elements.append({"key": int_key, "width": int_w})
-        obv_row_width += int_w + gap_px
-
     if has_obverse:
-        obv_row_elements.append({"key": "obverse", "width": obv_w})
-        obv_row_width += obv_w + gap_px
+        obv_center_x = central_column_x + (central_column_width - obv_w) // 2
+        coords["obverse"] = (obv_center_x, obv_row_y)
 
-    right_intermediates = grouped_intermediates["obverse_right"]
-    right_intermediates.sort(key=lambda x: x["number"])
-
-    for right_int in right_intermediates:
-        int_key = right_int["key"]
-        int_w = right_int["dims"]["w"]
-        obv_row_elements.append({"key": int_key, "width": int_w})
-        obv_row_width += int_w + gap_px
-
-    if has_right:
-        obv_row_elements.append({"key": "right", "width": r_w})
-        obv_row_width += r_w
-
-    if obv_row_width > 0:
-        obv_row_width -= gap_px
-
-    current_x = (canvas_w - obv_row_width) // 2
-
-    for element in obv_row_elements:
-        key = element["key"]
-        width = element["width"]
-
-        if key == "obverse":
-            coords["obverse"] = (current_x, obv_row_y)
-            central_column_x = current_x
-            central_column_width = obv_w
-        elif "intermediate" in key:
-            img_h = intermediate_dims[key]["h"]
+        # Place left sides going leftward from obverse
+        current_x = obv_center_x - gap_px
+        left_intermediates = grouped_intermediates["obverse_left"]
+        left_intermediates.sort(key=lambda x: x["number"], reverse=True)
+        for left_int in left_intermediates:
+            int_key = left_int["key"]
+            int_w = left_int["dims"]["w"]
+            img_h = intermediate_dims[int_key]["h"]
             int_y = obv_row_y + (obv_h - img_h) // 2
-            coords[key] = (current_x, int_y)
-        else:
-            coords[key] = (current_x, obv_row_y)
-            rotation_flags[key] = False
+            current_x -= int_w
+            coords[int_key] = (current_x, int_y)
+            current_x -= gap_px
+        if has_left:
+            current_x -= l_w
+            coords["left"] = (current_x, obv_row_y)
+            rotation_flags["left"] = False
+        # Ensure nothing is clipped on the left
+        leftmost_x = current_x if has_left else min((coords[li["key"]][0] for li in grouped_intermediates["obverse_left"]), default=obv_center_x)
+        if leftmost_x < 100:
+            shift = 100 - leftmost_x
+            canvas_w += shift
+            central_column_x += shift
+            for k in coords:
+                coords[k] = (coords[k][0] + shift, coords[k][1])
+            obv_center_x += shift
 
-        current_x += width + gap_px
+        # Place right sides going rightward from obverse
+        current_x = obv_center_x + obv_w + gap_px
+        right_intermediates = grouped_intermediates["obverse_right"]
+        right_intermediates.sort(key=lambda x: x["number"])
+        for right_int in right_intermediates:
+            int_key = right_int["key"]
+            int_w = right_int["dims"]["w"]
+            img_h = intermediate_dims[int_key]["h"]
+            int_y = obv_row_y + (obv_h - img_h) // 2
+            coords[int_key] = (current_x, int_y)
+            current_x += int_w + gap_px
+        if has_right:
+            coords["right"] = (current_x, obv_row_y)
+            rotation_flags["right"] = False
+            current_x += r_w
+        # Ensure nothing is clipped on the right
+        if current_x > canvas_w - 100:
+            canvas_w = current_x + 100
 
     y_curr += obv_h + gap_px
 
+    # --- Obverse bottom intermediates ---
     for bottom_int in grouped_intermediates["obverse_bottom"]:
         int_key = bottom_int["key"]
         int_data = bottom_int["dims"]
@@ -348,11 +368,13 @@ def calculate_stitching_layout(
         coords[int_key] = (int_x, y_curr)
         y_curr += int_data["h"] + gap_px
 
+    # --- Bottom view (spine) ---
     if object_images_dict.get("bottom") is not None and b_h > 0:
         bottom_x = central_column_x + (central_column_width - b_w) // 2
         coords["bottom"] = (bottom_x, y_curr)
         y_curr += b_h + gap_px
 
+    # --- Reverse top intermediates ---
     for top_int in grouped_intermediates["reverse_top"]:
         int_key = top_int["key"]
         int_data = top_int["dims"]
@@ -360,94 +382,59 @@ def calculate_stitching_layout(
         coords[int_key] = (int_x, y_curr)
         y_curr += int_data["h"] + gap_px
 
+    # --- Reverse row: spine view centered, sides attached ---
     rev_row_y = y_curr
 
-    reverse_center_offset = 0
-    if has_reverse and has_obverse:
-        obverse_center = central_column_x + central_column_width // 2
-        reverse_center = obverse_center
-
-    rev_row_width = 0
-    rev_row_elements = []
-
-    if has_left:
-        rev_row_elements.append({"key": "left_rotated", "width": l_w})
-        rev_row_width += l_w + gap_px
-
-    left_intermediates = grouped_intermediates["reverse_left"]
-    left_intermediates.sort(key=lambda x: x["number"], reverse=True)
-
-    for left_int in left_intermediates:
-        int_key = left_int["key"]
-        int_w = left_int["dims"]["w"]
-        rev_row_elements.append({"key": int_key, "width": int_w})
-        rev_row_width += int_w + gap_px
-
     if has_reverse:
-        rev_row_elements.append({"key": "reverse", "width": rev_w})
-        rev_row_width += rev_w + gap_px
+        rev_center_x = central_column_x + (central_column_width - rev_w) // 2
+        coords["reverse"] = (rev_center_x, rev_row_y)
 
-    right_intermediates = grouped_intermediates["reverse_right"]
-    right_intermediates.sort(key=lambda x: x["number"])
-
-    for right_int in right_intermediates:
-        int_key = right_int["key"]
-        int_w = right_int["dims"]["w"]
-        rev_row_elements.append({"key": int_key, "width": int_w})
-        rev_row_width += int_w + gap_px
-
-    if has_right:
-        rev_row_elements.append({"key": "right_rotated", "width": r_w})
-        rev_row_width += r_w
-
-    if rev_row_width > 0:
-        rev_row_width -= gap_px
-
-    reverse_row_offset = (canvas_w - rev_row_width) // 2
-    if has_reverse and has_obverse:
-        reverse_pos = 0
-        for idx, elem in enumerate(rev_row_elements):
-            if elem["key"] == "reverse":
-                reverse_pos = idx
-                break
-
-        reverse_x_in_row = reverse_row_offset
-        for i in range(reverse_pos):
-            reverse_x_in_row += rev_row_elements[i]["width"] + gap_px
-
-        reverse_center = reverse_x_in_row + rev_w // 2
-        obverse_center = central_column_x + obv_w // 2
-        reverse_center_offset = obverse_center - reverse_center
-        reverse_row_offset += reverse_center_offset
-
-    if reverse_row_offset < 100:
-        reverse_row_offset = 100
-    elif reverse_row_offset + rev_row_width > canvas_w - 100:
-        needed_width = reverse_row_offset + rev_row_width + 100
-        canvas_w = max(canvas_w, needed_width)
-        print(f"Canvas width expanded to {canvas_w} due to reverse row overflow")
-
-    current_x = reverse_row_offset
-    for element in rev_row_elements:
-        key = element["key"]
-        width = element["width"]
-
-        if key == "reverse":
-            coords["reverse"] = (current_x, rev_row_y)
-        elif key == "left_rotated":
+        # Place left sides going leftward from reverse
+        current_x = rev_center_x - gap_px
+        left_intermediates = grouped_intermediates["reverse_left"]
+        left_intermediates.sort(key=lambda x: x["number"], reverse=True)
+        for left_int in left_intermediates:
+            int_key = left_int["key"]
+            int_w = left_int["dims"]["w"]
+            img_h = intermediate_dims[int_key]["h"]
+            int_y = rev_row_y + (rev_h - img_h) // 2
+            current_x -= int_w
+            coords[int_key] = (current_x, int_y)
+            current_x -= gap_px
+        if has_left:
+            current_x -= l_w
             rotated_left_y = rev_row_y + (rev_h - l_h) // 2
             coords["left_rotated"] = (current_x, rotated_left_y)
             rotation_flags["left_rotated"] = True
-        elif key == "right_rotated":
+        # Ensure nothing is clipped on the left
+        leftmost_x = current_x if has_left else min((coords[li["key"]][0] for li in grouped_intermediates["reverse_left"]), default=rev_center_x)
+        if leftmost_x < 100:
+            shift = 100 - leftmost_x
+            canvas_w += shift
+            central_column_x += shift
+            for k in coords:
+                coords[k] = (coords[k][0] + shift, coords[k][1])
+            rev_center_x += shift
+
+        # Place right sides going rightward from reverse
+        current_x = rev_center_x + rev_w + gap_px
+        right_intermediates = grouped_intermediates["reverse_right"]
+        right_intermediates.sort(key=lambda x: x["number"])
+        for right_int in right_intermediates:
+            int_key = right_int["key"]
+            int_w = right_int["dims"]["w"]
+            img_h = intermediate_dims[int_key]["h"]
+            int_y = rev_row_y + (rev_h - img_h) // 2
+            coords[int_key] = (current_x, int_y)
+            current_x += int_w + gap_px
+        if has_right:
             rotated_right_y = rev_row_y + (rev_h - r_h) // 2
             coords["right_rotated"] = (current_x, rotated_right_y)
             rotation_flags["right_rotated"] = True
-        else:
-            img_h = intermediate_dims[key]["h"]
-            int_y = rev_row_y + (rev_h - img_h) // 2
-            coords[key] = (current_x, int_y)
-
-        current_x += width + gap_px
+            current_x += r_w
+        # Ensure nothing is clipped on the right
+        if current_x > canvas_w - 100:
+            canvas_w = current_x + 100
 
     y_curr += rev_h + gap_px
 

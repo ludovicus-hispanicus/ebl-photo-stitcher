@@ -17,7 +17,19 @@ def try_ruler_detection_with_fallback(primary_image_path, subfolder_path_item, r
     
     MIN_REASONABLE_PX_PER_CM = 100
 
-    if museum_selection == "Iraq Museum" or museum_selection == "Iraq Museum (Sippar Library)":
+    # Determine detection method: prefer active project, else legacy museum check
+    use_iraq_detector = False
+    try:
+        import project_manager
+        active = project_manager.get_active_project()
+        if active is not None and active.get("name") == museum_selection:
+            use_iraq_detector = (active.get("detection_method") == "iraq_museum")
+        else:
+            use_iraq_detector = museum_selection in ("Iraq Museum", "Iraq Museum (Sippar Library)")
+    except Exception:
+        use_iraq_detector = museum_selection in ("Iraq Museum", "Iraq Museum (Sippar Library)")
+
+    if use_iraq_detector:
         def detector_func(img_path): return ruler_detector_iraq_museum.detect_1cm_distance_iraq(
             img_path, museum_selection=museum_selection)
         detector_name = "Iraq Museum"
