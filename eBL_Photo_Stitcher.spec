@@ -57,7 +57,10 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'torch', 'torchvision', 'torchaudio',
+        'torch._C', 'torch.cuda',
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -66,8 +69,7 @@ a = Analysis(
 
 excluded_binaries = [
     'opengl32sw.dll',
-    'VCRUNTIME140.dll',
-    'MSVCP140.dll',
+    # VCRUNTIME140.dll and MSVCP140.dll are bundled so users don't need VC++ Redistributable
     'api-ms-win-core*.dll',
     'api-ms-win-crt*.dll',
     'opencv_videoio_ffmpeg*.dll',
