@@ -503,7 +503,20 @@ class ImageProcessorApp:
             self.version_checker.open_releases_page()
 
 
+def run_headless():
+    """Run the stitcher in headless (CLI) mode when called with --headless."""
+    # Re-use the process_tablets CLI logic
+    sys.argv = [sys.argv[0]] + sys.argv[2:]  # strip --headless from args
+    from process_tablets import main as cli_main
+    sys.exit(cli_main())
+
+
 if __name__ == "__main__":
+
+    # If called with --headless as the first argument, skip the GUI entirely
+    if len(sys.argv) > 1 and sys.argv[1] == '--headless':
+        run_headless()
+        sys.exit(0)
 
     try:
 
