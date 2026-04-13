@@ -506,6 +506,14 @@ class ImageProcessorApp:
 def run_headless():
     """Run the stitcher in headless (CLI) mode when called with --headless."""
     import argparse
+    import io
+
+    # Force UTF-8 on stdout/stderr so Unicode characters (✓, ✗) don't crash
+    # when spawned by Electron on Windows (where default encoding is cp1252)
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
     parser = argparse.ArgumentParser(description="eBL Photo Stitcher (headless)")
     parser.add_argument('--root', required=True, help='Root folder')
