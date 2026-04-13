@@ -111,12 +111,38 @@ def save_jpg_output(image, output_path):
     try:
         # JPEG only supports 8-bit images
         if image.dtype != np.uint8:
+            print(f"      Converting image from {image.dtype} to uint8 for JPG")
             image = (image / image.max() * 255).astype(np.uint8) if image.max() > 0 else image.astype(np.uint8)
+
+        print(f"      JPG save: shape={image.shape}, dtype={image.dtype}, path={output_path}")
+
+        # JPEG has a max dimension limit of ~65535 pixels
+        h, w = image.shape[:2]
+        if h > 65500 or w > 65500:
+            # Scale down to fit JPEG limits
+            scale = min(65500 / h, 65500 / w)
+            new_h, new_w = int(h * scale), int(w * scale)
+            print(f"      Image too large for JPEG ({w}x{h}), scaling to {new_w}x{new_h}")
+            image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
         if not cv2.imwrite(output_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_SAVE_QUALITY]):
-            raise IOError("cv2.imwrite for JPG returned False.")
+            # Try alternative: use Pillow as fallback
+            print(f"      cv2.imwrite failed, trying Pillow fallback...")
+            try:
+                from PIL import Image as PILImage
+                rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                pil_img = PILImage.fromarray(rgb)
+                pil_img.save(output_path, 'JPEG', quality=JPEG_SAVE_QUALITY)
+                print(f"      Successfully saved JPG via Pillow: {os.path.basename(output_path)}")
+                return True
+            except Exception as pil_err:
+                raise IOError(f"Both cv2 and Pillow failed: cv2=False, Pillow={pil_err}")
+
         print(
             f"      Successfully saved JPG: {os.path.basename(output_path)} with quality {JPEG_SAVE_QUALITY}")
         return True
     except Exception as e_jpg:
         print(f"      ERROR saving final JPG: {e_jpg}")
+        import traceback
+        traceback.print_exc()
         return False
