@@ -505,10 +505,113 @@ class ImageProcessorApp:
 
 def run_headless():
     """Run the stitcher in headless (CLI) mode when called with --headless."""
-    # Re-use the process_tablets CLI logic
-    sys.argv = [sys.argv[0]] + sys.argv[2:]  # strip --headless from args
-    from process_tablets import main as cli_main
-    sys.exit(cli_main())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="eBL Photo Stitcher (headless)")
+    parser.add_argument('--root', required=True, help='Root folder')
+    parser.add_argument('--tablets', nargs='*', default=None, help='Tablet names')
+    parser.add_argument('--museum', default='Non-eBL Ruler (VAM)', help='Project/museum')
+    parser.add_argument('--measurements', default=None, help='Measurements file')
+    parser.add_argument('--photographer', default='Unknown', help='Photographer')
+    parser.add_argument('--ruler-position', default='bottom',
+                        choices=['top', 'bottom', 'left', 'right'])
+    parser.add_argument('--add-logo', action='store_true')
+    parser.add_argument('--logo-path', default=None)
+    parser.add_argument('--json-progress', action='store_true')
+
+    # Strip --headless from argv before parsing
+    filtered_argv = [a for a in sys.argv[1:] if a != '--headless']
+    args = parser.parse_args(filtered_argv)
+
+    if not os.path.isdir(args.root):
+        print(f"ERROR: Root folder does not exist: {args.root}", file=sys.stderr)
+        sys.exit(2)
+
+    # Load measurements
+    measurements_dict = {}
+    if args.measurements and os.path.isfile(args.measurements):
+        try:
+            from measurements_utils import load_measurements_from_excel, load_measurements_from_json
+            ext = os.path.splitext(args.measurements)[1].lower()
+            if ext in ('.xlsx', '.xls'):
+                measurements_dict = load_measurements_from_excel(args.measurements)
+            else:
+                measurements_dict = load_measurements_from_json(args.measurements)
+            print(f"Loaded {len(measurements_dict)} measurements.")
+        except Exception as e:
+            print(f"WARNING: Could not load measurements: {e}", file=sys.stderr)
+
+    if not args.measurements:
+        try:
+            from measurements_utils import load_measurements_from_json, load_measurements_from_excel, merge_measurements_dicts
+            proj = project_manager.get_project_by_name(args.museum)
+            proj_meas = (proj or {}).get("measurements_file", "")
+            if proj_meas:
+                meas_path = project_manager.resolve_asset_path(proj_meas)
+                if os.path.isfile(meas_path):
+                    ext = os.path.splitext(meas_path)[1].lower()
+                    if ext in ('.xlsx', '.xls'):
+                        proj_data = load_measurements_from_excel(meas_path)
+                    else:
+                        proj_data = load_measurements_from_json(meas_path)
+                    measurements_dict = merge_measurements_dicts(proj_data, measurements_dict)
+        except Exception as e:
+            print(f"Warning: Could not load project measurements: {e}", file=sys.stderr)
+
+    # Asset paths
+    assets_dir = os.path.join(script_directory, 'assets')
+    ruler_1cm = os.path.join(assets_dir, 'BM_1cm_scale.tif')
+    ruler_2cm = os.path.join(assets_dir, 'BM_2cm_scale.tif')
+    ruler_5cm = os.path.join(assets_dir, 'BM_5cm_scale.tif')
+
+    def progress_callback(value):
+        if args.json_progress:
+            print(json.dumps({'type': 'progress', 'value': value}), flush=True)
+        sys.stdout.flush()
+
+    def finished_callback():
+        if args.json_progress:
+            print(json.dumps({'type': 'finished'}), flush=True)
+
+    if args.json_progress:
+        print(json.dumps({
+            'type': 'start',
+            'root': args.root,
+            'tablets': args.tablets,
+            'museum': args.museum,
+        }), flush=True)
+
+    print(f"=== Starting stitcher ===")
+    print(f"  Root: {args.root}")
+    print(f"  Tablets: {', '.join(args.tablets) if args.tablets else 'ALL'}")
+    print(f"  Museum: {args.museum}")
+
+    try:
+        run_complete_image_processing_workflow(
+            args.root, args.ruler_position, args.photographer,
+            'rembg', args.add_logo, args.logo_path, '.cr2',
+            ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'),
+            ruler_1cm, ruler_2cm, ruler_5cm,
+            STITCH_VIEW_PATTERNS_WITH_EXT,
+            "temp_isolated_ruler.tif",
+            OBJECT_ARTIFACT_SUFFIX,
+            progress_callback, finished_callback,
+            museum_selection=args.museum,
+            app_root_window=None,
+            use_measurements_from_database=bool(measurements_dict),
+            measurements_dict=measurements_dict,
+            selected_tablets=args.tablets,
+        )
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        if args.json_progress:
+            print(json.dumps({'type': 'error', 'message': str(e)}), flush=True)
+        sys.exit(1)
+
+    print("=== Done ===")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
