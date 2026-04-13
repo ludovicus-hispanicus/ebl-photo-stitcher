@@ -103,7 +103,7 @@ class ImageProcessorApp:
             get_persistent_config_dir_path(), "gui_config.json")
 
         self.input_folder_var = tk.StringVar()
-        self.ruler_position_var = tk.StringVar()
+        self.ruler_position_var = tk.StringVar(value="top")
         self.photographer_var = tk.StringVar()
         self.museum_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0.0)
@@ -273,8 +273,8 @@ class ImageProcessorApp:
     def on_museum_changed(self, event):
         """Handle project selection changes from the Main tab."""
         selected_name = self.museum_var.get()
-        if hasattr(self, 'config_tab'):
-            self.config_tab.set_active_project_by_name(selected_name)
+        if hasattr(self, 'project_config_tab'):
+            self.project_config_tab.set_active_project_by_name(selected_name)
         else:
             project = project_manager.get_project_by_name(selected_name)
             if project is not None:
@@ -401,15 +401,15 @@ class ImageProcessorApp:
 
         # Get photographer from project config
         photographer = ''
-        if hasattr(self, 'config_tab') and hasattr(self.config_tab, 'photographer_var'):
-            photographer = self.config_tab.photographer_var.get()
+        if hasattr(self, 'project_config_tab') and hasattr(self.project_config_tab, 'photographer_var'):
+            photographer = self.project_config_tab.photographer_var.get()
         if not photographer:
             photographer = self.photographer_var.get() if hasattr(self, 'photographer_var') else ''
 
         # Get ruler position from project config
         ruler_position = 'top'
-        if hasattr(self, 'config_tab') and hasattr(self.config_tab, 'ruler_position_var'):
-            ruler_position = self.config_tab.ruler_position_var.get()
+        if hasattr(self, 'project_config_tab') and hasattr(self.project_config_tab, 'ruler_position_var'):
+            ruler_position = self.project_config_tab.ruler_position_var.get()
         elif hasattr(self, 'ruler_position_var'):
             ruler_position = self.ruler_position_var.get()
 
