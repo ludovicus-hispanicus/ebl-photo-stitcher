@@ -109,6 +109,9 @@ def save_tiff_output(image, output_path):
 def save_jpg_output(image, output_path):
     """Save image as JPEG format."""
     try:
+        # JPEG only supports 8-bit images
+        if image.dtype != np.uint8:
+            image = (image / image.max() * 255).astype(np.uint8) if image.max() > 0 else image.astype(np.uint8)
         if not cv2.imwrite(output_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_SAVE_QUALITY]):
             raise IOError("cv2.imwrite for JPG returned False.")
         print(
