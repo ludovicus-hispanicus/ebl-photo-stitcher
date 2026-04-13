@@ -463,15 +463,7 @@ class ProjectConfigTab:
             messagebox.showerror("Invalid value", str(e))
             return
 
-        # Built-in projects cannot be saved in place; offer to duplicate
-        if self._current_project.get("builtin"):
-            if not messagebox.askyesno(
-                "Built-in project",
-                "Built-in projects can't be edited. Save a copy as a new user project?"):
-                return
-            self._duplicate_project()
-            return
-
+        # Built-in projects are saved as user overrides (same name)
         project_manager.save_user_project(project)
         self._dirty = False
         self.status_label.config(

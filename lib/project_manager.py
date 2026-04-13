@@ -77,12 +77,12 @@ def _load_project_file(path):
 def list_projects():
     """Return a list of all projects, built-ins first, then user projects.
 
-    User projects with a name matching a built-in are treated as overrides.
+    User projects with the same name as a built-in override the built-in.
     """
-    projects = []
-    seen_names = set()
+    builtin_projects = {}
+    user_projects = {}
 
-    # Built-in projects first
+    # Load built-in projects
     builtin_dir = get_builtin_projects_dir()
     if os.path.isdir(builtin_dir):
         for filename in sorted(os.listdir(builtin_dir)):
@@ -90,21 +90,28 @@ def list_projects():
                 data = _load_project_file(os.path.join(builtin_dir, filename))
                 if data:
                     data["builtin"] = True
-                    projects.append(data)
-                    seen_names.add(data["name"])
+                    builtin_projects[data["name"]] = data
 
-    # User projects (append new ones, skip duplicates by name)
+    # Load user projects (override built-ins with same name)
     user_dir = get_user_projects_dir()
     if os.path.isdir(user_dir):
         for filename in sorted(os.listdir(user_dir)):
             if filename.endswith(".json"):
                 data = _load_project_file(os.path.join(user_dir, filename))
-                if data and data["name"] not in seen_names:
+                if data:
                     data["builtin"] = False
-                    projects.append(data)
-                    seen_names.add(data["name"])
+                    user_projects[data["name"]] = data
 
-    return projects
+    # Merge: user overrides built-in
+    merged = {}
+    for name, project in builtin_projects.items():
+        merged[name] = user_projects.pop(name, project)
+
+    # Add remaining user-only projects
+    for name, project in user_projects.items():
+        merged[name] = project
+
+    return list(merged.values())
 
 
 def get_project_by_name(name):
