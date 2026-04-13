@@ -281,7 +281,8 @@ def run_complete_image_processing_workflow(
                             f"   Cached background colors - detected: {cached_detected_bg_color}, output: {cached_output_bg_color}")
 
             else:
-                failed_objects.append(subfolder_name_item)
+                reason = result.get('error', 'Unknown error')
+                failed_objects.append({'name': subfolder_name_item, 'reason': reason})
                 total_err += 1
 
             is_first_subfolder = False
@@ -289,7 +290,7 @@ def run_complete_image_processing_workflow(
         except Exception as e:
             print(f"   ERROR processing set '{subfolder_name_item}': {e}")
             traceback.print_exc()
-            failed_objects.append(subfolder_name_item)
+            failed_objects.append({'name': subfolder_name_item, 'reason': str(e)})
             total_err += 1
 
         # Free memory between subfolders
@@ -347,6 +348,7 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
 
     if not ruler_for_scale_fp:
         print(f"   No ruler image found for {subfolder_name_item}. Skip.")
+        result['error'] = 'No ruler image found'
         return result
 
     progress += sub_steps["layout"] * prog_per_folder
@@ -373,6 +375,7 @@ def process_single_subfolder(subfolder_path_item, subfolder_name_item, image_ext
     if px_cm_val is None:
         print(
             f"   ERROR: Could not determine ruler scale for {subfolder_name_item}. Skip.")
+        result['error'] = 'Could not determine ruler scale'
         return result
 
     progress += sub_steps["scale"] * prog_per_folder
