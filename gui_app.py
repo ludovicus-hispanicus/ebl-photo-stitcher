@@ -291,8 +291,9 @@ class ImageProcessorApp:
             pass
         if self.museum_var.get() != project["name"]:
             self.museum_var.set(project["name"])
-            self._load_default_measurements()
-            self.save_config()
+        # Always reload measurements (the project settings may have changed)
+        self._load_default_measurements()
+        self.save_config()
 
     def browse_folder(self):
         """Browse for input folder."""
