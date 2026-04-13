@@ -126,17 +126,40 @@ def save_jpg_output(image, output_path):
             image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         if not cv2.imwrite(output_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_SAVE_QUALITY]):
-            # Try alternative: use Pillow as fallback
-            print(f"      cv2.imwrite failed, trying Pillow fallback...")
+            # cv2 failed — try writing to a temp file in the same directory
+            # (avoids path encoding issues in PyInstaller exe context)
+            print(f"      cv2.imwrite failed, trying temp file workaround...")
+            import tempfile
+            output_dir = os.path.dirname(output_path)
+            try:
+                tmp_fd, tmp_path = tempfile.mkstemp(suffix='.jpg', dir=output_dir)
+                os.close(tmp_fd)
+                if cv2.imwrite(tmp_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_SAVE_QUALITY]):
+                    import shutil
+                    shutil.move(tmp_path, output_path)
+                    print(f"      Successfully saved JPG via temp file: {os.path.basename(output_path)}")
+                    return True
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+            # Final fallback: Pillow
+            print(f"      Trying Pillow fallback...")
             try:
                 from PIL import Image as PILImage
+                PILImage.MAX_IMAGE_PIXELS = None  # disable pixel limit
                 rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 pil_img = PILImage.fromarray(rgb)
-                pil_img.save(output_path, 'JPEG', quality=JPEG_SAVE_QUALITY)
+                # Write to temp file first to avoid path issues
+                tmp_fd, tmp_path = tempfile.mkstemp(suffix='.jpg', dir=output_dir)
+                os.close(tmp_fd)
+                pil_img.save(tmp_path, 'JPEG', quality=JPEG_SAVE_QUALITY)
+                import shutil
+                shutil.move(tmp_path, output_path)
                 print(f"      Successfully saved JPG via Pillow: {os.path.basename(output_path)}")
                 return True
             except Exception as pil_err:
-                raise IOError(f"Both cv2 and Pillow failed: cv2=False, Pillow={pil_err}")
+                raise IOError(f"All JPG save methods failed: {pil_err}")
 
         print(
             f"      Successfully saved JPG: {os.path.basename(output_path)} with quality {JPEG_SAVE_QUALITY}")
