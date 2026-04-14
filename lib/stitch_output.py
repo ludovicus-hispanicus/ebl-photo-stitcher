@@ -135,30 +135,38 @@ def save_jpg_output(image, output_path):
                 tmp_fd, tmp_path = tempfile.mkstemp(suffix='.jpg', dir=output_dir)
                 os.close(tmp_fd)
                 if cv2.imwrite(tmp_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_SAVE_QUALITY]):
-                    import shutil
-                    shutil.move(tmp_path, output_path)
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                    os.rename(tmp_path, output_path)
                     print(f"      Successfully saved JPG via temp file: {os.path.basename(output_path)}")
                     return True
-                os.remove(tmp_path)
-            except Exception:
-                pass
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception as tmp_err:
+                print(f"      Temp file method failed: {tmp_err}")
 
             # Final fallback: Pillow
             print(f"      Trying Pillow fallback...")
             try:
                 from PIL import Image as PILImage
-                PILImage.MAX_IMAGE_PIXELS = None  # disable pixel limit
+                PILImage.MAX_IMAGE_PIXELS = None
                 rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 pil_img = PILImage.fromarray(rgb)
-                # Write to temp file first to avoid path issues
                 tmp_fd, tmp_path = tempfile.mkstemp(suffix='.jpg', dir=output_dir)
                 os.close(tmp_fd)
                 pil_img.save(tmp_path, 'JPEG', quality=JPEG_SAVE_QUALITY)
-                import shutil
-                shutil.move(tmp_path, output_path)
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                os.rename(tmp_path, output_path)
                 print(f"      Successfully saved JPG via Pillow: {os.path.basename(output_path)}")
                 return True
             except Exception as pil_err:
+                # Clean up temp file
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except Exception:
+                    pass
                 raise IOError(f"All JPG save methods failed: {pil_err}")
 
         print(
