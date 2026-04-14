@@ -11,12 +11,30 @@ pyexiv2_hiddenimports = []
 
 # Try to collect pyexiv2 data if PyInstaller is running
 try:
-    from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+    from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
     pyexiv2_datas = collect_data_files('pyexiv2')
     pyexiv2_hiddenimports = collect_submodules('pyexiv2')
 except (ImportError, ModuleNotFoundError):
     # PyInstaller not available or running outside of PyInstaller context
+    copy_metadata = lambda *a: []
     pass
+
+# Collect package metadata that PyInstaller misses
+extra_metadata = []
+for pkg in ['imageio', 'rawpy', 'rembg', 'pillow_heif']:
+    try:
+        md = copy_metadata(pkg)
+        extra_metadata += md
+        print(f"  Collected metadata for {pkg}: {len(md)} entries")
+    except Exception as e:
+        print(f"  Warning: Could not collect metadata for {pkg}: {e}")
+        # Fallback: try collect_data_files for the dist-info
+        try:
+            md = collect_data_files(pkg)
+            extra_metadata += md
+            print(f"  Fallback collect_data_files for {pkg}: {len(md)} entries")
+        except Exception:
+            pass
 
 block_cipher = None
 
@@ -27,7 +45,7 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('lib', 'lib'),
-    ] + pyexiv2_datas,
+    ] + pyexiv2_datas + extra_metadata,
     hiddenimports=[
         'cv2', 
         'numpy',

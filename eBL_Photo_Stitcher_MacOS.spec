@@ -3,9 +3,18 @@
 import os
 import subprocess
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 pyexiv2_datas, pyexiv2_binaries, pyexiv2_hiddenimports = collect_all("pyexiv2")
+
+# Collect package metadata that PyInstaller misses
+extra_metadata = []
+for pkg in ['imageio', 'rawpy', 'rembg', 'pillow_heif']:
+    try:
+        extra_metadata += copy_metadata(pkg)
+    except Exception:
+        pass
+
 block_cipher = None
 
 def get_homebrew_prefix():
