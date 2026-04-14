@@ -74,9 +74,17 @@ jobs:
       - name: Build macOS app
         run: python -m PyInstaller eBL_Photo_Stitcher_MacOS.spec --noconfirm
 
+      - name: Ad-hoc codesign (macOS)
+        run: |
+          # Remove any partial/broken signatures first
+          codesign --remove-signature "dist/eBL Photo Stitcher.app" 2>/dev/null || true
+          # Apply clean ad-hoc signature (allows xattr -cr bypass)
+          codesign --force --deep --sign - "dist/eBL Photo Stitcher.app"
+          # Verify
+          codesign --verify --verbose "dist/eBL Photo Stitcher.app" || echo "Warning: signature verification failed"
+
       - name: Create DMG
         run: |
-          # Simple DMG creation
           hdiutil create -volname "eBL Photo Stitcher" \
             -srcfolder "dist/eBL Photo Stitcher.app" \
             -ov -format UDZO \
