@@ -210,12 +210,29 @@ def process_tablet_subfolder(
     if pixels_per_cm and pixels_per_cm > 0:
         output_dpi = int(pixels_per_cm * 2.54)
 
+    # Load measurement record for metadata embedding
+    obj_width_cm = None
+    obj_length_cm = None
+    try:
+        from extract_measurements import get_measurement_record
+        record = get_measurement_record(output_base_name, main_input_folder_path)
+        if not record:
+            record = get_measurement_record(output_base_name, subfolder_path)
+        if record:
+            obj_width_cm = record.get('width_cm')
+            obj_length_cm = record.get('length_cm')
+    except Exception:
+        pass
+
     tiff_path, jpg_path = save_stitched_output(
         final_image,
         main_input_folder_path,
         output_base_name,
         photographer_name,
-        output_dpi
+        output_dpi,
+        object_width_cm=obj_width_cm,
+        object_length_cm=obj_length_cm,
+        pixels_per_cm=pixels_per_cm
     )
 
     print(f"  Finished processing and stitching for tablet: {output_base_name}")

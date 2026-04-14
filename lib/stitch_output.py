@@ -21,7 +21,10 @@ def save_stitched_output(
     main_input_folder_path,
     output_base_name,
     photographer_name,
-    output_dpi
+    output_dpi,
+    object_width_cm=None,
+    object_length_cm=None,
+    pixels_per_cm=None
 ):
     """Save stitched output in both TIFF and JPG formats with metadata."""
     if not isinstance(final_image, np.ndarray) or final_image.size == 0:
@@ -66,7 +69,10 @@ def save_stitched_output(
             credit_line_text=stitch_config.STITCH_CREDIT_LINE,
             copyright_text=stitch_config.STITCH_CREDIT_LINE,
             usage_terms_text=stitch_config.STITCH_XMP_USAGE_TERMS,
-            image_dpi=output_dpi
+            image_dpi=output_dpi,
+            object_width_cm=object_width_cm,
+            object_length_cm=object_length_cm,
+            pixels_per_cm=pixels_per_cm
         )
 
     if not tiff_save_success:

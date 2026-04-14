@@ -476,6 +476,18 @@ def get_scale_from_excel_and_create_measurement(image_path: str, subfolder_path:
         return None, False
 
 
+def get_measurement_record(file_id: str, output_dir: str = None) -> dict:
+    """Get the measurement record for a tablet, or None if not found."""
+    try:
+        existing = load_existing_measurements(output_dir)
+        for m in existing:
+            if m.get("_id") == file_id or m.get("object_id") == file_id:
+                return m
+    except Exception:
+        pass
+    return None
+
+
 def measurement_record_exists(file_id: str, output_dir: str = None) -> bool:
     """
     Check if a measurement record already exists for the given file_id.

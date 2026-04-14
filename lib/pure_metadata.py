@@ -109,7 +109,10 @@ def apply_all_metadata(
     credit_line_text,
     copyright_text,
     usage_terms_text=None,
-    image_dpi=600
+    image_dpi=600,
+    object_width_cm=None,
+    object_length_cm=None,
+    pixels_per_cm=None
 ):
     """
     Apply all metadata (EXIF, XMP, IPTC) using pyexiv2 when available.
@@ -176,6 +179,20 @@ def apply_all_metadata(
                     {'lang': 'x-default', 'value': usage_terms_text}]
 
             new_xmp_data['Xmp.xmp.MetadataDate'] = datetime.datetime.now().isoformat()
+
+            # Physical object measurements (if available)
+            if object_width_cm is not None and object_width_cm > 0:
+                new_xmp_data['Xmp.dc.format'] = f"Tablet dimensions: {object_width_cm:.1f} x {object_length_cm:.1f} cm" if object_length_cm else f"Tablet width: {object_width_cm:.1f} cm"
+                # IPTC Extension fields for artwork/object dimensions
+                try:
+                    pyexiv2.registerNs('http://ns.ebl.lmu.de/1.0/', 'ebl')
+                except Exception:
+                    pass
+                new_xmp_data['Xmp.ebl.ObjectWidthCm'] = f"{object_width_cm:.2f}"
+                if object_length_cm and object_length_cm > 0:
+                    new_xmp_data['Xmp.ebl.ObjectLengthCm'] = f"{object_length_cm:.2f}"
+                if pixels_per_cm and pixels_per_cm > 0:
+                    new_xmp_data['Xmp.ebl.PixelsPerCm'] = f"{pixels_per_cm:.2f}"
 
             img.modify_exif(new_exif_data)
             img.modify_xmp(new_xmp_data)
