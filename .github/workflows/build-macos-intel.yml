@@ -1,0 +1,58 @@
+name: Build macOS Intel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-intel:
+    runs-on: macos-13
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: brew install cairo libffi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install opencv-python numpy imageio rawpy piexif pyexiv2
+          pip install cairosvg cairocffi tinycss2 cssselect2 defusedxml webencodings
+          pip install rembg onnxruntime
+          pip install Pillow scikit-image scipy
+          pip install tqdm requests
+          pip install pandas openpyxl
+          pip install pillow-heif
+
+      - name: Build macOS app
+        run: python -m PyInstaller eBL_Photo_Stitcher_MacOS.spec --noconfirm
+
+      - name: Ad-hoc codesign
+        run: |
+          codesign --remove-signature "dist/eBL Photo Stitcher.app" 2>/dev/null || true
+          codesign --force --deep --sign - "dist/eBL Photo Stitcher.app"
+          codesign --verify --verbose "dist/eBL Photo Stitcher.app" || echo "Warning: signature verification failed"
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "eBL Photo Stitcher" \
+            -srcfolder "dist/eBL Photo Stitcher.app" \
+            -ov -format UDZO \
+            "dist/eBL_Photo_Stitcher_macOS_intel.dmg"
+
+      - name: Upload to latest release
+        run: |
+          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+          echo "Uploading to release: $LATEST_TAG"
+          gh release upload "$LATEST_TAG" "dist/eBL_Photo_Stitcher_macOS_intel.dmg" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
