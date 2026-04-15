@@ -6,32 +6,61 @@ import shutil
 
 def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, ruler_suffix=SCALED_RULER_FILE_SUFFIX):
     """
-    Remove intermediate processing files from each processed subfolder and HDR folders from main directory.
+    Clean up intermediate files: replace originals with clean _object.tif versions,
+    remove ruler and temp files.
 
-    Args:
-        processed_subfolders: List of subfolder paths that were processed
-        object_artifact_suffix: Suffix used for extracted object files (e.g., "_object.tif")
-        ruler_suffix: Suffix used for ruler files (default: SCALED_RULER_FILE_SUFFIX)
+    The _object.tif files (background-removed) replace the original source images.
+    This is safe because the originals are already preserved in the source folder
+    (the working folder contains copies).
     """
     print("\n--- Cleaning up intermediate files ---")
     total_removed = 0
+    total_replaced = 0
 
     for subfolder_path in processed_subfolders:
         folder_name = os.path.basename(subfolder_path)
-        files_removed = 0
 
         try:
+            # First pass: replace originals with _object.tif versions
+            for filename in os.listdir(subfolder_path):
+                if not filename.endswith(object_artifact_suffix):
+                    continue
+
+                object_path = os.path.join(subfolder_path, filename)
+                # e.g., "Si.1_01_object.tif" -> base is "Si.1_01"
+                base_name = filename[:-len(object_artifact_suffix)]
+
+                # Find and remove the original source file (any extension)
+                for orig_file in os.listdir(subfolder_path):
+                    orig_name_no_ext = os.path.splitext(orig_file)[0]
+                    if (orig_name_no_ext == base_name
+                            and orig_file != filename
+                            and not orig_file.endswith(object_artifact_suffix)
+                            and not orig_file.endswith(ruler_suffix)
+                            and not orig_file.endswith('.json')):
+                        orig_path = os.path.join(subfolder_path, orig_file)
+                        try:
+                            os.remove(orig_path)
+                            # Rename _object.tif to replace original (keep .tif extension)
+                            new_name = base_name + '.tif'
+                            new_path = os.path.join(subfolder_path, new_name)
+                            os.rename(object_path, new_path)
+                            total_replaced += 1
+                            break
+                        except Exception as e:
+                            print(f"  Error replacing {orig_file}: {e}")
+
+            # Second pass: remove ruler and temp files
             for filename in os.listdir(subfolder_path):
                 file_path = os.path.join(subfolder_path, filename)
                 if os.path.isfile(file_path) and (
-                    filename.endswith(object_artifact_suffix)
-                    or filename.endswith(ruler_suffix)
+                    filename.endswith(ruler_suffix)
                     or "temp_isolated_ruler" in filename
                     or "_rawscale.tif" in filename
+                    or filename.endswith(object_artifact_suffix)  # any remaining _object.tif
                 ):
                     try:
                         os.remove(file_path)
-                        files_removed += 1
                         total_removed += 1
                     except Exception as e:
                         print(f"  Error removing {filename}: {e}")
@@ -73,7 +102,9 @@ def cleanup_intermediate_files(processed_subfolders, object_artifact_suffix, rul
         except Exception as e:
             print(f"  Error accessing main directory {main_folder}: {e}")
 
-    print(f"--- Cleanup complete: {total_removed} files/folders removed ---")
+    if total_replaced > 0:
+        print(f"  Replaced {total_replaced} original(s) with clean background-removed versions")
+    print(f"--- Cleanup complete: {total_replaced} replaced, {total_removed} files/folders removed ---")
 
 
 def normalize_subfolder_names(processed_subfolders):
