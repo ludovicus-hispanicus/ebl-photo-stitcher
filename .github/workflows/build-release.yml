@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -94,6 +98,7 @@ jobs:
 
   build-macos-intel:
     runs-on: macos-13
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
