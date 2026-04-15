@@ -217,7 +217,13 @@ def _ensure_local_model():
     # Give user a chance to cancel if they prefer manual download
     try:
         # Check if we're running in an interactive environment
-        if sys.stdin.isatty():
+        is_interactive = False
+        try:
+            is_interactive = sys.stdin is not None and sys.stdin.isatty()
+        except (AttributeError, ValueError):
+            pass
+
+        if is_interactive:
             user_input = input("\n  Continue with automatic download? (y/n) [y]: ").strip().lower()
             if user_input in ['n', 'no']:
                 print("\n  Skipping automatic download.")
@@ -225,7 +231,7 @@ def _ensure_local_model():
             else:
                 success = _download_with_progress(url, model_path)
         else:
-            # Non-interactive environment (GUI), proceed with download
+            # Non-interactive environment (GUI/exe), proceed with download
             print("\n  Proceeding with automatic download...")
             success = _download_with_progress(url, model_path)
     except (KeyboardInterrupt, EOFError):
