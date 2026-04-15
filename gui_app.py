@@ -10,6 +10,13 @@ lib_directory = os.path.join(script_directory, "lib")
 if lib_directory not in sys.path:
     sys.path.insert(0, lib_directory)
 
+# Patch cv2 to handle Unicode paths (e.g., Polish, German characters in folder names)
+try:
+    from image_utils import patch_cv2_for_unicode
+    patch_cv2_for_unicode()
+except Exception:
+    pass
+
 try:
     from gui_utils import resource_path, get_persistent_config_dir_path, TextRedirector, LogPanel
     from gui_config_manager import (

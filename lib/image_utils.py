@@ -3,6 +3,44 @@ import numpy as np
 import os
 
 
+def imread_unicode(path, flags=cv2.IMREAD_COLOR):
+    """Read an image, handling Unicode/non-ASCII paths on Windows."""
+    img = cv2._original_imread(path, flags) if hasattr(cv2, '_original_imread') else cv2.imread(path, flags)
+    if img is None and os.path.exists(path):
+        try:
+            buf = np.fromfile(path, dtype=np.uint8)
+            img = cv2.imdecode(buf, flags)
+        except Exception:
+            pass
+    return img
+
+
+def imwrite_unicode(path, img, params=None):
+    """Write an image, handling Unicode/non-ASCII paths on Windows."""
+    write_fn = cv2._original_imwrite if hasattr(cv2, '_original_imwrite') else cv2.imwrite
+    success = write_fn(path, img, params) if params else write_fn(path, img)
+    if not success and path:
+        try:
+            ext = os.path.splitext(path)[1]
+            result, buf = cv2.imencode(ext, img, params or [])
+            if result:
+                buf.tofile(path)
+                return True
+        except Exception:
+            pass
+    return success
+
+
+def patch_cv2_for_unicode():
+    """Monkey-patch cv2.imread/imwrite to handle Unicode paths. Call once at startup."""
+    if not hasattr(cv2, '_original_imread'):
+        cv2._original_imread = cv2.imread
+        cv2.imread = imread_unicode
+    if not hasattr(cv2, '_original_imwrite'):
+        cv2._original_imwrite = cv2.imwrite
+        cv2.imwrite = imwrite_unicode
+
+
 def get_mask_bounding_box(mask_array):
     rows_with_true = np.any(mask_array, axis=1)
     cols_with_true = np.any(mask_array, axis=0)
