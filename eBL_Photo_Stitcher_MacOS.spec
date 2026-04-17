@@ -69,7 +69,8 @@ a = Analysis(
         ("assets", "assets"),
         ("lib", "lib"),
     ]
-    + pyexiv2_datas,
+    + pyexiv2_datas
+    + extra_metadata,
     hiddenimports=[
         "cv2",
         "numpy",
