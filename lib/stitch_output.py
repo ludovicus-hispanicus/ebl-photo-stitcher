@@ -15,6 +15,13 @@ except ImportError as e:
     print(f"CRITICAL ERROR in stitch_output.py: Could not import metadata utils: {e}")
     raise
 
+try:
+    from stitch_post_process import apply_professional_processing
+except ImportError as e:
+    print(f"Warning: stitch_post_process not available ({e}); post-processing disabled")
+    def apply_professional_processing(img):
+        return img
+
 
 def save_stitched_output(
     final_image,
@@ -32,6 +39,10 @@ def save_stitched_output(
 
     if HDR_SUFFIX in output_base_name:
         output_base_name = output_base_name.replace(HDR_SUFFIX, "")
+
+    # Professional post-processing: Levels + High Pass sharpening
+    # (replicates the 'cuneiform_documentation_bm.atn' Photoshop action)
+    final_image = apply_professional_processing(final_image)
 
     final_tiff_output_dir = os.path.join(
         main_input_folder_path, FINAL_TIFF_SUBFOLDER_NAME)
