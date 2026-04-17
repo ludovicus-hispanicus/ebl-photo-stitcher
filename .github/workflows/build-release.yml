@@ -96,8 +96,56 @@ jobs:
           name: macos-arm-dmg
           path: "dist/eBL_Photo_Stitcher_macOS_arm64.dmg"
 
+  build-macos-intel:
+    runs-on: macos-13
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: brew install cairo libffi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install opencv-python numpy imageio rawpy piexif pyexiv2
+          pip install cairosvg cairocffi tinycss2 cssselect2 defusedxml webencodings
+          pip install rembg onnxruntime
+          pip install Pillow scikit-image scipy
+          pip install tqdm requests
+          pip install pandas openpyxl
+          pip install pillow-heif
+
+      - name: Build macOS app
+        run: python -m PyInstaller eBL_Photo_Stitcher_MacOS.spec --noconfirm
+
+      - name: Ad-hoc codesign
+        run: |
+          codesign --remove-signature "dist/eBL Photo Stitcher.app" 2>/dev/null || true
+          codesign --force --deep --sign - "dist/eBL Photo Stitcher.app"
+          codesign --verify --verbose "dist/eBL Photo Stitcher.app" || echo "Warning: signature verification failed"
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "eBL Photo Stitcher" \
+            -srcfolder "dist/eBL Photo Stitcher.app" \
+            -ov -format UDZO \
+            "dist/eBL_Photo_Stitcher_macOS_intel.dmg"
+
+      - name: Upload macOS Intel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-dmg
+          path: "dist/eBL_Photo_Stitcher_macOS_intel.dmg"
+
   release:
-    needs: [build-windows, build-macos-arm]
+    needs: [build-windows, build-macos-arm, build-macos-intel]
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
@@ -106,10 +154,16 @@ jobs:
           name: windows-exe
           path: dist/
 
-      - name: Download macOS artifact
+      - name: Download macOS ARM artifact
         uses: actions/download-artifact@v4
         with:
           name: macos-arm-dmg
+          path: dist/
+
+      - name: Download macOS Intel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-intel-dmg
           path: dist/
 
       - name: Determine tag
@@ -130,16 +184,16 @@ jobs:
           files: |
             dist/eBL Photo Stitcher.exe
             dist/eBL_Photo_Stitcher_macOS_arm64.dmg
+            dist/eBL_Photo_Stitcher_macOS_intel.dmg
           body: |
             ## eBL Photo Stitcher ${{ steps.tag.outputs.tag }}
 
             ### Downloads
             - **Windows**: `eBL Photo Stitcher.exe` (portable, no installation needed)
-            - **macOS**: `eBL_Photo_Stitcher_macOS_arm64.dmg` (Apple Silicon, also works on Intel via Rosetta 2)
+            - **macOS (Apple Silicon)**: `eBL_Photo_Stitcher_macOS_arm64.dmg` (M1/M2/M3/M4)
+            - **macOS (Intel)**: `eBL_Photo_Stitcher_macOS_intel.dmg` (native Intel build)
 
             First run requires internet to download the AI model (~176MB).
-
-            **Intel Mac users**: The ARM build runs on Intel Macs via Rosetta 2 (automatic).
 
             ### Changes
             See [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.tag.outputs.tag }}) for details.
